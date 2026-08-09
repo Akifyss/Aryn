@@ -256,13 +256,18 @@ function AgentProvider({
   const [panelError, setPanelError] = useState<string | null>(null)
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<OptimisticAgentUserMessage[]>([])
   const [hasLoadedWorkspaceState, setHasLoadedWorkspaceState] = useState(false)
+  const [agentRuntimeRefreshRevision, setAgentRuntimeRefreshRevision] = useState(0)
   const sessionTreeAgentIds = SESSION_TREE_AGENT_IDS
   const {
-    invalidateProjectSessions: handleAgentCatalogRefreshed,
+    invalidateProjectSessions,
     loadProjectSessions,
     projectSessions,
     storeProjectAgentSessions,
   } = useAgentProjectSessions({ projectState, sessionTreeAgentIds })
+  const handleAgentCatalogRefreshed = useCallback(() => {
+    invalidateProjectSessions()
+    setAgentRuntimeRefreshRevision((revision) => revision + 1)
+  }, [invalidateProjectSessions])
   const {
     addComposerFiles,
     clearComposerOptimistically,
@@ -287,7 +292,6 @@ function AgentProvider({
   const {
     agentCatalog: resolvedAgentCatalog,
     agentCatalogRefreshError,
-    agentCatalogRefreshRevision,
     markAgentUnavailable,
     refreshAgentCatalog,
     selectedAgentIdValue,
@@ -387,7 +391,6 @@ function AgentProvider({
   useAgentWorkspaceLifecycle({
     catalog: {
       markAgentUnavailable,
-      refreshRevision: agentCatalogRefreshRevision,
     },
     conversation: {
       activeConversation,
@@ -407,6 +410,9 @@ function AgentProvider({
       restorableSessionPath,
       selectedAgentId,
       syncActiveSessionSelection,
+    },
+    refresh: {
+      revision: agentRuntimeRefreshRevision,
     },
     state: {
       agentState,

@@ -37,7 +37,6 @@ const INITIAL_MODEL_SELECTION = parseModelSelection(null)
 type UseAgentWorkspaceLifecycleOptions = {
   catalog: {
     markAgentUnavailable: (agentId: AgentId, reason: string, guidance?: string) => void
-    refreshRevision: number
   }
   conversation: {
     activeConversation: ConversationRecord | null
@@ -60,6 +59,9 @@ type UseAgentWorkspaceLifecycleOptions = {
     restorableSessionPath: string | null
     selectedAgentId: AgentId
     syncActiveSessionSelection: (selection: AgentSessionSelection) => void
+  }
+  refresh: {
+    revision: number
   }
   state: {
     agentState: AgentWorkspaceState
@@ -86,7 +88,6 @@ type UseAgentWorkspaceLifecycleOptions = {
 export function useAgentWorkspaceLifecycle({
   catalog: {
     markAgentUnavailable,
-    refreshRevision,
   },
   conversation: {
     activeConversation,
@@ -106,6 +107,9 @@ export function useAgentWorkspaceLifecycle({
     restorableSessionPath,
     selectedAgentId,
     syncActiveSessionSelection,
+  },
+  refresh: {
+    revision: runtimeRefreshRevision,
   },
   state: {
     agentState,
@@ -129,6 +133,9 @@ export function useAgentWorkspaceLifecycle({
   },
 }: UseAgentWorkspaceLifecycleOptions) {
   const loadAgentStateRequestIdRef = useRef(0)
+  const primaryLoadPendingRef = useRef(false)
+  const backgroundRefreshRequestIdRef = useRef(0)
+  const handledRuntimeRefreshRevisionRef = useRef(0)
   const locallyEmittedWorkspaceStatesRef = useRef<WeakSet<AgentWorkspaceState>>(new WeakSet())
   const pendingExternalWorkspaceStateRef = useRef<AgentWorkspaceState | null>(null)
 
@@ -189,6 +196,8 @@ export function useAgentWorkspaceLifecycle({
   useEffect(() => {
     const requestId = loadAgentStateRequestIdRef.current + 1
     loadAgentStateRequestIdRef.current = requestId
+    primaryLoadPendingRef.current = true
+    backgroundRefreshRequestIdRef.current += 1
 
     if (!workspacePath) {
       setAgentState(initialAgentState)
@@ -231,6 +240,7 @@ export function useAgentWorkspaceLifecycle({
         })
         .finally(() => {
           if (loadAgentStateRequestIdRef.current === requestId) {
+            primaryLoadPendingRef.current = false
             setIsLoading(false)
           }
         })
@@ -328,10 +338,91 @@ export function useAgentWorkspaceLifecycle({
       })
       .finally(() => {
         if (loadAgentStateRequestIdRef.current === requestId) {
+          primaryLoadPendingRef.current = false
           setIsLoading(false)
         }
       })
-  }, [refreshRevision, markAgentUnavailable, selectedAgentId, workspacePath])
+  }, [markAgentUnavailable, selectedAgentId, workspacePath])
+
+  // Opening the Agent selector refreshes discovery in the background. Revalidate
+  // the current new-session runtime without replacing the surface with a loader
+  // or discarding the user's composer and model drafts.
+  useEffect(() => {
+    if (runtimeRefreshRevision <= handledRuntimeRefreshRevisionRef.current) {
+      return
+    }
+    handledRuntimeRefreshRevisionRef.current = runtimeRefreshRevision
+
+    const currentSelection = activeSessionSelectionRef.current
+    const isCurrentRuntime = workspacePath
+      ? shouldPersistAgentWorkspaceSelection(agentState.runtime, selectedAgentId, workspacePath)
+      : agentState.runtime.agentId === selectedAgentId && agentState.runtime.workspacePath === null
+    if (
+      primaryLoadPendingRef.current
+      || isLoading
+      || currentSelection.kind !== 'new'
+      || activeWorkspaceContext.kind === 'conversation'
+      || (hasLoadedWorkspaceState && !isCurrentRuntime)
+    ) {
+      return
+    }
+
+    const requestId = backgroundRefreshRequestIdRef.current + 1
+    backgroundRefreshRequestIdRef.current = requestId
+    setPanelError(null)
+    const refreshRequest = workspacePath
+      ? window.appApi.loadAgentWorkspace(
+          { agentId: selectedAgentId, workspacePath },
+          null,
+          { restoreSession: false },
+        )
+      : window.appApi.loadAgentDraftState(selectedAgentId)
+
+    void refreshRequest
+      .then((nextState) => {
+        if (
+          backgroundRefreshRequestIdRef.current !== requestId
+          || activeSessionSelectionRef.current.kind !== 'new'
+        ) {
+          return
+        }
+
+        if (!nextState.runtime.hasConfiguredModels) {
+          markAgentUnavailable(selectedAgentId, nextState.runtime.setupHint ?? '当前 Agent 没有可用模型。')
+        }
+        setAgentState(nextState)
+        const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
+        const nextDraft = normalizeAgentModelDraft(
+          newSessionModelDraftRef.current,
+          nextState.runtime,
+          defaultDraft,
+        )
+        syncNewSessionModelDraft(nextDraft)
+        syncModelDraft(nextDraft)
+        setHasLoadedWorkspaceState(true)
+      })
+      .catch((error) => {
+        if (backgroundRefreshRequestIdRef.current !== requestId) {
+          return
+        }
+
+        const message = error instanceof Error ? error.message : 'Unable to refresh Agent settings.'
+        markAgentUnavailable(selectedAgentId, message)
+        setPanelError(message)
+      })
+  }, [
+    activeWorkspaceContext.kind,
+    agentState.runtime,
+    hasLoadedWorkspaceState,
+    isLoading,
+    markAgentUnavailable,
+    newSessionModelDraftRef,
+    runtimeRefreshRevision,
+    selectedAgentId,
+    syncModelDraft,
+    syncNewSessionModelDraft,
+    workspacePath,
+  ])
 
   useEffect(() => {
     if (

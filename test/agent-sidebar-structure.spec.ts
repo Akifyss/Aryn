@@ -247,9 +247,10 @@ describe('agent sidebar structure', () => {
   })
 
   it('keeps Agent catalog lifecycle state in its feature hook', async () => {
-    const [sidebarSource, catalogHookSource] = await Promise.all([
+    const [sidebarSource, catalogHookSource, workspaceLifecycleSource] = await Promise.all([
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
       readSource('../src/features/agent/hooks/use-agent-catalog.ts'),
+      readSource('../src/features/agent/runtime/use-agent-workspace-lifecycle.ts'),
     ])
 
     expect(sidebarSource).toContain(
@@ -266,6 +267,35 @@ describe('agent sidebar structure', () => {
     expect(catalogHookSource).toContain('export function useAgentCatalog(')
     expect(catalogHookSource).toContain('window.appApi.getAgentCatalog({ force: true })')
     expect(catalogHookSource).toContain('window.appApi.getAgentCatalog()')
+    expect(catalogHookSource).not.toContain('agentCatalogRefreshRevision')
+    expect(sidebarSource).toContain('agentRuntimeRefreshRevision')
+    expect(workspaceLifecycleSource).toContain('runtimeRefreshRevision')
+  })
+
+  it('refreshes the selected new-session runtime without blocking the conversation surface', async () => {
+    const lifecycleSource = await readSource(
+      '../src/features/agent/runtime/use-agent-workspace-lifecycle.ts',
+    )
+    const refreshStart = lifecycleSource.indexOf(
+      'if (runtimeRefreshRevision <= handledRuntimeRefreshRevisionRef.current)',
+    )
+    const persistenceEffectStart = lifecycleSource.indexOf(
+      "if (\n      !workspacePath\n      || isLoading",
+      refreshStart,
+    )
+    const refreshEffect = lifecycleSource.slice(refreshStart, persistenceEffectStart)
+
+    expect(refreshStart).toBeGreaterThan(-1)
+    expect(persistenceEffectStart).toBeGreaterThan(refreshStart)
+    expect(refreshEffect).toContain('primaryLoadPendingRef.current')
+    expect(refreshEffect).toContain("currentSelection.kind !== 'new'")
+    expect(refreshEffect).toContain("activeWorkspaceContext.kind === 'conversation'")
+    expect(refreshEffect).toContain('hasLoadedWorkspaceState && !isCurrentRuntime')
+    expect(refreshEffect).toContain('window.appApi.loadAgentDraftState(selectedAgentId)')
+    expect(refreshEffect).toContain('{ restoreSession: false }')
+    expect(refreshEffect).toContain('newSessionModelDraftRef.current')
+    expect(refreshEffect).not.toContain('setIsLoading(')
+    expect(refreshEffect).not.toContain('resetComposer(')
   })
 
   it('keeps Agent UI styles with their owning Agent components', async () => {

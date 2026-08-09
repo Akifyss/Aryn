@@ -19,7 +19,6 @@ type UseAgentCatalogOptions = {
 type UseAgentCatalogResult = {
   agentCatalog: AgentAvailability[]
   agentCatalogRefreshError: string | null
-  agentCatalogRefreshRevision: number
   markAgentUnavailable: (agentId: AgentId, reason: string, guidance?: string) => void
   refreshAgentCatalog: () => Promise<void>
   selectedAgentIdValue: AgentId
@@ -40,7 +39,6 @@ export function useAgentCatalog({
     Partial<Record<AgentId, AgentAvailabilityFailure>>
   >({})
   const [agentCatalogRefreshError, setAgentCatalogRefreshError] = useState<string | null>(null)
-  const [agentCatalogRefreshRevision, setAgentCatalogRefreshRevision] = useState(0)
   const [selectedAgentIdValue, setSelectedAgentIdValue] = useState<AgentId>(DEFAULT_AGENT_ID)
   const catalogRequestIdRef = useRef(0)
   const catalogRefreshRef = useRef<Promise<void> | null>(null)
@@ -75,7 +73,6 @@ export function useAgentCatalog({
         onCatalogRefreshed()
         setAgentCatalog(catalog)
         setAgentAvailabilityFailures({})
-        setAgentCatalogRefreshRevision((revision) => revision + 1)
         setSelectedAgentIdValue((currentAgentId) => (
           resolveAvailableAgentId(catalog, currentAgentId)
         ))
@@ -144,7 +141,6 @@ export function useAgentCatalog({
   return {
     agentCatalog: resolvedAgentCatalog,
     agentCatalogRefreshError,
-    agentCatalogRefreshRevision,
     markAgentUnavailable,
     refreshAgentCatalog,
     selectedAgentIdValue,
