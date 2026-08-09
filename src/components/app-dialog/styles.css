@@ -34,7 +34,6 @@
   outline: none;
   background: var(--overlay);
   color: var(--overlay-foreground);
-  box-shadow: var(--dialog-shadow);
   pointer-events: auto;
   transform-origin: center;
   transition:

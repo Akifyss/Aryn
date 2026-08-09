@@ -29,14 +29,26 @@ describe('shadow system', () => {
   })
 
   it('uses a ring only for shared elevated surfaces', async () => {
-    const [indexCss, appMenuCss, appDialogCss, appButtonCss, appIconButtonCss] =
-      await Promise.all([
-        readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
-        readFile(new URL('../src/components/app-menu/styles.css', import.meta.url), 'utf8'),
-        readFile(new URL('../src/components/app-dialog/styles.css', import.meta.url), 'utf8'),
-        readFile(new URL('../src/components/app-button/styles.css', import.meta.url), 'utf8'),
-        readFile(new URL('../src/components/app-icon-button/styles.css', import.meta.url), 'utf8'),
-      ])
+    const [
+      indexCss,
+      appMenuCss,
+      appDialogSource,
+      appAlertDialogSource,
+      appDialogCss,
+      appButtonCss,
+      appIconButtonCss,
+    ] = await Promise.all([
+      readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/components/app-menu/styles.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/components/app-dialog/app-dialog.tsx', import.meta.url), 'utf8'),
+      readFile(
+        new URL('../src/components/app-dialog/app-alert-dialog.tsx', import.meta.url),
+        'utf8',
+      ),
+      readFile(new URL('../src/components/app-dialog/styles.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/components/app-button/styles.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/components/app-icon-button/styles.css', import.meta.url), 'utf8'),
+    ])
 
     expect(indexCss).toContain(
       [
@@ -45,18 +57,21 @@ describe('shadow system', () => {
         '    0 0 0 1px var(--smooth-ring-color);',
       ].join('\n'),
     )
-    expect(indexCss).toContain(
-      [
-        '--dialog-shadow:',
-        '    var(--shadow-md),',
-        '    0 0 0 1px var(--smooth-ring-color);',
-      ].join('\n'),
-    )
+    expect(indexCss).not.toContain('--dialog-shadow:')
     expect(appMenuCss).toMatch(
       /\.app-menu-surface\s*\{[^}]*border:\s*0;[^}]*box-shadow:\s*var\(--app-menu-popup-shadow\);/s,
     )
+    expect(appDialogSource).toMatch(
+      /className=\{joinClassNames\(\s*'app-dialog-popup',\s*'smooth-shadow-ring-md',\s*className,\s*\)\}/s,
+    )
+    expect(appAlertDialogSource).toMatch(
+      /className=\{joinClassNames\(\s*'app-alert-dialog-popup',\s*'smooth-shadow-ring-md',\s*className,\s*\)\}/s,
+    )
     expect(appDialogCss).toMatch(
-      /\.app-dialog-popup,\s*\n\.app-alert-dialog-popup\s*\{[^}]*border:\s*0;[^}]*box-shadow:\s*var\(--dialog-shadow\);/s,
+      /\.app-dialog-popup,\s*\n\.app-alert-dialog-popup\s*\{[^}]*border:\s*0;/s,
+    )
+    expect(appDialogCss).not.toMatch(
+      /\.app-dialog-popup,\s*\n\.app-alert-dialog-popup\s*\{[^}]*box-shadow:/s,
     )
 
     expect(appButtonCss).toContain('box-shadow: var(--app-button-shadow);')

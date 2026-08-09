@@ -72,7 +72,11 @@ const AlertDialogPopup = forwardRef<HTMLDivElement, AlertDialogPopupProps>(
             ref={ref}
             data-size={size}
             data-slot='app-alert-dialog-popup'
-            className={joinClassNames('app-alert-dialog-popup', className)}
+            className={joinClassNames(
+              'app-alert-dialog-popup',
+              'smooth-shadow-ring-md',
+              className,
+            )}
           >
             {children}
             {closeButtonDisabled ? (

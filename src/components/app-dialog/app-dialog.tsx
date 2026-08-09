@@ -69,7 +69,11 @@ const DialogPopup = forwardRef<HTMLDivElement, DialogPopupProps>(function Dialog
           ref={ref}
           data-size={size}
           data-slot='app-dialog-popup'
-          className={joinClassNames('app-dialog-popup', className)}
+          className={joinClassNames(
+            'app-dialog-popup',
+            'smooth-shadow-ring-md',
+            className,
+          )}
         >
           {children}
           {showCloseButton ? (
