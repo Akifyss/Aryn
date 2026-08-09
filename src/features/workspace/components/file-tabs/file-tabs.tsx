@@ -1,4 +1,4 @@
-import { Fragment, type DragEvent as ReactDragEvent, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { type AnimationEvent as ReactAnimationEvent, type DragEvent as ReactDragEvent, type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ScrollArea } from '@base-ui/react/scroll-area'
 import { Tabs } from '@base-ui/react/tabs'
@@ -10,8 +10,14 @@ import {
   interpolateFileTabActiveGeometry,
   parseCssTimeInMilliseconds,
 } from './file-tabs-boundary-motion'
-import { createFileTabsBoundaryPaths, type FileTabsBoundaryPaths } from './file-tabs-boundary-path'
-import { getFileTabsShadowFilterPadding, parseComputedBoxShadow, type FileTabsShadowLayer } from './file-tabs-shadow'
+import { createFileTabsBoundaryPaths } from './file-tabs-boundary-path'
+import {
+  createFileTabsShadowSnapshot,
+  FileTabsBoundaryShadowLayer,
+  getFileTabsShadowSnapshotCssTransform,
+  type FileTabsShadowSnapshot,
+} from './file-tabs-boundary-shadow'
+import { parseComputedBoxShadow, type FileTabsShadowLayer } from './file-tabs-shadow'
 import {
   reorderWorkspaceTabs,
   type TabDropPosition,
@@ -69,9 +75,17 @@ type FileTabsBoundaryGeometry = FileTabsBoundaryGeometryBase & ({
   railHeight: number
 })
 
+type FileTabsShadowSlot = 'a' | 'b'
+
+type FileTabsShadowHandoff = {
+  outgoingSlot: FileTabsShadowSlot
+  snapshot: FileTabsShadowSnapshot
+}
+
 const FILE_TAB_LABEL_TOOLTIP_DELAY = 500
 const FILE_TAB_TEXT_OVERFLOW_EPSILON = 1
 const FILE_TAB_BOUNDARY_GEOMETRY_EPSILON = 0.01
+const FILE_TAB_SHADOW_HANDOFF_FALLBACK_BUFFER_MS = 100
 
 function getTabLabel(tab: WorkspaceDisplayTab) {
   if (tab.kind === 'fixed-panel') {
@@ -180,6 +194,10 @@ function readBaseTabsIndicatorGeometry(
   }
 }
 
+function getAlternateShadowSlot(slot: FileTabsShadowSlot): FileTabsShadowSlot {
+  return slot === 'a' ? 'b' : 'a'
+}
+
 function FileTabsBoundaryChrome({
   chromeHost,
   geometry,
@@ -187,10 +205,27 @@ function FileTabsBoundaryChrome({
   chromeHost: HTMLElement
   geometry: FileTabsBoundaryGeometry
 }) {
-  const shadowFilterId = `file-tabs-boundary-shadow-${useId().replace(/:/g, '')}`
+  const shadowFilterPrefix = `file-tabs-boundary-shadow-${useId().replace(/:/g, '')}`
   const shadowTokenProbeRef = useRef<HTMLSpanElement | null>(null)
-  const stableShadowPathsRef = useRef<FileTabsBoundaryPaths | null>(null)
+  const stableShadowSnapshotRef = useRef<FileTabsShadowSnapshot | null>(null)
+  const layoutShadowSnapshotRef = useRef<FileTabsShadowSnapshot | null>(null)
+  const layoutWasChangingRef = useRef(false)
+  const [activeShadowSlot, setActiveShadowSlot] = useState<FileTabsShadowSlot>('a')
+  const [shadowHandoff, setShadowHandoff] = useState<FileTabsShadowHandoff | null>(null)
   const [shadowLayers, setShadowLayers] = useState<FileTabsShadowLayer[]>([])
+  const completeShadowHandoff = useCallback(() => {
+    setShadowHandoff(null)
+  }, [])
+  const handleShadowHandoffAnimationEnd = useCallback((
+    event: ReactAnimationEvent<SVGSVGElement>,
+  ) => {
+    if (
+      event.target === event.currentTarget
+      && event.animationName === 'file-tabs-shadow-handoff-in'
+    ) {
+      completeShadowHandoff()
+    }
+  }, [completeShadowHandoff])
   useLayoutEffect(() => {
     const shadowTokenProbe = shadowTokenProbeRef.current
     if (!shadowTokenProbe) {
@@ -221,7 +256,7 @@ function FileTabsBoundaryChrome({
     return () => themeObserver.disconnect()
   }, [])
 
-  const paths = createFileTabsBoundaryPaths({
+  const paths = useMemo(() => createFileTabsBoundaryPaths({
     frameHeight: geometry.frameHeight,
     frameWidth: geometry.frameWidth,
     radius: geometry.radius,
@@ -237,21 +272,80 @@ function FileTabsBoundaryChrome({
           kind: 'empty',
           railHeight: geometry.railHeight,
         },
-  })
+  }), [geometry])
+  const currentShadowSnapshot = useMemo(
+    () => paths ? createFileTabsShadowSnapshot(geometry, paths) : null,
+    [geometry, paths],
+  )
+
+  // Keep one complete, exact shadow render as the source for the next layout
+  // transition. No filter input changes while that snapshot is in motion.
+  useLayoutEffect(() => {
+    if (
+      currentShadowSnapshot
+      && (
+        !stableShadowSnapshotRef.current
+        || (!geometry.isTabActivating && !geometry.isLayoutChanging)
+      )
+    ) {
+      stableShadowSnapshotRef.current = currentShadowSnapshot
+    }
+  }, [currentShadowSnapshot, geometry.isLayoutChanging, geometry.isTabActivating])
 
   useLayoutEffect(() => {
-    if (paths && (!stableShadowPathsRef.current || !geometry.isTabActivating)) {
-      stableShadowPathsRef.current = paths
-    }
-  }, [geometry.isTabActivating, paths])
+    if (geometry.isLayoutChanging) {
+      if (!layoutWasChangingRef.current) {
+        layoutShadowSnapshotRef.current = stableShadowSnapshotRef.current
+      }
 
-  if (!paths) {
+      layoutWasChangingRef.current = true
+      setShadowHandoff(null)
+      return
+    }
+
+    if (!layoutWasChangingRef.current) {
+      return
+    }
+
+    layoutWasChangingRef.current = false
+    const outgoingSnapshot = layoutShadowSnapshotRef.current
+    layoutShadowSnapshotRef.current = null
+
+    if (
+      !outgoingSnapshot
+      || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      setShadowHandoff(null)
+      return
+    }
+
+    setShadowHandoff({
+      outgoingSlot: activeShadowSlot,
+      snapshot: outgoingSnapshot,
+    })
+    setActiveShadowSlot(getAlternateShadowSlot(activeShadowSlot))
+  }, [activeShadowSlot, geometry.isLayoutChanging])
+
+  useEffect(() => {
+    if (!shadowHandoff) {
+      return
+    }
+
+    const handoffDuration = parseCssTimeInMilliseconds(
+      window.getComputedStyle(chromeHost).getPropertyValue('--file-tab-shadow-handoff-duration'),
+      100,
+    )
+    const timerId = window.setTimeout(
+      completeShadowHandoff,
+      handoffDuration + FILE_TAB_SHADOW_HANDOFF_FALLBACK_BUFFER_MS,
+    )
+
+    return () => window.clearTimeout(timerId)
+  }, [chromeHost, completeShadowHandoff, shadowHandoff])
+
+  if (!paths || !currentShadowSnapshot) {
     return null
   }
-
-  const shadowPaths = geometry.isTabActivating
-    ? stableShadowPathsRef.current ?? paths
-    : paths
 
   const variant = geometry.hasLeftBoundary
     ? paths.withLeftBoundary
@@ -259,12 +353,6 @@ function FileTabsBoundaryChrome({
   const outlinePath = geometry.hasRightBoundary
     ? variant.outlinePathWithRightBoundary
     : variant.outlinePath
-  const shadowVariant = geometry.hasLeftBoundary
-    ? shadowPaths.withLeftBoundary
-    : shadowPaths.withoutLeftBoundary
-  const shadowSurfacePath = geometry.hasRightBoundary
-    ? shadowVariant.surfacePathWithRightBoundary
-    : shadowVariant.surfacePath
 
   const svgProps = {
     'aria-hidden': true,
@@ -273,86 +361,86 @@ function FileTabsBoundaryChrome({
     viewBox: `0 0 ${paths.frameWidth} ${paths.frameHeight}`,
     width: paths.frameWidth,
   } as const
-  const shadowFilterPadding = getFileTabsShadowFilterPadding(shadowLayers)
-  const shadowLayer = geometry.isLayoutChanging || shadowLayers.length === 0 || typeof document === 'undefined'
-    ? null
-    : createPortal(
-        <svg
-          {...svgProps}
+  const prefersReducedMotion = typeof window !== 'undefined'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  // useLayoutEffect finalizes the slot state before paint. This synchronous
+  // projection also keeps the outgoing slot unchanged in that first commit,
+  // so the browser never invalidates its frozen filter with final geometry.
+  const transitionJustEnded = !geometry.isLayoutChanging && layoutWasChangingRef.current
+  const pendingHandoffSnapshot = transitionJustEnded && !prefersReducedMotion
+    ? layoutShadowSnapshotRef.current
+    : null
+  const effectiveHandoff = shadowHandoff ?? (
+    pendingHandoffSnapshot
+      ? {
+          outgoingSlot: activeShadowSlot,
+          snapshot: pendingHandoffSnapshot,
+        }
+      : null
+  )
+  const incomingShadowSlot = shadowHandoff
+    ? activeShadowSlot
+    : pendingHandoffSnapshot
+      ? getAlternateShadowSlot(activeShadowSlot)
+      : activeShadowSlot
+  const layoutSnapshot = layoutShadowSnapshotRef.current
+    ?? stableShadowSnapshotRef.current
+    ?? currentShadowSnapshot
+  const activationSnapshot = geometry.isTabActivating
+    ? stableShadowSnapshotRef.current ?? currentShadowSnapshot
+    : currentShadowSnapshot
+  let shadowContent: ReactNode[] = []
+
+  if (shadowLayers.length > 0 && typeof document !== 'undefined') {
+    if (geometry.isLayoutChanging) {
+      shadowContent = [
+        <FileTabsBoundaryShadowLayer
+          key={activeShadowSlot}
+          className='file-tabs-boundary-shadow-layer is-layout-snapshot'
+          filterId={`${shadowFilterPrefix}-${activeShadowSlot}`}
+          shadowLayers={shadowLayers}
+          snapshot={layoutSnapshot}
+          transform={getFileTabsShadowSnapshotCssTransform(layoutSnapshot, geometry)}
+        />,
+      ]
+    } else if (effectiveHandoff) {
+      const outgoingSnapshot = effectiveHandoff.snapshot
+
+      shadowContent = [
+        <FileTabsBoundaryShadowLayer
+          key={effectiveHandoff.outgoingSlot}
+          className='file-tabs-boundary-shadow-layer is-shadow-handoff-outgoing'
+          filterId={`${shadowFilterPrefix}-${effectiveHandoff.outgoingSlot}`}
+          shadowLayers={shadowLayers}
+          snapshot={outgoingSnapshot}
+          transform={getFileTabsShadowSnapshotCssTransform(outgoingSnapshot, geometry)}
+        />,
+        <FileTabsBoundaryShadowLayer
+          key={incomingShadowSlot}
+          className='file-tabs-boundary-shadow-layer is-shadow-handoff-incoming'
+          filterId={`${shadowFilterPrefix}-${incomingShadowSlot}`}
+          onAnimationEnd={handleShadowHandoffAnimationEnd}
+          shadowLayers={shadowLayers}
+          snapshot={currentShadowSnapshot}
+        />,
+      ]
+    } else {
+      shadowContent = [
+        <FileTabsBoundaryShadowLayer
+          key={activeShadowSlot}
           className='file-tabs-boundary-shadow-layer'
-          style={{
-            left: geometry.frameLeft,
-            top: geometry.frameTop,
-          }}
-        >
-          <defs>
-            <filter
-              id={shadowFilterId}
-              x={-shadowFilterPadding.x}
-              y={-shadowFilterPadding.y}
-              width={paths.frameWidth + shadowFilterPadding.x * 2}
-              height={paths.frameHeight + shadowFilterPadding.y * 2}
-              colorInterpolationFilters='sRGB'
-              filterUnits='userSpaceOnUse'
-            >
-              {shadowLayers.map((layer, index) => {
-                const resultPrefix = `shadow-${index}`
-                const spreadResult = `${resultPrefix}-spread`
-                const shadowSource = layer.spreadRadius === 0 ? 'SourceAlpha' : spreadResult
+          filterId={`${shadowFilterPrefix}-${activeShadowSlot}`}
+          shadowLayers={shadowLayers}
+          snapshot={activationSnapshot}
+          transform={getFileTabsShadowSnapshotCssTransform(activationSnapshot, geometry)}
+        />,
+      ]
+    }
+  }
 
-                return (
-                  <Fragment key={`${layer.offsetX}-${layer.offsetY}-${layer.blurRadius}-${layer.spreadRadius}-${layer.color}`}>
-                    {layer.spreadRadius !== 0 ? (
-                      <feMorphology
-                        in='SourceAlpha'
-                        operator={layer.spreadRadius > 0 ? 'dilate' : 'erode'}
-                        radius={Math.abs(layer.spreadRadius)}
-                        result={spreadResult}
-                      />
-                    ) : null}
-                    <feGaussianBlur
-                      in={shadowSource}
-                      stdDeviation={layer.blurRadius / 2}
-                      result={`${resultPrefix}-blur`}
-                    />
-                    <feOffset
-                      in={`${resultPrefix}-blur`}
-                      dx={layer.offsetX}
-                      dy={layer.offsetY}
-                      result={`${resultPrefix}-offset`}
-                    />
-                    <feFlood floodColor={layer.color} result={`${resultPrefix}-color`} />
-                    <feComposite
-                      in={`${resultPrefix}-color`}
-                      in2={`${resultPrefix}-offset`}
-                      operator='in'
-                      result={`${resultPrefix}-shadow`}
-                    />
-                    <feComposite
-                      in={`${resultPrefix}-shadow`}
-                      in2='SourceAlpha'
-                      operator='out'
-                      result={`${resultPrefix}-outer`}
-                    />
-                  </Fragment>
-                )
-              })}
-
-              <feMerge>
-                {shadowLayers.map((_, index) => (
-                  <feMergeNode key={index} in={`shadow-${index}-outer`} />
-                ))}
-              </feMerge>
-            </filter>
-          </defs>
-          <path
-            className='file-tabs-boundary-shadow-source'
-            d={shadowSurfacePath}
-            filter={`url(#${shadowFilterId})`}
-          />
-        </svg>,
-        document.body,
-      )
+  const shadowLayer = shadowContent.length > 0 && typeof document !== 'undefined'
+    ? createPortal(shadowContent, document.body)
+    : null
 
   const chromeLayers = createPortal(
     <>

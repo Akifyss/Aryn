@@ -138,6 +138,14 @@ describe('shell layout helpers', () => {
     return fileTabsSource.replace(/\r\n/g, '\n')
   }
 
+  async function readFileTabsBoundaryShadowSource() {
+    const shadowSource = await readFile(
+      new URL('../src/features/workspace/components/file-tabs/file-tabs-boundary-shadow.tsx', import.meta.url),
+      'utf8',
+    )
+    return shadowSource.replace(/\r\n/g, '\n')
+  }
+
   async function readFileTabsCss() {
     const fileTabsCss = await readFile(new URL('../src/features/workspace/components/file-tabs/styles.css', import.meta.url), 'utf8')
     return fileTabsCss.replace(/\r\n/g, '\n')
@@ -453,6 +461,8 @@ describe('shell layout helpers', () => {
 
     expect(globalCss).toContain('--file-tabs-top-gap: 6px;')
     expect(globalCss).toContain('--file-tab-radius: 8px;')
+    expect(globalCss).toContain('--file-tab-shadow-handoff-duration: 100ms;')
+    expect(globalCss).toContain('--file-tab-shadow-handoff-easing: cubic-bezier(0.16, 1, 0.3, 1);')
     expect(appShellCss).toContain('--tabs-chrome-height: var(--chrome-height);')
     expect(appShellCss).not.toContain('--tabs-chrome-height: calc(var(--chrome-height) - 1px);')
     expect(fileTabsCss).toContain('--file-tabs-rail-surface: var(--background-primary);')
@@ -527,6 +537,15 @@ describe('shell layout helpers', () => {
   z-index: 3;
 }`)
     expect(fileTabsCss).toContain('.file-tabs-boundary-shadow-layer {')
+    const shadowLayerRule = fileTabsCss.match(/\.file-tabs-boundary-shadow-layer\s*\{[^}]*\}/)?.[0]
+    expect(shadowLayerRule).toBeDefined()
+    expect(shadowLayerRule).not.toContain('will-change')
+    expect(fileTabsCss).toContain('.file-tabs-boundary-shadow-layer.is-layout-snapshot {')
+    expect(fileTabsCss).toContain('will-change: transform;')
+    expect(fileTabsCss).toContain('.file-tabs-boundary-shadow-layer.is-shadow-handoff-outgoing,')
+    expect(fileTabsCss).toContain('will-change: transform, opacity;')
+    expect(fileTabsCss).toContain('@keyframes file-tabs-shadow-handoff-out')
+    expect(fileTabsCss).toContain('@keyframes file-tabs-shadow-handoff-in')
     expect(fileTabsCss).toContain('box-shadow: var(--shadow-xs);')
     expect(fileTabsCss).not.toContain('--editor-frame-shadow-')
     expect(fileTabsCss).toContain('.file-tabs-boundary-active-fill {')
@@ -549,7 +568,10 @@ describe('shell layout helpers', () => {
     expect(fileTabsCss).not.toContain('.panel-resize-handle')
     expect(fileTabsCss).not.toContain(".app-shell[data-left-collapsed='true'] .file-tabs-scroller")
 
-    const fileTabsSource = await readFileTabsSource()
+    const [fileTabsSource, fileTabsBoundaryShadowSource] = await Promise.all([
+      readFileTabsSource(),
+      readFileTabsBoundaryShadowSource(),
+    ])
     expect(fileTabsSource).toContain("from './file-tabs-boundary-path'")
     expect(fileTabsSource).toContain('<FileTabsBoundaryChrome')
     expect(fileTabsSource).toContain("kind: 'empty'")
@@ -560,10 +582,13 @@ describe('shell layout helpers', () => {
     expect(fileTabsSource).toContain('parseComputedBoxShadow(window.getComputedStyle(shadowTokenProbe).boxShadow)')
     expect(fileTabsSource).toContain("attributeFilter: ['class', 'data-theme']")
     expect(fileTabsSource).toContain('createPortal(')
-    expect(fileTabsSource).toContain('shadowVariant.surfacePathWithRightBoundary')
-    expect(fileTabsSource).toContain("operator='out'")
     expect(fileTabsSource).toContain('function FileTabsBoundaryChromeController({')
-    expect(fileTabsSource).toContain('geometry.isLayoutChanging ||')
+    expect(fileTabsSource).not.toContain('geometry.isLayoutChanging || shadowLayers.length')
+    expect(fileTabsSource).toContain("className='file-tabs-boundary-shadow-layer is-layout-snapshot'")
+    expect(fileTabsSource).toContain("className='file-tabs-boundary-shadow-layer is-shadow-handoff-outgoing'")
+    expect(fileTabsSource).toContain("className='file-tabs-boundary-shadow-layer is-shadow-handoff-incoming'")
+    expect(fileTabsBoundaryShadowSource).toContain('const FileTabsBoundaryShadowSurface = memo(')
+    expect(fileTabsSource).toContain("event.animationName === 'file-tabs-shadow-handoff-in'")
     expect(fileTabsSource).toContain("appShellElement?.hasAttribute('data-sidebar-transition')")
     expect(fileTabsSource).toContain("appShellElement?.dataset.resizing === 'true'")
     expect(fileTabsSource).toContain("attributeName === 'data-sidebar-transition'")
@@ -587,11 +612,12 @@ describe('shell layout helpers', () => {
     expect(fileTabsSource).toContain('interpolateFileTabActiveGeometry(')
     expect(fileTabsSource).toContain('boundaryMotionTargetRef.current = nextGeometry')
     expect(fileTabsSource).toContain('isTabActivating: progress < 1')
-    expect(fileTabsSource).toContain('const stableShadowPathsRef = useRef<FileTabsBoundaryPaths | null>(null)')
+    expect(fileTabsSource).toContain('const stableShadowSnapshotRef = useRef<FileTabsShadowSnapshot | null>(null)')
     expect(fileTabsSource).toContain(
-      'if (paths && (!stableShadowPathsRef.current || !geometry.isTabActivating))',
+      '|| (!geometry.isTabActivating && !geometry.isLayoutChanging)',
     )
-    expect(fileTabsSource).toContain('const shadowPaths = geometry.isTabActivating')
+    expect(fileTabsSource).toContain('layoutShadowSnapshotRef.current = stableShadowSnapshotRef.current')
+    expect(fileTabsSource).toContain('setActiveShadowSlot(getAlternateShadowSlot(activeShadowSlot))')
   })
 
   it('uses the workspace FileSystem for the Agent fixed file tab', async () => {

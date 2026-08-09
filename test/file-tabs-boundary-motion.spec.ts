@@ -3,6 +3,7 @@ import {
   easeFileTabActivation,
   interpolateFileTabActiveGeometry,
   parseCssTimeInMilliseconds,
+  resolveFileTabShadowSnapshotTransform,
 } from '../src/features/workspace/components/file-tabs/file-tabs-boundary-motion'
 
 describe('file tab boundary motion', () => {
@@ -45,4 +46,44 @@ describe('file tab boundary motion', () => {
     expect(parseCssTimeInMilliseconds('180', 140)).toBe(140)
     expect(parseCssTimeInMilliseconds('invalid', 140)).toBe(140)
   })
+
+  it('maps a frozen shadow surface onto the live editor frame with compositor geometry', () => {
+    expect(resolveFileTabShadowSnapshotTransform(
+      {
+        frameHeight: 900,
+        frameLeft: 320,
+        frameTop: 44,
+        frameWidth: 1200,
+      },
+      {
+        frameHeight: 900,
+        frameLeft: 0,
+        frameTop: 44,
+        frameWidth: 1520,
+      },
+    )).toEqual({
+      scaleX: 1520 / 1200,
+      scaleY: 1,
+      translateX: -320,
+      translateY: 0,
+    })
+  })
+
+  it('rejects unmeasurable shadow snapshot geometry', () => {
+    expect(resolveFileTabShadowSnapshotTransform(
+      {
+        frameHeight: 900,
+        frameLeft: 320,
+        frameTop: 44,
+        frameWidth: 0,
+      },
+      {
+        frameHeight: 900,
+        frameLeft: 0,
+        frameTop: 44,
+        frameWidth: 1520,
+      },
+    )).toBeNull()
+  })
+
 })

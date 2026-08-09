@@ -7,6 +7,20 @@ export type FileTabActiveMotionGeometry = {
   activeWidth: number
 }
 
+export type FileTabFrameGeometry = {
+  frameHeight: number
+  frameLeft: number
+  frameTop: number
+  frameWidth: number
+}
+
+export type FileTabShadowSnapshotTransform = {
+  scaleX: number
+  scaleY: number
+  translateX: number
+  translateY: number
+}
+
 function clampUnitInterval(value: number) {
   return Math.min(1, Math.max(0, value))
 }
@@ -30,6 +44,44 @@ export function interpolateFileTabActiveGeometry(
     activeLeft: interpolate(from.activeLeft, to.activeLeft),
     activeTop: interpolate(from.activeTop, to.activeTop),
     activeWidth: interpolate(from.activeWidth, to.activeWidth),
+  }
+}
+
+/**
+ * Maps a frozen shadow surface onto the current editor frame using only
+ * compositor-friendly translation and scaling. The SVG path and filter stay
+ * unchanged while sidebars animate, avoiding per-frame shadow rasterization.
+ */
+export function resolveFileTabShadowSnapshotTransform(
+  snapshot: FileTabFrameGeometry,
+  current: FileTabFrameGeometry,
+): FileTabShadowSnapshotTransform | null {
+  const values = [
+    snapshot.frameHeight,
+    snapshot.frameLeft,
+    snapshot.frameTop,
+    snapshot.frameWidth,
+    current.frameHeight,
+    current.frameLeft,
+    current.frameTop,
+    current.frameWidth,
+  ]
+
+  if (
+    values.some((value) => !Number.isFinite(value))
+    || snapshot.frameHeight <= 0
+    || snapshot.frameWidth <= 0
+    || current.frameHeight <= 0
+    || current.frameWidth <= 0
+  ) {
+    return null
+  }
+
+  return {
+    scaleX: current.frameWidth / snapshot.frameWidth,
+    scaleY: current.frameHeight / snapshot.frameHeight,
+    translateX: current.frameLeft - snapshot.frameLeft,
+    translateY: current.frameTop - snapshot.frameTop,
   }
 }
 

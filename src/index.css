@@ -43,6 +43,8 @@
   --app-item-list-gap: 2px;
   --file-tabs-top-gap: 6px;
   --file-tab-radius: 8px;
+  --file-tab-shadow-handoff-duration: 100ms;
+  --file-tab-shadow-handoff-easing: cubic-bezier(0.16, 1, 0.3, 1);
   --app-menu-content-padding: 6px;
   --app-menu-popup-max-width: 360px;
   --app-menu-popup-max-height: 520px;

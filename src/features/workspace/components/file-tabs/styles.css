@@ -273,6 +273,46 @@
   z-index: calc(var(--app-z-panel-resize) - 1);
 }
 
+.file-tabs-boundary-shadow-layer.is-layout-snapshot {
+  will-change: transform;
+}
+
+.file-tabs-boundary-shadow-layer.is-shadow-handoff-outgoing,
+.file-tabs-boundary-shadow-layer.is-shadow-handoff-incoming {
+  animation-duration: var(--file-tab-shadow-handoff-duration);
+  animation-fill-mode: both;
+  animation-timing-function: var(--file-tab-shadow-handoff-easing);
+  will-change: transform, opacity;
+}
+
+.file-tabs-boundary-shadow-layer.is-shadow-handoff-outgoing {
+  animation-name: file-tabs-shadow-handoff-out;
+}
+
+.file-tabs-boundary-shadow-layer.is-shadow-handoff-incoming {
+  animation-name: file-tabs-shadow-handoff-in;
+}
+
+@keyframes file-tabs-shadow-handoff-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes file-tabs-shadow-handoff-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 .file-tabs-boundary-shadow-source {
   fill: #000;
 }
@@ -492,5 +532,15 @@
   .file-tab-actions,
   .file-tab-dirty-indicator {
     transition: none;
+  }
+
+  .file-tabs-boundary-shadow-layer.is-shadow-handoff-outgoing {
+    animation: none;
+    opacity: 0;
+  }
+
+  .file-tabs-boundary-shadow-layer.is-shadow-handoff-incoming {
+    animation: none;
+    opacity: 1;
   }
 }
