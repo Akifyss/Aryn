@@ -5,6 +5,8 @@ import {
   CodeLine,
   Columns2Line,
   DownLine,
+  Eye2Line,
+  FileCodeLine,
   FontSizeLine,
   GitCompareLine,
   HashtagLine,
@@ -45,14 +47,20 @@ import {
   type ReactNode,
   type Ref,
 } from 'react'
-import { AppButton } from '@/components/app-button'
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppMenu as Menu } from '@/components/app-menu'
+import {
+  SegmentedIconTabs,
+  type SegmentedIconTabOption,
+} from '@/components/ui/segmented-icon-tabs/segmented-icon-tabs'
 import {
   MeoNativeOutline,
   type MeoNativeOutlineController,
 } from '@/features/editor/lib/meo-native-outline'
-import type { MeoEditorInstance } from '@/features/editor/lib/meo-native-editor-types'
+import type {
+  MeoEditorInstance,
+  MeoEditorMode,
+} from '@/features/editor/lib/meo-native-editor-types'
 import type { FindPanelElements } from '@/vendor/meo/webview/helpers/findPanel'
 import type { SelectionMenuElements } from '@/vendor/meo/webview/helpers/selectionMenu'
 import './meo-native-editor-shell.css'
@@ -66,24 +74,47 @@ const HEADING_LEVELS = [
   { icon: heading6Icon, level: 6 },
 ] as const
 
+const MODE_OPTIONS = [
+  {
+    ariaLabel: 'Live preview mode',
+    icon: <Eye2Line aria-hidden='true' />,
+    tooltip: 'Live preview',
+    value: 'live',
+  },
+  {
+    ariaLabel: 'Markdown source mode',
+    icon: <FileCodeLine aria-hidden='true' />,
+    tooltip: 'Markdown source',
+    value: 'source',
+  },
+  {
+    ariaLabel: 'Split diff mode',
+    icon: <Columns2Line aria-hidden='true' />,
+    tooltip: 'Split diff',
+    value: 'diff-split',
+  },
+  {
+    ariaLabel: 'Unified diff mode',
+    icon: <Rows2Line aria-hidden='true' />,
+    tooltip: 'Unified diff',
+    value: 'diff-unified',
+  },
+] satisfies readonly SegmentedIconTabOption<MeoEditorMode>[]
+
 type NativeMeoButtonMap = {
   bulletListBtn: HTMLButtonElement
   codeBlockBtn: HTMLButtonElement
   diffNextChangeBtn: HTMLButtonElement
   diffPreviousChangeBtn: HTMLButtonElement
-  diffSplitButton: HTMLButtonElement
-  diffUnifiedButton: HTMLButtonElement
   findToggleBtn: HTMLButtonElement
   gitChangesGutterBtn: HTMLButtonElement
   hrBtn: HTMLButtonElement
   imageBtn: HTMLButtonElement
   lineNumbersBtn: HTMLButtonElement
   linkBtn: HTMLButtonElement
-  liveButton: HTMLButtonElement
   numberedListBtn: HTMLButtonElement
   outlineBtn: HTMLButtonElement
   quoteBtn: HTMLButtonElement
-  sourceButton: HTMLButtonElement
   tableBtn: HTMLButtonElement
   taskBtn: HTMLButtonElement
   wikiLinkBtn: HTMLButtonElement
@@ -92,6 +123,7 @@ type NativeMeoButtonMap = {
 type NativeMeoEditorShellActions = {
   getEditor: () => NativeMeoShellEditor | null
   onHeadingLevel: ((level: number) => void) | null
+  onModeChange: ((mode: MeoEditorMode) => void) | null
 }
 
 type MeoHeadingMenuController = {
@@ -108,19 +140,15 @@ type NativeMeoEditorChromeRefs = {
     codeBlockBtn: ElementSlot<HTMLButtonElement>
     diffNextChangeBtn: ElementSlot<HTMLButtonElement>
     diffPreviousChangeBtn: ElementSlot<HTMLButtonElement>
-    diffSplitButton: ElementSlot<HTMLButtonElement>
-    diffUnifiedButton: ElementSlot<HTMLButtonElement>
     findToggleBtn: ElementSlot<HTMLButtonElement>
     gitChangesGutterBtn: ElementSlot<HTMLButtonElement>
     hrBtn: ElementSlot<HTMLButtonElement>
     imageBtn: ElementSlot<HTMLButtonElement>
     lineNumbersBtn: ElementSlot<HTMLButtonElement>
     linkBtn: ElementSlot<HTMLButtonElement>
-    liveButton: ElementSlot<HTMLButtonElement>
     numberedListBtn: ElementSlot<HTMLButtonElement>
     outlineBtn: ElementSlot<HTMLButtonElement>
     quoteBtn: ElementSlot<HTMLButtonElement>
-    sourceButton: ElementSlot<HTMLButtonElement>
     tableBtn: ElementSlot<HTMLButtonElement>
     taskBtn: ElementSlot<HTMLButtonElement>
     wikiLinkBtn: ElementSlot<HTMLButtonElement>
@@ -149,16 +177,6 @@ type MeoToolbarIconButtonProps = {
   pressed?: boolean
 }
 
-type MeoModeTextButtonProps = {
-  buttonRef: ElementSlot<HTMLButtonElement>
-  children: ReactNode
-  mode: string
-}
-
-type MeoModeIconButtonProps = MeoModeTextButtonProps & {
-  label: string
-}
-
 type NativeMeoShellEditor = Pick<
   MeoEditorInstance,
   'getHeadings' | 'moveHeadingSection' | 'scrollToLine'
@@ -176,6 +194,8 @@ export type NativeMeoEditorShell = {
   selectionMenuElements: SelectionMenuElements
   setEditorGetter: (handler: (() => NativeMeoShellEditor | null) | null) => void
   setHeadingLevelHandler: (handler: ((level: number) => void) | null) => void
+  setMode: (mode: MeoEditorMode) => void
+  setModeChangeHandler: (handler: ((mode: MeoEditorMode) => void) | null) => void
   toolbar: HTMLDivElement
 }
 
@@ -186,12 +206,6 @@ function createElementSlot<T extends Element>(): ElementSlot<T> {
 function bindElementSlot<T extends Element>(slot: ElementSlot<T>) {
   return (element: T | null) => {
     slot.current = element
-  }
-}
-
-function bindButtonSlot(slot: ElementSlot<HTMLButtonElement>) {
-  return (element: HTMLElement | null) => {
-    slot.current = element instanceof HTMLButtonElement ? element : null
   }
 }
 
@@ -210,19 +224,15 @@ function createChromeRefs(): NativeMeoEditorChromeRefs {
       codeBlockBtn: createElementSlot(),
       diffNextChangeBtn: createElementSlot(),
       diffPreviousChangeBtn: createElementSlot(),
-      diffSplitButton: createElementSlot(),
-      diffUnifiedButton: createElementSlot(),
       findToggleBtn: createElementSlot(),
       gitChangesGutterBtn: createElementSlot(),
       hrBtn: createElementSlot(),
       imageBtn: createElementSlot(),
       lineNumbersBtn: createElementSlot(),
       linkBtn: createElementSlot(),
-      liveButton: createElementSlot(),
       numberedListBtn: createElementSlot(),
       outlineBtn: createElementSlot(),
       quoteBtn: createElementSlot(),
-      sourceButton: createElementSlot(),
       tableBtn: createElementSlot(),
       taskBtn: createElementSlot(),
       wikiLinkBtn: createElementSlot(),
@@ -408,53 +418,6 @@ function MeoFindPanel({
   )
 }
 
-function MeoModeTextButton({
-  buttonRef,
-  children,
-  mode,
-}: MeoModeTextButtonProps) {
-  return (
-    <AppButton
-      ref={bindButtonSlot(buttonRef)}
-      type='button'
-      size='sm'
-      variant='ghost'
-      className='mode-button'
-      data-mode={mode}
-      role='tab'
-      aria-selected='false'
-      tabIndex={-1}
-    >
-      {children}
-    </AppButton>
-  )
-}
-
-function MeoModeIconButton({
-  buttonRef,
-  children,
-  label,
-  mode,
-}: MeoModeIconButtonProps) {
-  return (
-    <AppIconButton
-      ref={bindElementSlot(buttonRef)}
-      type='button'
-      size='sm'
-      variant='ghost'
-      className='mode-button mode-button-icon'
-      data-mode={mode}
-      role='tab'
-      aria-label={label}
-      aria-selected='false'
-      tabIndex={-1}
-      tooltip={label}
-    >
-      {children}
-    </AppIconButton>
-  )
-}
-
 function MeoSelectionMenu() {
   const actions = [
     { action: 'bold', icon: <BoldLine aria-hidden='true' />, label: 'Bold' },
@@ -485,10 +448,12 @@ function MeoSelectionMenu() {
 function MeoEditorToolbar({
   actions,
   headingMenuControllerRef,
+  mode,
   refs,
 }: {
   actions: NativeMeoEditorShellActions
   headingMenuControllerRef: Ref<MeoHeadingMenuController>
+  mode: MeoEditorMode
   refs: NativeMeoEditorChromeRefs
 }) {
   const { buttons } = refs
@@ -587,18 +552,14 @@ function MeoEditorToolbar({
 
       <div
         ref={bindElementSlot(refs.modeGroup)}
-        className='mode-group'
-        role='tablist'
-        aria-label='Markdown mode'
+        className='meo-editor-mode-switch'
       >
-        <MeoModeTextButton buttonRef={buttons.liveButton} mode='live'>Live</MeoModeTextButton>
-        <MeoModeTextButton buttonRef={buttons.sourceButton} mode='source'>Source</MeoModeTextButton>
-        <MeoModeIconButton buttonRef={buttons.diffSplitButton} label='Split diff' mode='diff-split'>
-          <Columns2Line aria-hidden='true' />
-        </MeoModeIconButton>
-        <MeoModeIconButton buttonRef={buttons.diffUnifiedButton} label='Unified diff' mode='diff-unified'>
-          <Rows2Line aria-hidden='true' />
-        </MeoModeIconButton>
+        <SegmentedIconTabs<MeoEditorMode>
+          ariaLabel='Markdown editor mode'
+          options={MODE_OPTIONS}
+          value={mode}
+          onValueChange={(nextMode) => actions.onModeChange?.(nextMode)}
+        />
       </div>
 
       <MeoFindPanel refs={refs.findPanel} />
@@ -612,19 +573,15 @@ function resolveButtons(refs: NativeMeoEditorChromeRefs): NativeMeoButtonMap {
     codeBlockBtn: requireElement(refs.buttons.codeBlockBtn, 'code block button'),
     diffNextChangeBtn: requireElement(refs.buttons.diffNextChangeBtn, 'next change button'),
     diffPreviousChangeBtn: requireElement(refs.buttons.diffPreviousChangeBtn, 'previous change button'),
-    diffSplitButton: requireElement(refs.buttons.diffSplitButton, 'split diff button'),
-    diffUnifiedButton: requireElement(refs.buttons.diffUnifiedButton, 'unified diff button'),
     findToggleBtn: requireElement(refs.buttons.findToggleBtn, 'find button'),
     gitChangesGutterBtn: requireElement(refs.buttons.gitChangesGutterBtn, 'Git gutter button'),
     hrBtn: requireElement(refs.buttons.hrBtn, 'horizontal rule button'),
     imageBtn: requireElement(refs.buttons.imageBtn, 'image button'),
     lineNumbersBtn: requireElement(refs.buttons.lineNumbersBtn, 'line numbers button'),
     linkBtn: requireElement(refs.buttons.linkBtn, 'link button'),
-    liveButton: requireElement(refs.buttons.liveButton, 'live mode button'),
     numberedListBtn: requireElement(refs.buttons.numberedListBtn, 'numbered list button'),
     outlineBtn: requireElement(refs.buttons.outlineBtn, 'outline button'),
     quoteBtn: requireElement(refs.buttons.quoteBtn, 'quote button'),
-    sourceButton: requireElement(refs.buttons.sourceButton, 'source mode button'),
     tableBtn: requireElement(refs.buttons.tableBtn, 'table button'),
     taskBtn: requireElement(refs.buttons.taskBtn, 'task list button'),
     wikiLinkBtn: requireElement(refs.buttons.wikiLinkBtn, 'wiki link button'),
@@ -663,6 +620,7 @@ const MeoNativeEditorChromeImpl = forwardRef(function MeoNativeEditorChrome(
   const outlineControllerRef = useRef<MeoNativeOutlineController | null>(null)
   const chromeRefsRef = useRef<NativeMeoEditorChromeRefs | null>(null)
   const actionsRef = useRef<NativeMeoEditorShellActions | null>(null)
+  const [mode, setMode] = useState<MeoEditorMode>('live')
 
   if (!chromeRefsRef.current) {
     chromeRefsRef.current = createChromeRefs()
@@ -671,6 +629,7 @@ const MeoNativeEditorChromeImpl = forwardRef(function MeoNativeEditorChrome(
     actionsRef.current = {
       getEditor: () => null,
       onHeadingLevel: null,
+      onModeChange: null,
     }
   }
 
@@ -703,6 +662,7 @@ const MeoNativeEditorChromeImpl = forwardRef(function MeoNativeEditorChrome(
       disconnectController() {
         actions.getEditor = () => null
         actions.onHeadingLevel = null
+        actions.onModeChange = null
         headingMenuControllerRef.current?.close()
         outlineController.destroy()
         const activeElement = document.activeElement
@@ -743,6 +703,10 @@ const MeoNativeEditorChromeImpl = forwardRef(function MeoNativeEditorChrome(
       setHeadingLevelHandler(handler) {
         actions.onHeadingLevel = handler
       },
+      setMode,
+      setModeChangeHandler(handler) {
+        actions.onModeChange = handler
+      },
       toolbar,
     }
   }, [actions, refs])
@@ -761,6 +725,7 @@ const MeoNativeEditorChromeImpl = forwardRef(function MeoNativeEditorChrome(
         <MeoEditorToolbar
           actions={actions}
           headingMenuControllerRef={headingMenuControllerRef}
+          mode={mode}
           refs={refs}
         />
       </div>

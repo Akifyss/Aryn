@@ -152,19 +152,15 @@ export function mountNativeMeoEditor({
       codeBlockBtn,
       diffNextChangeBtn,
       diffPreviousChangeBtn,
-      diffSplitButton,
-      diffUnifiedButton,
       findToggleBtn,
       gitChangesGutterBtn,
       hrBtn,
       imageBtn,
       lineNumbersBtn,
       linkBtn,
-      liveButton,
       numberedListBtn,
       outlineBtn,
       quoteBtn,
-      sourceButton,
       tableBtn,
       taskBtn,
       wikiLinkBtn,
@@ -362,24 +358,7 @@ export function mountNativeMeoEditor({
   }
 
   const updateModeUi = () => {
-    const modeButtons = [
-      [liveButton, 'live'],
-      [sourceButton, 'source'],
-      [diffSplitButton, 'diff-split'],
-      [diffUnifiedButton, 'diff-unified'],
-    ] as const
-
-    for (const [button, mode] of modeButtons) {
-      const active = currentMode === mode
-      button.classList.toggle('is-active', active)
-      button.setAttribute('aria-selected', active ? 'true' : 'false')
-      button.tabIndex = active ? 0 : -1
-      if (active) {
-        button.setAttribute('data-active', 'true')
-      } else {
-        button.removeAttribute('data-active')
-      }
-    }
+    shell.setMode(currentMode)
     editorHost.classList.toggle('meo-diff-split-active', isDiffMode(currentMode))
     root.classList.toggle('is-diff-mode', isDiffMode(currentMode))
     root.classList.toggle('is-diff-split-mode', currentMode === 'diff-split')
@@ -970,6 +949,7 @@ export function mountNativeMeoEditor({
     handleFormatAction('heading', level)
     focusEditor()
   })
+  shell.setModeChangeHandler(applyMode)
 
   const isEventInsideMeoSurface = (eventTarget: EventTarget | null) => (
     eventTarget instanceof Node && root.contains(eventTarget)
@@ -1150,35 +1130,6 @@ export function mountNativeMeoEditor({
     updateCompositionState(false)
   }
 
-  const modeGroupKeydownHandler = (event: KeyboardEvent) => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
-      return
-    }
-
-    const modeButtons = [liveButton, sourceButton, diffSplitButton, diffUnifiedButton]
-      .filter((button) => !button.disabled && button.offsetParent !== null)
-    if (modeButtons.length === 0) {
-      return
-    }
-
-    const focusedButton = event.target instanceof Element
-      ? event.target.closest<HTMLButtonElement>('[role="tab"]')
-      : null
-    const currentIndex = Math.max(0, modeButtons.indexOf(focusedButton ?? liveButton))
-    const nextIndex = event.key === 'Home'
-      ? 0
-      : event.key === 'End'
-        ? modeButtons.length - 1
-        : event.key === 'ArrowLeft'
-          ? (currentIndex - 1 + modeButtons.length) % modeButtons.length
-          : (currentIndex + 1) % modeButtons.length
-    const nextButton = modeButtons[nextIndex]
-
-    event.preventDefault()
-    nextButton.focus()
-    nextButton.click()
-  }
-
   const eventAbortController = new AbortController()
   const eventOptions = { signal: eventAbortController.signal }
   const captureEventOptions = { capture: true, signal: eventAbortController.signal }
@@ -1190,8 +1141,6 @@ export function mountNativeMeoEditor({
   document.addEventListener('visibilitychange', visibilityHandler, eventOptions)
   root.addEventListener('compositionstart', compositionStartHandler, captureEventOptions)
   root.addEventListener('compositionend', compositionEndHandler, captureEventOptions)
-  modeGroup.addEventListener('keydown', modeGroupKeydownHandler, eventOptions)
-
   bulletListBtn.addEventListener('click', () => handleFormatAction('bulletList'), eventOptions)
   numberedListBtn.addEventListener('click', () => handleFormatAction('numberedList'), eventOptions)
   taskBtn.addEventListener('click', () => handleFormatAction('task'), eventOptions)
@@ -1222,19 +1171,6 @@ export function mountNativeMeoEditor({
     diffSplitController?.nextChange()
     diffSplitController?.focus()
   }, eventOptions)
-  liveButton.addEventListener('click', () => {
-    applyMode('live')
-  }, eventOptions)
-  sourceButton.addEventListener('click', () => {
-    applyMode('source')
-  }, eventOptions)
-  diffSplitButton.addEventListener('click', () => {
-    applyMode('diff-split')
-  }, eventOptions)
-  diffUnifiedButton.addEventListener('click', () => {
-    applyMode('diff-unified')
-  }, eventOptions)
-
   findPanelElements.findInput.addEventListener('input', () => {
     findPanelController.updateFindStatusSummary()
   }, eventOptions)

@@ -15,8 +15,8 @@ describe('MEO React chrome boundary', () => {
     expect(shellSource).toContain("from '@iconify/react/offline'")
     expect(shellSource).toContain("from '@iconify-icons/lucide/whole-word'")
     expect(shellSource).toContain("import { Input } from '@heroui/react'")
-    expect(shellSource).toContain("import { AppButton } from '@/components/app-button'")
     expect(shellSource).toContain("import { AppIconButton } from '@/components/app-icon-button'")
+    expect(shellSource).toContain('SegmentedIconTabs')
     expect(shellSource).toContain("AppMenu as Menu")
     expect(shellSource).toContain('const MeoNativeEditorChromeImpl = forwardRef')
     expect(shellSource).toContain('memo(MeoNativeEditorChromeImpl)')
@@ -51,6 +51,8 @@ describe('MEO React chrome boundary', () => {
       'replaceAllIcon',
       'wholeWordIcon',
       'ListCheck3Line',
+      'Eye2Line',
+      'FileCodeLine',
     ]) {
       expect(shellSource).toContain(icon)
     }
@@ -68,6 +70,8 @@ describe('MEO React chrome boundary', () => {
     }
 
     expect(shellSource).not.toContain('meo-heading-menu-level')
+    expect(shellSource).not.toContain('MeoModeTextButton')
+    expect(shellSource).not.toContain('MeoModeIconButton')
   })
 
   it('keeps the CodeMirror engine outside React while the shell owns the outline', async () => {
@@ -81,11 +85,15 @@ describe('MEO React chrome boundary', () => {
 
     expect(hostSource).toContain('<MeoNativeEditorChrome ref={editorChromeRef} />')
     expect(editorSource).toContain('shell.setEditorGetter(getActiveEditor)')
+    expect(editorSource).toContain('shell.setMode(currentMode)')
+    expect(editorSource).toContain('shell.setModeChangeHandler(applyMode)')
     expect(editorSource).toContain('const eventAbortController = new AbortController()')
     expect(editorSource).toContain('eventAbortController.abort()')
     expect(editorSource).toContain('shell.disconnectController()')
     expect(editorSource).not.toContain('root.replaceChildren()')
     expect(editorSource).not.toContain('createOutlineController')
+    expect(editorSource).not.toContain('modeGroupKeydownHandler')
+    expect(editorSource).not.toContain("liveButton.addEventListener('click'")
     expect(hostSource).not.toContain('root: editorShell.root')
     expect(outlineSource).toContain('<AppScrollArea')
     expect(outlineSource).toContain('<AppButton')
