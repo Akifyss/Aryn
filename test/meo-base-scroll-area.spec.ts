@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { __meoBaseScrollAreaTestHooks } from '../src/features/editor/lib/meo-base-scroll-area'
+import { scheduleDeferredReactRootUnmount } from '../src/features/editor/lib/meo-react-root'
 
-describe('meo base scroll area teardown', () => {
+describe('MEO secondary React root teardown', () => {
   afterEach(() => {
     vi.useRealTimers()
   })
@@ -10,7 +10,7 @@ describe('meo base scroll area teardown', () => {
     vi.useFakeTimers()
     const root = { unmount: vi.fn() }
 
-    __meoBaseScrollAreaTestHooks.scheduleDeferredRootUnmount(root)
+    scheduleDeferredReactRootUnmount(root)
 
     expect(root.unmount).not.toHaveBeenCalled()
     vi.runOnlyPendingTimers()
@@ -21,7 +21,7 @@ describe('meo base scroll area teardown', () => {
     vi.useFakeTimers()
     const root = { unmount: vi.fn() }
 
-    const unmount = __meoBaseScrollAreaTestHooks.scheduleDeferredRootUnmount(root)
+    const unmount = scheduleDeferredReactRootUnmount(root)
     unmount()
     unmount()
     vi.runOnlyPendingTimers()

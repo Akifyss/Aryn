@@ -5,7 +5,7 @@ import {language, highlightingFor} from "@codemirror/language"
 import {highlightTree} from "@lezer/highlight"
 import {Chunk, chunkActualRange, defaultDiffConfig} from "./chunk"
 import {computeChunks, ChunkField, mergeConfig} from "./merge"
-import type {DeletedContentRenderResult} from "./merge"
+import type {DeletedContentRenderResult, MergeControlRenderer, MergeControlRenderResult} from "./merge"
 import {Change, DiffConfig} from "./diff"
 import {decorateChunks, inlineChangeLayer, collapseUnchanged, changedText} from "./deco"
 import {baseTheme} from "./theme"
@@ -32,8 +32,8 @@ interface UnifiedMergeConfig {
   syntaxHighlightDeletionsMaxLength?: number
   /// Controls whether accept/reject buttons are displayed for each
   /// changed chunk. Defaults to true. When set to a function, that
-  /// function is used to render the buttons.
-  mergeControls?: boolean | ((type: "reject" | "accept", action: (e: MouseEvent) => void) => HTMLElement)
+  /// function is used to render the buttons and may return lifecycle cleanup.
+  mergeControls?: boolean | MergeControlRenderer
   /// When given, this is used to render deleted content in unified
   /// views. Returning null falls back to the default plain DOM renderer.
   renderDeletedContent?: (context: {
@@ -125,7 +125,7 @@ const DeletionWidgets: WeakMap<readonly Change[], Decoration> = new WeakMap
 
 class DeletionWidget extends WidgetType {
   dom: HTMLElement | null = null
-  private cleanup: (() => void) | null = null
+  private cleanups: (() => void)[] = []
   constructor(
     readonly buildDOM: (view: EditorView, widget: DeletionWidget) => HTMLElement,
     readonly marksDeletedLines: boolean,
@@ -133,14 +133,24 @@ class DeletionWidget extends WidgetType {
   eq(other: DeletionWidget) { return this.dom == other.dom }
   toDOM(view: EditorView) { return this.dom || (this.dom = this.buildDOM(view, this)) }
   destroy() {
-    if (this.cleanup) {
-      this.cleanup()
-      this.cleanup = null
-    }
+    for (let cleanup of this.cleanups.splice(0)) cleanup()
     this.dom = null
   }
-  setDeletedContentCleanup(cleanup: (() => void) | null | undefined) {
-    this.cleanup = cleanup || null
+  addCleanup(cleanup: (() => void) | null | undefined) {
+    if (cleanup) this.cleanups.push(cleanup)
+  }
+}
+
+function appendRenderedControl(
+  parent: HTMLElement,
+  rendered: MergeControlRenderResult,
+  widget: DeletionWidget
+) {
+  if (rendered instanceof HTMLElement) {
+    parent.appendChild(rendered)
+  } else {
+    parent.appendChild(rendered.dom)
+    widget.addCleanup(rendered.destroy)
   }
 }
 
@@ -157,18 +167,20 @@ function deletionWidget(state: EditorState, chunk: Chunk, hideContent: boolean) 
     dom.className = marksDeletedLines ? "cm-deletedChunk" : "cm-deletedChunk cm-insertedChunkHost"
     if (mergeControls) {
       let buttons = dom.appendChild(document.createElement("div"))
-      buttons.className = "cm-chunkButtons"
+      buttons.className = "cm-chunkButtons meo-diff-floating-control-surface"
       let onAccept = (e: MouseEvent) => { e.preventDefault(); acceptChunk(view, view.posAtDOM(dom)) }
       let onReject = (e: MouseEvent) => { e.preventDefault(); rejectChunk(view, view.posAtDOM(dom)) }
       if (typeof mergeControls == "function") {
-        buttons.appendChild(mergeControls("accept", onAccept))
-        buttons.appendChild(mergeControls("reject", onReject))
+        appendRenderedControl(buttons, mergeControls("accept", onAccept), widget)
+        appendRenderedControl(buttons, mergeControls("reject", onReject), widget)
       } else {
         let accept = buttons.appendChild(document.createElement("button"))
+        accept.className = "cm-merge-defaultControl"
         accept.name = "accept"
         accept.textContent = viewState.phrase("Accept")
         accept.onmousedown = onAccept
         let reject = buttons.appendChild(document.createElement("button"))
+        reject.className = "cm-merge-defaultControl"
         reject.name = "reject"
         reject.textContent = viewState.phrase("Reject")
         reject.onmousedown = onReject
@@ -183,7 +195,7 @@ function deletionWidget(state: EditorState, chunk: Chunk, hideContent: boolean) 
         dom.appendChild(rendered)
       } else {
         dom.appendChild(rendered.dom)
-        widget.setDeletedContentCleanup(rendered.destroy)
+        widget.addCleanup(rendered.destroy)
       }
       return dom
     }

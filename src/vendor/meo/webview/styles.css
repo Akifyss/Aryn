@@ -863,11 +863,11 @@
 }
 
 .meo-native-theme .meo-diff-split-body .cm-merge-revert {
+  box-sizing: border-box;
   position: relative;
-  width: 18px;
-  min-width: 18px;
-  border-left: 1px solid var(--panel-border);
-  border-right: 1px solid var(--panel-border);
+  width: calc(var(--app-icon-button-size-sm) + 4px);
+  min-width: calc(var(--app-icon-button-size-sm) + 4px);
+  border: 0;
   background: transparent;
 }
 
@@ -885,10 +885,9 @@
 
 .meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-deletedChunk .cm-chunkButtons {
   position: absolute;
-  top: calc(-1 * var(--meo-live-inline-diff-floating-lift, 26px));
+  top: calc(-1 * var(--meo-live-inline-diff-floating-lift, calc(var(--app-icon-button-size-sm) + 6px)));
   right: 10px;
   width: max-content;
-  z-index: 12;
 }
 
 .meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-deletedChunk.is-toolbar-stuck .cm-chunkButtons {
@@ -945,49 +944,15 @@
   flex-flow: column nowrap !important;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  width: 100%;
-  min-height: 33px;
+  gap: 2px;
+  width: calc(var(--app-icon-button-size-sm) + 4px);
+  min-width: calc(var(--app-icon-button-size-sm) + 4px);
   margin-top: var(--editor-content-padding-top, 0px);
-  padding: 0;
-  pointer-events: auto;
+  padding: 2px;
 }
 
-.meo-native-theme .meo-diff-split-body .meo-diff-hunk-action {
-  appearance: none;
-  position: static !important;
-  box-sizing: border-box;
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  width: 16px !important;
-  height: 16px !important;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  color: var(--descriptionForeground);
-  background: transparent;
-  font: inherit;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.meo-native-theme .meo-diff-split-body .meo-diff-hunk-action:hover,
-.meo-native-theme .meo-diff-split-body .meo-diff-hunk-action:focus-visible {
-  color: var(--editor-foreground);
-  background: var(--toolbar-hoverBackground);
-  outline: none;
-}
-
-.meo-native-theme .meo-diff-split-body .meo-diff-hunk-action svg {
-  display: block;
-  width: var(--icon-size-md);
-  height: var(--icon-size-md);
-}
-
-.meo-native-theme .meo-diff-split-body .meo-diff-hunk-action:disabled {
-  cursor: default;
-  opacity: 0.45;
+.meo-native-theme .meo-diff-split-body .cm-merge-revert>.meo-diff-hunk-actions {
+  inset-inline-start: 0;
 }
 
 .meo-native-theme .meo-diff-split-body .cm-cursorLayer {
@@ -1060,8 +1025,8 @@
 .meo-native-theme .meo-live-inline-diff {
   --editor-content-padding-top: 0px;
   --meo-live-inline-outer-gutter-width: 0px;
-  --meo-live-inline-diff-floating-height: 24px;
-  --meo-live-inline-diff-floating-lift: 26px;
+  --meo-live-inline-diff-floating-height: calc(var(--app-icon-button-size-sm) + 4px);
+  --meo-live-inline-diff-floating-lift: calc(var(--meo-live-inline-diff-floating-height) + 2px);
   --meo-live-inline-diff-sticky-inset: 8px;
   position: relative;
   display: block;
@@ -1079,7 +1044,7 @@
 }
 
 .meo-native-theme .meo-live-inline-diff[data-line-numbers='hidden'] {
-  --meo-live-inline-diff-floating-height: 24px;
+  --meo-live-inline-diff-floating-height: calc(var(--app-icon-button-size-sm) + 4px);
 }
 
 .meo-native-theme .meo-live-inline-diff-header {
@@ -1096,29 +1061,33 @@
   pointer-events: none;
 }
 
+/* Structural fallbacks keep long-lived CodeMirror widgets styled across HMR. */
+.meo-native-theme .meo-diff-floating-control-surface,
+.meo-native-theme .meo-diff-floating-hunk-toolbar,
+.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-deletedChunk .cm-chunkButtons,
+.meo-native-theme .meo-diff-split-body .cm-merge-revert>.meo-diff-hunk-actions {
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 6px;
+  background: var(--meo-floating-toolbar-background) !important;
+  box-shadow:
+    var(--shadow-sm),
+    0 0 0 1px var(--smooth-ring-color);
+  isolation: isolate;
+  pointer-events: auto;
+  z-index: var(--meo-floating-toolbar-z-index);
+}
+
 .meo-native-theme .meo-diff-floating-hunk-toolbar,
 .meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-deletedChunk .cm-chunkButtons {
   right: 10px;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
   max-width: min(54%, 420px);
-  height: var(--meo-live-inline-diff-floating-height, 24px);
-  padding: 1px 4px;
-  border: 1px solid color-mix(in srgb,
-      var(--panel-border) 78%,
-      var(--meo-floating-toolbar-background) 22%);
-  border-radius: 6px;
-  background: var(--meo-floating-toolbar-background) !important;
-  background-color: var(--meo-floating-toolbar-background) !important;
-  background-image: none !important;
-  background-clip: border-box;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--shadow, #000) 16%, transparent);
-  isolation: isolate;
-  opacity: 1 !important;
-  pointer-events: auto;
-  z-index: var(--meo-floating-toolbar-z-index);
+  height: var(--meo-live-inline-diff-floating-height, calc(var(--app-icon-button-size-sm) + 4px));
+  padding: 2px;
 }
 
 .meo-native-theme .meo-live-inline-diff-controls {
@@ -1134,36 +1103,8 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
   height: 100%;
-}
-
-.meo-native-theme .meo-live-inline-diff-nav-button {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 21px;
-  height: 21px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  color: var(--descriptionForeground);
-  background: transparent;
-  cursor: pointer;
-}
-
-.meo-native-theme .meo-live-inline-diff-nav-button:hover,
-.meo-native-theme .meo-live-inline-diff-nav-button:focus-visible {
-  color: var(--editor-foreground);
-  background: var(--toolbar-hoverBackground);
-  outline: none;
-}
-
-.meo-native-theme .meo-live-inline-diff-nav-button svg {
-  display: block;
-  width: var(--icon-size-md);
-  height: var(--icon-size-md);
 }
 
 .meo-native-theme .meo-live-inline-diff-body {
@@ -1291,7 +1232,7 @@
   flex: 0 0 auto;
   flex-flow: row nowrap !important;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
   height: 100%;
   margin: 0;
   padding: 0;
@@ -1300,49 +1241,8 @@
   box-shadow: none;
 }
 
-.meo-native-theme .meo-diff-floating-hunk-toolbar .meo-diff-hunk-action,
-.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-chunkButtons .meo-diff-hunk-action,
-.meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action {
-  appearance: none;
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  width: 21px !important;
-  height: 21px !important;
-  min-width: 21px !important;
-  min-height: 21px !important;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  color: var(--descriptionForeground);
-  background: transparent;
-  cursor: pointer;
-}
-
-.meo-native-theme .meo-diff-floating-hunk-toolbar .meo-diff-hunk-action:hover,
-.meo-native-theme .meo-diff-floating-hunk-toolbar .meo-diff-hunk-action:focus-visible,
-.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-chunkButtons .meo-diff-hunk-action:hover,
-.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-chunkButtons .meo-diff-hunk-action:focus-visible,
-.meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action:hover,
-.meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action:focus-visible {
-  color: var(--editor-foreground);
-  background: var(--toolbar-hoverBackground);
-  outline: none;
-}
-
-.meo-native-theme .meo-diff-floating-hunk-toolbar .meo-diff-hunk-action svg,
-.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-chunkButtons .meo-diff-hunk-action svg,
-.meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action svg {
-  display: block;
-  width: var(--icon-size-md);
-  height: var(--icon-size-md);
-}
-
-.meo-native-theme .meo-diff-floating-hunk-toolbar .meo-diff-hunk-action:disabled,
-.meo-native-theme .meo-diff-split-body.meo-diff-view-unified .cm-chunkButtons .meo-diff-hunk-action:disabled,
-.meo-native-theme .meo-live-inline-diff-header .meo-diff-hunk-action:disabled {
-  cursor: default;
-  opacity: 0.48;
+.meo-native-theme .meo-diff-hunk-action-mount {
+  display: contents;
 }
 
 .meo-native-theme .selection-inline-menu {
@@ -1367,7 +1267,7 @@
   pointer-events: auto;
 }
 
-.meo-native-theme .selection-inline-button {
+.meo-native-theme .selection-inline-button:not(.app-icon-button) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1381,7 +1281,7 @@
   cursor: pointer;
 }
 
-.meo-native-theme .selection-inline-button:hover {
+.meo-native-theme .selection-inline-button:not(.app-icon-button):hover {
   background-color: var(--toolbar-hoverBackground);
 }
 
@@ -1521,7 +1421,7 @@
   flex: 0 0 auto;
 }
 
-.meo-native-theme .find-option-button {
+.meo-native-theme .find-option-button:not(.app-icon-button) {
   width: 24px;
   min-width: 24px;
   padding: 0;
@@ -1711,7 +1611,7 @@
   text-align: center;
 }
 
-.meo-native-theme .format-button,
+.meo-native-theme .format-button:not(.app-icon-button),
 .meo-native-theme .heading-dropdown-option,
 .meo-native-theme .meo-mermaid-zoom-btn {
   display: flex;
@@ -1725,39 +1625,39 @@
   cursor: pointer;
 }
 
-.meo-native-theme .format-button.export-button {
+.meo-native-theme .format-button.export-button:not(.app-icon-button) {
   width: 24px;
   min-width: 24px;
   padding: 0;
 }
 
-.meo-native-theme .format-button,
+.meo-native-theme .format-button:not(.app-icon-button),
 .meo-native-theme .heading-dropdown-option {
   color: var(--editor-foreground);
   background-color: transparent;
 }
 
-.meo-native-theme .format-button svg,
+.meo-native-theme .format-button:not(.app-icon-button) svg,
 .meo-native-theme .heading-dropdown-option svg,
-.meo-native-theme .selection-inline-button svg,
+.meo-native-theme .selection-inline-button:not(.app-icon-button) svg,
 .meo-native-theme .meo-mermaid-zoom-btn svg {
   display: block;
   width: var(--icon-size-md);
   height: var(--icon-size-md);
 }
 
-.meo-native-theme .format-button:hover,
+.meo-native-theme .format-button:not(.app-icon-button):hover,
 .meo-native-theme .heading-dropdown-option:hover,
 .meo-native-theme .mode-button.is-active,
 .meo-native-theme .meo-copy-code-btn:hover {
   background-color: var(--toolbar-hoverBackground);
 }
 
-.meo-native-theme .format-button.toggle-button:not(.is-active) {
+.meo-native-theme .format-button.toggle-button:not(.app-icon-button):not(.is-active) {
   color: var(--foreground-secondary);
 }
 
-.meo-native-theme .format-button.toggle-button:not(.is-active):hover {
+.meo-native-theme .format-button.toggle-button:not(.app-icon-button):not(.is-active):hover {
   color: var(--foreground-primary);
 }
 

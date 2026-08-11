@@ -5,6 +5,32 @@ function readSource(path: string) {
   return readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 }
 
+const SHARED_ICON_BUTTON_VISUAL_PROPERTIES =
+  /(?:^|;)\s*(?:appearance|display|align-items|justify-content|width|min-width|height|min-height|padding|border(?:-[\w-]+)?|border-radius|background(?:-[\w-]+)?|color|font|line-height|cursor|opacity|outline|transition|box-shadow)\s*:/m
+
+function findSharedIconButtonVisualOverrides(source: string, contextualClass: string) {
+  const contextualClassPattern = new RegExp(`\\.${contextualClass}(?![\\w-])`)
+  const violations: string[] = []
+
+  for (const match of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const [, selectorList, declarations] = match
+    if (!SHARED_ICON_BUTTON_VISUAL_PROPERTIES.test(declarations)) {
+      continue
+    }
+
+    for (const selector of selectorList.split(',')) {
+      if (
+        contextualClassPattern.test(selector)
+        && !selector.includes(':not(.app-icon-button)')
+      ) {
+        violations.push(selector.trim())
+      }
+    }
+  }
+
+  return violations
+}
+
 describe('MEO React chrome boundary', () => {
   it('renders application chrome with shared React components and locally bundled icons', async () => {
     const shellSource = await readSource(
@@ -103,5 +129,76 @@ describe('MEO React chrome boundary', () => {
     expect(profileSource).toContain("'meo-host:react-chrome-ready'")
     expect(profileSource).not.toContain("'native-meo:create-shell:end'")
     expect(shellCss).toContain('.selection-inline-menu.is-visible')
+  })
+
+  it('renders diff actions through shared React controls instead of button-specific DOM factories', async () => {
+    const [controlsSource, splitSource, inlineSource] = await Promise.all([
+      readSource('src/features/editor/components/meo-diff-controls/meo-diff-controls.tsx'),
+      readSource('src/features/editor/lib/meo-native-diff-split.ts'),
+      readSource('src/features/editor/lib/meo-native-live-inline-diff.ts'),
+    ])
+
+    expect(controlsSource).toContain("import { AppIconButton } from '@/components/app-icon-button'")
+    expect(controlsSource).toContain("from '@mingcute/react'")
+    expect(controlsSource).toContain("from '@iconify/react/offline'")
+    expect(controlsSource).toContain('<AppIconButton')
+    expect(splitSource).toContain('mountMeoDiffHunkActions')
+    expect(splitSource).toContain('mountMeoDiffHunkAction')
+    expect(splitSource).toContain('mountedHunkActionControls.delete(trackedControl)')
+    expect(inlineSource).toContain('mountMeoLiveInlineDiffToolbar')
+    expect(inlineSource).toContain('this.toolbar.destroy()')
+    expect(splitSource).not.toContain('getHunkActionIcon')
+    expect(splitSource).not.toContain('createHunkActionButton')
+    expect(splitSource).toContain('placeholder.hidden = true')
+    expect(inlineSource).not.toContain('createHunkActionButton')
+    expect(inlineSource).not.toContain('createNavButton')
+    expect(inlineSource).not.toContain('button.innerHTML')
+    expect(controlsSource).toContain("dom.setAttribute('aria-orientation', 'vertical')")
+    expect(controlsSource).not.toContain("classList.toggle('is-busy'")
+  })
+
+  it('keeps shared icon-button visuals owned by AppIconButton across the MEO surface', async () => {
+    const [shellCss, vendorCss, mergeTheme] = await Promise.all([
+      readSource('src/features/editor/lib/meo-native-editor-shell.css'),
+      readSource('src/vendor/meo/webview/styles.css'),
+      readSource('src/vendor/codemirror-merge/src/theme.ts'),
+    ])
+
+    expect(shellCss).not.toContain('.app-icon-button')
+    expect(shellCss).not.toContain('--toolbar-hoverBackground')
+
+    for (const contextualClass of [
+      'format-button',
+      'selection-inline-button',
+      'meo-diff-hunk-action',
+      'meo-live-inline-diff-nav-button',
+    ]) {
+      expect(findSharedIconButtonVisualOverrides(vendorCss, contextualClass)).toEqual([])
+    }
+
+    expect(vendorCss).toMatch(
+      /\.cm-merge-revert\s*\{[^}]*width:\s*calc\(var\(--app-icon-button-size-sm\) \+ 4px\);[^}]*border:\s*0;/,
+    )
+    expect(vendorCss).not.toMatch(
+      /\.cm-merge-revert\s*\{[^}]*(?:border-left|border-right)\s*:/,
+    )
+    expect(vendorCss).toContain('inset-inline-start: 0;')
+    expect(vendorCss).toMatch(
+      /\.meo-diff-floating-hunk-toolbar,[\s\S]*?\.cm-chunkButtons\s*\{[^}]*gap:\s*2px;[^}]*height:\s*var\(--meo-live-inline-diff-floating-height, calc\(var\(--app-icon-button-size-sm\) \+ 4px\)\);[^}]*padding:\s*2px;/,
+    )
+    expect(vendorCss).toMatch(
+      /\.meo-diff-split-body \.meo-diff-hunk-actions\s*\{[^}]*flex-flow:\s*column nowrap !important;[^}]*gap:\s*2px;[^}]*width:\s*calc\(var\(--app-icon-button-size-sm\) \+ 4px\);[^}]*padding:\s*2px;/,
+    )
+    expect(vendorCss).toMatch(
+      /\.meo-diff-floating-control-surface,[\s\S]*?\.cm-chunkButtons,[\s\S]*?\.cm-merge-revert>\.meo-diff-hunk-actions\s*\{[^}]*background:\s*var\(--meo-floating-toolbar-background\) !important;[^}]*z-index:\s*var\(--meo-floating-toolbar-z-index\);/,
+    )
+    expect(vendorCss).toMatch(/\.meo-live-inline-diff-nav\s*\{[^}]*gap:\s*2px;/)
+    expect(vendorCss).toMatch(
+      /\.meo-live-inline-diff-header \.meo-live-inline-diff-hunk-actions\s*\{[^}]*gap:\s*2px;/,
+    )
+    expect(mergeTheme).toContain('.cm-merge-revert .cm-merge-defaultControl')
+    expect(mergeTheme).toContain('& .cm-merge-defaultControl')
+    expect(mergeTheme).not.toContain('.cm-merge-revert button')
+    expect(mergeTheme).not.toContain('& button')
   })
 })

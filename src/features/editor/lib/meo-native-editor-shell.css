@@ -1,15 +1,3 @@
-.meo-native-theme .format-button.app-icon-button,
-.meo-native-theme .selection-inline-button.app-icon-button {
-  color: var(--foreground-secondary);
-}
-
-.meo-native-theme .format-button.app-icon-button:hover,
-.meo-native-theme .format-button.app-icon-button.is-active,
-.meo-native-theme .selection-inline-button.app-icon-button:hover {
-  color: var(--foreground-primary);
-  background: var(--toolbar-hoverBackground);
-}
-
 .meo-native-theme .selection-inline-menu {
   visibility: hidden;
 }
@@ -56,11 +44,4 @@
 .meo-native-theme .outline-item.app-button {
   min-height: 28px;
   height: auto;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .meo-native-theme .format-button.app-icon-button,
-  .meo-native-theme .selection-inline-button.app-icon-button {
-    transition: none;
-  }
 }

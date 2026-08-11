@@ -38,6 +38,10 @@ import {
 } from '@codemirror/view'
 import { ChevronDown } from 'lucide'
 import type { GitBaselinePayload, GitChangeItem, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '@/features/git/types'
+import {
+  mountMeoDiffHunkAction,
+  mountMeoDiffHunkActions,
+} from '@/features/editor/components/meo-diff-controls'
 import { mountMeoBaseScrollArea } from '@/features/editor/lib/meo-base-scroll-area'
 import { createCompactMeoIcon } from '@/features/editor/lib/meo-native-icon'
 import type { MeoDiffSplitGitChangeContext, MeoEditorInsertFormat, MeoEditorViewportPosition } from '@/features/editor/lib/meo-native-editor-types'
@@ -913,7 +917,7 @@ function canUseTextOnlyResolvedUpdate(
 const SPLIT_DIFF_REFRESH_IDLE_DELAY_MS = 200
 const SPLIT_DIFF_REFRESH_AFTER_COMPOSITION_MS = 80
 const DIFF_CHUNK_TOOLBAR_STUCK_CLASS = 'is-toolbar-stuck'
-const DIFF_CHUNK_TOOLBAR_DEFAULT_LIFT = 26
+const DIFF_CHUNK_TOOLBAR_DEFAULT_LIFT = 30
 const DIFF_CHUNK_TOOLBAR_DEFAULT_RIGHT = 10
 const DIFF_CHUNK_TOOLBAR_DEFAULT_STICKY_INSET = 8
 
@@ -1902,31 +1906,6 @@ export function shouldRefreshSplitInlineChangeLayerAfterLiveMarkerLayoutChange(
     transaction,
     hasRefreshLiveDecorationsEffect(transaction) || liveDecorationsWillRefresh,
   )
-}
-
-export function getHunkActionLabel(action: GitDiffBlockAction) {
-  switch (action) {
-    case 'stage':
-      return 'Stage block'
-    case 'unstage':
-      return 'Unstage block'
-    case 'discard':
-      return 'Discard block'
-    default:
-      return 'Apply block action'
-  }
-}
-
-export function getHunkActionIcon(action: GitDiffBlockAction) {
-  if (action === 'stage') {
-    return '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3.25v9.5"/><path d="M3.25 8h9.5"/></svg>'
-  }
-
-  if (action === 'unstage') {
-    return '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3.25 8h9.5"/></svg>'
-  }
-
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="color:currentColor" aria-hidden="true"><g fill="none"><path d="M24 0v24H0V0zM12.593 23.258l-.011.002-.071.035-.02.004-.014-.004-.071-.035q-.016-.005-.024.005l-.004.01-.017.428.005.02.01.013.104.074.015.004.012-.004.104-.074.012-.016.004-.017-.017-.427q-.004-.016-.017-.018m.265-.113-.013.002-.185.093-.01.01-.003.011.018.43.005.012.008.007.201.093q.019.005.029-.008l.004-.014-.034-.614q-.005-.019-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014-.034.614q.001.018.017.024l.015-.002.201-.093.01-.008.004-.011.017-.43-.003-.012-.01-.01z"></path><path fill="currentColor" d="M6.046 11.677A7.5 7.5 0 0 1 20 15.5a1 1 0 1 0 2 0A9.5 9.5 0 0 0 4.78 9.963l-.537-3.045a1 1 0 1 0-1.97.347l1.042 5.909a1 1 0 0 0 .412.645 1.1 1.1 0 0 0 .975.125l5.68-1.001a1 1 0 1 0-.347-1.97z"></path></g></svg>'
 }
 
 const readOnlyWidgetSelector = 'textarea, input, select, button, [contenteditable="true"]'
@@ -4090,6 +4069,7 @@ export function createMeoDiffSplitController({
   let currentFocusedLineHighlightVisible = focusedLineHighlightVisible === true
   let currentLineNumbersVisible = lineNumbersVisible
   let applyingHunkAction = false
+  const mountedHunkActionControls = new Set<{ setBusy: (busy: boolean) => void }>()
   let destroyed = false
   let applyingExternal = false
   let isComposing = false
@@ -5305,9 +5285,6 @@ export function createMeoDiffSplitController({
 
     applyingHunkAction = true
     syncHunkActionButtonStates()
-    mergeView?.reconfigure({
-      renderRevertControl: createHunkActionControls,
-    })
     try {
       const originalDoc = getOriginalDiffDoc()
       const modifiedDoc = getModifiedDiffDoc()
@@ -5322,74 +5299,36 @@ export function createMeoDiffSplitController({
       )
     } finally {
       applyingHunkAction = false
-      mergeView?.reconfigure({
-        renderRevertControl: createHunkActionControls,
-      })
       syncHunkActionButtonStates()
     }
   }
 
-  const handleHunkActionEvent = (
-    event: MouseEvent | KeyboardEvent,
-    action: GitDiffBlockAction,
-  ) => {
-    event.preventDefault()
-    event.stopPropagation()
-    void applyHunkAction(event.currentTarget as HTMLElement, action)
-  }
-
-  const createHunkActionButton = (action: GitDiffBlockAction) => {
-    const button = document.createElement('button')
-    const label = applyingHunkAction ? 'Wait for the current Git block action to finish.' : getHunkActionLabel(action)
-    button.type = 'button'
-    button.className = 'meo-diff-hunk-action'
-    button.dataset.action = action
-    button.disabled = applyingHunkAction
-    button.setAttribute('aria-label', label)
-    button.setAttribute('aria-disabled', applyingHunkAction ? 'true' : 'false')
-    button.title = label
-    button.innerHTML = getHunkActionIcon(action)
-    button.onmousedown = (event) => {
-      handleHunkActionEvent(event, action)
-    }
-    button.onkeydown = (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        handleHunkActionEvent(event, action)
-      }
-    }
-    return button
-  }
-
   const syncHunkActionButtonStates = () => {
-    const buttons = host.querySelectorAll<HTMLButtonElement>('.meo-diff-hunk-action')
-    buttons.forEach((button) => {
-      const action = button.dataset.action as GitDiffBlockAction | undefined
-      if (!action) {
-        return
-      }
-      const label = applyingHunkAction ? 'Wait for the current Git block action to finish.' : getHunkActionLabel(action)
-      button.disabled = applyingHunkAction
-      button.setAttribute('aria-label', label)
-      button.setAttribute('aria-disabled', applyingHunkAction ? 'true' : 'false')
-      button.title = label
-    })
+    mountedHunkActionControls.forEach((control) => control.setBusy(applyingHunkAction))
   }
 
   const createHunkActionControls = () => {
-    const container = document.createElement('div')
-    container.className = 'meo-diff-hunk-actions'
-    container.classList.toggle('is-busy', applyingHunkAction)
-    container.setAttribute('aria-label', 'Git block actions')
-    container.onmousedown = (event) => {
-      event.preventDefault()
-      event.stopPropagation()
+    const actions = getHunkActions()
+    const createProps = (busy: boolean) => ({
+      actions,
+      busy,
+      onAction: (control: HTMLElement, action: GitDiffBlockAction) => {
+        void applyHunkAction(control, action)
+      },
+    })
+    const mounted = mountMeoDiffHunkActions(createProps(applyingHunkAction))
+    const trackedControl = {
+      setBusy: (busy: boolean) => mounted.update(createProps(busy)),
     }
+    mountedHunkActionControls.add(trackedControl)
 
-    for (const action of getHunkActions()) {
-      container.appendChild(createHunkActionButton(action))
+    return {
+      dom: mounted.dom,
+      destroy: () => {
+        mountedHunkActionControls.delete(trackedControl)
+        mounted.destroy()
+      },
     }
-
-    return container
   }
 
   const createUnifiedHunkActionControl = (kind: 'accept' | 'reject') => {
@@ -5399,10 +5338,31 @@ export function createMeoDiffSplitController({
       : actions.find((candidate) => candidate === 'discard') ?? null
 
     if (!action) {
-      return document.createElement('span')
+      const placeholder = document.createElement('span')
+      placeholder.hidden = true
+      return placeholder
     }
 
-    return createHunkActionButton(action)
+    const createProps = (busy: boolean) => ({
+      action,
+      busy,
+      onAction: (control: HTMLElement, nextAction: GitDiffBlockAction) => {
+        void applyHunkAction(control, nextAction)
+      },
+    })
+    const mounted = mountMeoDiffHunkAction(createProps(applyingHunkAction))
+    const trackedControl = {
+      setBusy: (busy: boolean) => mounted.update(createProps(busy)),
+    }
+    mountedHunkActionControls.add(trackedControl)
+
+    return {
+      dom: mounted.dom,
+      destroy: () => {
+        mountedHunkActionControls.delete(trackedControl)
+        mounted.destroy()
+      },
+    }
   }
 
   const scheduleResolvedFrameSync = () => {

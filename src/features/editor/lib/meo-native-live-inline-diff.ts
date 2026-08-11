@@ -9,14 +9,18 @@ import {
   gutterLineClass,
   GutterMarker,
 } from '@codemirror/view'
-import { Columns2, Rows2 } from 'lucide'
 import type { GitBaselinePayload, GitChangeItem, GitChangeKind, GitChangeScope, GitDiffBlockAction, GitDiffSelection } from '@/features/git/types'
+import {
+  getInlineDiffViewModeToggleLabel,
+  getNextInlineDiffViewMode,
+  mountMeoLiveInlineDiffToolbar,
+  type MeoInlineDiffViewMode,
+} from '@/features/editor/components/meo-diff-controls'
 import {
   createSelectionFromCodeMirrorChunk,
   resolveChunkNavigationMatch,
   type CodeMirrorDiffChunk,
 } from '@/features/editor/lib/git-diff-navigation'
-import { createCompactMeoIcon } from '@/features/editor/lib/meo-native-icon'
 import {
   buildDiffSplitGutterFlagsFromChunks,
   createActiveLineHighlightExtensions,
@@ -24,8 +28,6 @@ import {
   createMeoDiffUnifiedEditorView,
   createTextDocFromContent,
   getDiffConfig,
-  getHunkActionIcon,
-  getHunkActionLabel,
   lockReadOnlyWidgets,
   mapUnifiedDiffWidgetGutterFlag,
   mapCurrentLineToIndexLine,
@@ -57,7 +59,7 @@ type InlineHunkRequest = {
   scope: GitChangeScope
 }
 
-export type InlineDiffViewMode = 'split' | 'unified'
+export type InlineDiffViewMode = MeoInlineDiffViewMode
 
 type InlineHunkDescriptor = {
   actionChange: GitChangeItem | null
@@ -175,7 +177,7 @@ const setInlineHunksEffect = StateEffect.define<InlineHunkDescriptor[]>()
 const INLINE_DIFF_SYNC_DELAY_MS = 120
 const INLINE_DIFF_SYNC_AFTER_COMPOSITION_MS = 80
 const INLINE_DIFF_TOOLBAR_STUCK_CLASS = 'is-toolbar-stuck'
-const INLINE_DIFF_TOOLBAR_DEFAULT_LIFT = 26
+const INLINE_DIFF_TOOLBAR_DEFAULT_LIFT = 30
 const INLINE_DIFF_TOOLBAR_DEFAULT_STICKY_INSET = 8
 
 type VerticalBounds = {
@@ -200,33 +202,6 @@ function getViewportVerticalBounds(viewportRect: DOMRect): VerticalBounds {
 
 function normalizeLineEndings(text: string) {
   return text.replace(/\r\n?/g, '\n')
-}
-
-function getNavigateIcon(direction: 'next' | 'previous') {
-  return direction === 'next'
-    ? '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>'
-    : '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg>'
-}
-
-function getNextInlineDiffViewMode(mode: InlineDiffViewMode): InlineDiffViewMode {
-  return mode === 'unified' ? 'split' : 'unified'
-}
-
-function getInlineDiffViewModeToggleIconName(mode: InlineDiffViewMode): InlineDiffViewMode {
-  return getNextInlineDiffViewMode(mode)
-}
-
-function createInlineDiffViewModeToggleIcon(mode: InlineDiffViewMode) {
-  const IconComponent = getInlineDiffViewModeToggleIconName(mode) === 'unified'
-    ? Rows2
-    : Columns2
-  return createCompactMeoIcon(IconComponent)
-}
-
-function getInlineDiffViewModeToggleLabel(mode: InlineDiffViewMode) {
-  return mode === 'unified'
-    ? 'Switch to inline split'
-    : 'Switch to inline unified'
 }
 
 function lineRangeText(doc: Text, startLine: number, lineCount: number) {
@@ -959,6 +934,7 @@ class InlineDiffWidgetView {
   private readonly componentRoot: HTMLElement
   private descriptor: InlineHunkDescriptor
   private readonly header: HTMLElement
+  private readonly toolbar: ReturnType<typeof mountMeoLiveInlineDiffToolbar>
   private currentViewMode: InlineDiffViewMode
   private mergeView: MergeView | null = null
   private unifiedView: EditorView | null = null
@@ -1004,12 +980,12 @@ class InlineDiffWidgetView {
 
     this.header = document.createElement('div')
     this.header.className = 'meo-live-inline-diff-header'
+    this.toolbar = mountMeoLiveInlineDiffToolbar(this.header, this.createToolbarProps())
 
     this.body = document.createElement('div')
     this.body.className = 'meo-diff-split-body meo-live-inline-diff-body'
 
     this.componentRoot.append(this.header, this.body)
-    this.renderHeader()
     this.createCurrentView()
     this.installInlineRowHandlers()
     this.scheduleOuterGutterMeasure()
@@ -1028,6 +1004,7 @@ class InlineDiffWidgetView {
     this.uninstallToolbarStickHandlers()
     this.componentRoot.removeEventListener('mousedown', this.handleInlineRowMouseDown, true)
     this.destroyCurrentView()
+    this.toolbar.destroy()
     this.componentRoot.remove()
   }
 
@@ -1730,117 +1707,25 @@ class InlineDiffWidgetView {
   }
 
   private renderHeader() {
-    this.header.replaceChildren()
-
-    const controls = document.createElement('div')
-    controls.className = 'meo-live-inline-diff-controls meo-diff-floating-hunk-toolbar'
-    controls.onmousedown = (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-    }
-
-    const actions = this.createHunkActionControls()
-    if (actions.hasChildNodes()) {
-      controls.appendChild(actions)
-    }
-
-    const nav = document.createElement('div')
-    nav.className = 'meo-live-inline-diff-nav'
-    nav.append(
-      this.createViewModeToggleButton(),
-      this.createNavButton('previous'),
-      this.createNavButton('next'),
-    )
-
-    controls.append(nav)
-    this.header.appendChild(controls)
+    this.toolbar.update(this.createToolbarProps())
     this.scheduleToolbarStickSync()
   }
 
-  private createNavButton(direction: 'next' | 'previous') {
-    const button = document.createElement('button')
-    const title = direction === 'next' ? 'Next change' : 'Previous change'
-    button.type = 'button'
-    button.className = 'meo-live-inline-diff-nav-button'
-    button.setAttribute('aria-label', title)
-    button.title = title
-    button.innerHTML = getNavigateIcon(direction)
-    button.onmousedown = (event) => {
-      event.preventDefault()
-      event.stopPropagation()
+  private createToolbarProps() {
+    return {
+      actions: getHunkActions(this.descriptor),
+      busy: this.descriptor.actionBusy,
+      onAction: (_control: HTMLElement, action: GitDiffBlockAction) => {
+        void this.controller.applyHunkAction(this.descriptor.requestId, action)
+      },
+      onNavigate: (direction: 'next' | 'previous') => {
+        this.controller.navigateFromInlineHunk(this.descriptor.requestId, direction)
+      },
+      onViewModeChange: (mode: InlineDiffViewMode) => {
+        this.controller.setInlineDiffViewMode(mode)
+      },
+      viewMode: this.currentViewMode,
     }
-    button.onclick = (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      this.controller.navigateFromInlineHunk(this.descriptor.requestId, direction)
-    }
-    return button
-  }
-
-  private createViewModeToggleButton() {
-    const button = document.createElement('button')
-    const label = getInlineDiffViewModeToggleLabel(this.currentViewMode)
-    const targetMode = getNextInlineDiffViewMode(this.currentViewMode)
-    button.type = 'button'
-    button.className = 'meo-live-inline-diff-nav-button meo-live-inline-diff-view-toggle'
-    button.dataset.targetMode = targetMode
-    button.setAttribute('aria-label', label)
-    button.title = label
-    button.appendChild(createInlineDiffViewModeToggleIcon(this.currentViewMode))
-    button.onmousedown = (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-    }
-    button.onclick = (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      this.controller.setInlineDiffViewMode(targetMode)
-    }
-    return button
-  }
-
-  private createHunkActionControls() {
-    const container = document.createElement('div')
-    container.className = 'meo-diff-hunk-actions meo-live-inline-diff-hunk-actions'
-    container.setAttribute('aria-label', 'Git block actions')
-    container.onmousedown = (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-    }
-
-    for (const action of getHunkActions(this.descriptor)) {
-      container.appendChild(this.createHunkActionButton(action))
-    }
-
-    return container
-  }
-
-  private createHunkActionButton(action: GitDiffBlockAction) {
-    const button = document.createElement('button')
-    const label = this.descriptor.actionBusy
-      ? 'Wait for the current Git block action to finish.'
-      : getHunkActionLabel(action)
-    button.type = 'button'
-    button.className = 'meo-diff-hunk-action'
-    button.dataset.action = action
-    button.disabled = this.descriptor.actionBusy
-    button.setAttribute('aria-label', label)
-    button.title = label
-    button.innerHTML = getHunkActionIcon(action)
-    button.onmousedown = (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      void this.controller.applyHunkAction(this.descriptor.requestId, action)
-    }
-    button.onkeydown = (event) => {
-      if (event.key !== 'Enter' && event.key !== ' ') {
-        return
-      }
-      event.preventDefault()
-      event.stopPropagation()
-      void this.controller.applyHunkAction(this.descriptor.requestId, action)
-    }
-    return button
   }
 }
 
@@ -2651,7 +2536,6 @@ export const __meoLiveInlineDiffTestHooks = {
   createModifiedSelectionTarget,
   findInlineChunkMatch,
   getInlineWidgetSide,
-  getInlineDiffViewModeToggleIconName,
   getInlineDiffViewModeToggleLabel,
   getNextInlineDiffViewMode,
   mergeDiffSelections,

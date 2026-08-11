@@ -91,6 +91,9 @@ describe('shadow system', () => {
       overlayLayerSource,
       overlayLayerCss,
       xlsxViewerSource,
+      meoDiffControlsSource,
+      codeMirrorUnifiedSource,
+      meoVendorCss,
     ] = await Promise.all([
       readFile(new URL('../src/components/app-tooltip/app-tooltip.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/app-tooltip/styles.css', import.meta.url), 'utf8'),
@@ -119,6 +122,18 @@ describe('shadow system', () => {
         'utf8',
       ),
       readFile(new URL('../src/components/ui/xlsx-viewer.tsx', import.meta.url), 'utf8'),
+      readFile(
+        new URL(
+          '../src/features/editor/components/meo-diff-controls/meo-diff-controls.tsx',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL('../src/vendor/codemirror-merge/src/unified.ts', import.meta.url),
+        'utf8',
+      ),
+      readFile(new URL('../src/vendor/meo/webview/styles.css', import.meta.url), 'utf8'),
     ])
 
     expect(appTooltipSource).toContain("className='app-tooltip'")
@@ -145,6 +160,21 @@ describe('shadow system', () => {
     expect(xlsxViewerSource).toContain('smooth-shadow-ring-md pointer-events-none fixed')
     expect(xlsxViewerSource).not.toContain('shadow-sm/5')
     expect(xlsxViewerSource).not.toContain('shadow-xl')
+    expect(meoDiffControlsSource).toContain(
+      "meo-diff-floating-hunk-toolbar meo-diff-floating-control-surface",
+    )
+    expect(meoDiffControlsSource).toContain(
+      "meo-diff-hunk-actions-vertical meo-diff-floating-control-surface",
+    )
+    expect(codeMirrorUnifiedSource).toContain(
+      'cm-chunkButtons meo-diff-floating-control-surface',
+    )
+    expect(meoVendorCss).toMatch(
+      /\.meo-diff-floating-control-surface,[\s\S]*?\.cm-merge-revert>\.meo-diff-hunk-actions\s*\{[^}]*border:\s*0;[^}]*background:\s*var\(--meo-floating-toolbar-background\) !important;[^}]*box-shadow:\s*var\(--shadow-sm\),\s*0 0 0 1px var\(--smooth-ring-color\);[^}]*z-index:\s*var\(--meo-floating-toolbar-z-index\);/,
+    )
+    expect(meoVendorCss).not.toContain(
+      'box-shadow: 0 6px 16px color-mix(in srgb, var(--shadow, #000) 16%, transparent);',
+    )
 
     expect(overlayLayerSource).toContain("import './styles.css'")
     expect(overlayLayerSource).toContain("className='app-toast-region'")

@@ -8,6 +8,16 @@ export type DeletedContentRenderResult = HTMLElement | {
   destroy?: () => void
 }
 
+export type MergeControlRenderResult = HTMLElement | {
+  dom: HTMLElement,
+  destroy?: () => void
+}
+
+export type MergeControlRenderer = (
+  type: "accept" | "reject",
+  action: (event: MouseEvent) => void
+) => MergeControlRenderResult
+
 export type DeletedContentRenderer = (context: {
   chunk: Chunk,
   state: EditorState,
@@ -22,7 +32,7 @@ type Config = {
   markGutter: boolean,
   syntaxHighlightDeletions?: boolean,
   syntaxHighlightDeletionsMaxLength?: number,
-  mergeControls?: boolean | ((type: "accept" | "reject", action: (event: MouseEvent) => void) => HTMLElement),
+  mergeControls?: boolean | MergeControlRenderer,
   overrideChunk?: ((
     state: EditorState,
     chunk: Chunk,

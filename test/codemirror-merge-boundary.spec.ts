@@ -63,4 +63,21 @@ describe('CodeMirror merge fork boundaries', () => {
 
     expect(source).toContain("outerScrollPrimarySide: config.outerScrollPrimarySide ?? 'b'")
   })
+
+  it('owns cleanup for lifecycle-aware custom merge controls', async () => {
+    const [mergeSource, mergeViewSource, unifiedSource] = await Promise.all([
+      readFile(path.join(sourceRoot, 'vendor/codemirror-merge/src/merge.ts'), 'utf8'),
+      readFile(path.join(sourceRoot, 'vendor/codemirror-merge/src/mergeview.ts'), 'utf8'),
+      readFile(path.join(sourceRoot, 'vendor/codemirror-merge/src/unified.ts'), 'utf8'),
+    ])
+
+    expect(mergeSource).toContain('export type MergeControlRenderResult = HTMLElement | {')
+    expect(mergeSource).toContain('destroy?: () => void')
+    expect(mergeViewSource).toContain('this.revertControlCleanups.set(elt, rendered.destroy)')
+    expect(mergeViewSource).toContain('this.clearRevertControls()')
+    expect(mergeViewSource).toContain('elt.className = "cm-merge-defaultControl"')
+    expect(unifiedSource).toContain('appendRenderedControl(buttons, mergeControls("accept", onAccept), widget)')
+    expect(unifiedSource).toContain('widget.addCleanup(rendered.destroy)')
+    expect(unifiedSource.match(/className = "cm-merge-defaultControl"/g)).toHaveLength(2)
+  })
 })

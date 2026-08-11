@@ -20,7 +20,7 @@ export const externalTheme = EditorView.styleModule.of(new StyleModule({
     flexShrink: 0,
     position: "relative"
   },
-  ".cm-merge-revert button": {
+  ".cm-merge-revert .cm-merge-defaultControl": {
     position: "absolute",
     display: "block",
     width: "100%",
@@ -205,7 +205,7 @@ export const baseTheme = EditorView.baseTheme({
       position: "absolute",
       insetInlineEnd: "5px"
     },
-    "& button": {
+    "& .cm-merge-defaultControl": {
       border: "none",
       cursor: "pointer",
       color: "white",

@@ -2,7 +2,7 @@ import {EditorView} from "@codemirror/view"
 import {EditorStateConfig, Transaction, EditorState, StateEffect, Prec, Compartment, ChangeSet} from "@codemirror/state"
 import {Chunk, chunkActualRange, defaultDiffConfig, type ChunkSide} from "./chunk"
 import {DiffConfig} from "./diff"
-import {deferredChunkUpdate, setChunks, ChunkField, mergeConfig} from "./merge"
+import {deferredChunkUpdate, setChunks, ChunkField, mergeConfig, type MergeControlRenderResult} from "./merge"
 import {chunkTouchesViewport, decorateChunks, inlineChangeLayer, updateSpacers, Spacers, adjustSpacers, collapseUnchanged, changeGutter, type SpacerViewportOverride, type TrailingSpacerMode} from "./deco"
 import {baseTheme, externalTheme} from "./theme"
 
@@ -16,8 +16,9 @@ export interface MergeConfig {
   /// chunks.
   revertControls?: "a-to-b" | "b-to-a"
   /// When given, this function is called to render the button to
-  /// revert a chunk.
-  renderRevertControl?: () => HTMLElement,
+  /// revert a chunk. Returning an object allows the renderer to clean
+  /// up resources when the control leaves the view.
+  renderRevertControl?: () => MergeControlRenderResult,
   /// By default, the merge view will mark inserted and deleted text
   /// in changed chunks. Set this to false to turn that off.
   highlightChanges?: boolean,
@@ -291,7 +292,8 @@ export class MergeView {
   private revertDOM: HTMLElement | null = null
   private revertToA = false
   private revertToLeft = false
-  private renderRevert: (() => HTMLElement) | undefined
+  private renderRevert: (() => MergeControlRenderResult) | undefined
+  private readonly revertControlCleanups = new WeakMap<HTMLElement, () => void>()
   private diffConf: DiffConfig | undefined
   private outerScrollViewportSync = true
   private outerScrollViewportMargin = 1000
@@ -496,7 +498,7 @@ export class MergeView {
         this.editorDOM.insertBefore(aB ? domA : domB, this.editorDOM.firstChild)
         this.editorDOM.appendChild(aB ? domB : domA)
         this.revertToLeft = !this.revertToLeft
-        if (this.revertDOM) this.revertDOM.textContent = ""
+        this.clearRevertControls()
       }
     }
     if ("revertControls" in config || "renderRevertControl" in config) {
@@ -811,11 +813,12 @@ export class MergeView {
     return Math.max(this.outerScrollViewportRetention, margin * 2)
   }
 
-  private setupRevertControls(controls: boolean, toA: boolean, render: (() => HTMLElement) | undefined) {
+  private setupRevertControls(controls: boolean, toA: boolean, render: (() => MergeControlRenderResult) | undefined) {
     this.revertToA = toA
     this.revertToLeft = this.revertToA == (this.editorDOM.firstChild == this.a.dom.parentNode)
     this.renderRevert = render
     if (!controls && this.revertDOM) {
+      this.clearRevertControls()
       this.revertDOM.remove()
       this.revertDOM = null
     } else if (controls && !this.revertDOM) {
@@ -823,8 +826,25 @@ export class MergeView {
       this.revertDOM.addEventListener("mousedown", e => this.revertClicked(e))
       this.revertDOM.className = "cm-merge-revert"
     } else if (this.revertDOM) {
-      this.revertDOM.textContent = ""
+      this.clearRevertControls()
     }
+  }
+
+  private clearRevertControls() {
+    if (!this.revertDOM) return
+    let child = this.revertDOM.firstChild as HTMLElement | null
+    while (child) child = this.removeRevertControl(child)
+  }
+
+  private removeRevertControl(control: HTMLElement) {
+    let next = control.nextSibling as HTMLElement | null
+    let cleanup = this.revertControlCleanups.get(control)
+    if (cleanup) {
+      this.revertControlCleanups.delete(control)
+      cleanup()
+    }
+    control.remove()
+    return next
   }
 
   private scheduleMeasure() {
@@ -856,7 +876,7 @@ export class MergeView {
       if (rangeA.from > vpA.to && rangeB.from > vpB.to) break
       if (!chunkTouchesViewport(chunk, vpA, vpB)) continue
       let top = this.a.lineBlockAt(chunkActualRange(chunk, "a").from).top + "px"
-      while (next && +(next.dataset.chunk!) < i) next = rm(next)
+      while (next && +(next.dataset.chunk!) < i) next = this.removeRevertControl(next)
       if (next && next.dataset.chunk! == String(i)) {
         if (next.style.top != top) next.style.top = top
         next = next.nextSibling as HTMLElement | null
@@ -864,15 +884,22 @@ export class MergeView {
         dom.insertBefore(this.renderRevertButton(top, i), next)
       }
     }
-    while (next) next = rm(next)
+    while (next) next = this.removeRevertControl(next)
   }
 
   private renderRevertButton(top: string, chunk: number) {
-    let elt
+    let elt: HTMLElement
     if (this.renderRevert) {
-      elt = this.renderRevert()
+      let rendered = this.renderRevert()
+      if (rendered instanceof HTMLElement) {
+        elt = rendered
+      } else {
+        elt = rendered.dom
+        if (rendered.destroy) this.revertControlCleanups.set(elt, rendered.destroy)
+      }
     } else {
       elt = document.createElement("button")
+      elt.className = "cm-merge-defaultControl"
       let text = this.a.state.phrase("Revert this chunk")
       elt.setAttribute("aria-label", text)
       elt.setAttribute("title", text)
@@ -908,16 +935,11 @@ export class MergeView {
   /// Destroy this merge view.
   destroy() {
     this.dom.removeEventListener("scroll", this.onOuterScroll)
+    this.clearRevertControls()
     this.a.destroy()
     this.b.destroy()
     if (this.measuring > -1)
       (this.dom.ownerDocument.defaultView || window).cancelAnimationFrame(this.measuring)
     this.dom.remove()
   }
-}
-
-function rm(elt: HTMLElement) {
-  let next = elt.nextSibling
-  elt.remove()
-  return next as HTMLElement | null
 }
