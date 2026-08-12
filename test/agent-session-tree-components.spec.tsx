@@ -389,6 +389,27 @@ describe('AgentSessionTree presentation components', () => {
     expect(markup).not.toContain('Open Rename me menu')
   })
 
+  it('renders session agent identities with their brand artwork', () => {
+    const markup = renderToStaticMarkup(
+      <AgentSessionTreeRow
+        agentId='codex'
+        isActive={false}
+        isDeleting={false}
+        isRenaming={false}
+        label='Codex session'
+        onCancelRename={vi.fn()}
+        onDelete={vi.fn()}
+        onOpen={vi.fn()}
+        onRename={vi.fn(async () => undefined)}
+        onRequestRename={vi.fn()}
+      />,
+    )
+
+    expect(markup).toContain('agent-brand-icon-image')
+    expect(markup).toContain('src="./agent-icons/codex.svg"')
+    expect(markup).not.toContain('agent-brand-icon-mask')
+  })
+
   it('preserves the public project switch trigger contract', () => {
     const markup = renderToStaticMarkup(
       <AgentProjectSwitchTrigger

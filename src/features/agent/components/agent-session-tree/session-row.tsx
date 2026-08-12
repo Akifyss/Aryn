@@ -255,7 +255,7 @@ export function AgentSessionTreeRow({
       after={error ? <p className='tree-error agent-session-rename-error'>{error}</p> : null}
       icon={agentId ? (
         <AppItemIcon>
-          <AgentBrandIcon agentId={agentId} className='agent-brand-icon' size='md' tone='muted' />
+          <AgentBrandIcon agentId={agentId} className='agent-brand-icon' size='md' />
         </AppItemIcon>
       ) : undefined}
       main={rowMain}
