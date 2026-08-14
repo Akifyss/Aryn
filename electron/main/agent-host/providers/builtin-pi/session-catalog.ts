@@ -4,6 +4,7 @@ import path from 'node:path'
 import { SessionManager } from '@earendil-works/pi-coding-agent'
 import type { AgentSessionListItem } from '../../../../shared/agent-contracts/types'
 import { AgentSessionAnnotationStore } from '../../sessions/annotations'
+import { PiSessionFileReader } from '../../sessions/pi-session-file-reader'
 import { pathExists } from './file-system'
 import { clampText } from './session-presentation'
 
@@ -53,6 +54,8 @@ function getLegacyArynPiSessionDir(cwd: string, agentDir: string) {
  * to the requested workspace before it is opened or removed.
  */
 export class BuiltinPiSessionCatalog {
+  private readonly sessionFileReader = new PiSessionFileReader()
+
   constructor(
     private readonly agentDir: string,
     private readonly annotationStore: AgentSessionAnnotationStore,
@@ -121,6 +124,15 @@ export class BuiltinPiSessionCatalog {
     }
 
     return resolvedSessionPath
+  }
+
+  async readFile(cwd: string, sessionPath: string) {
+    const resolvedSessionPath = this.resolvePath(cwd, sessionPath)
+    const value = await this.sessionFileReader.read(resolvedSessionPath)
+    if (!value.workspacePath || !areSameWorkspacePath(value.workspacePath, cwd)) {
+      throw new Error('Invalid session path.')
+    }
+    return value
   }
 
   private legacyAppSessionDir(cwd: string) {

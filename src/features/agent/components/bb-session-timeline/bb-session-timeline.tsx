@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type {
   BbNativeFileChange,
   BbNativeSessionSnapshot,
@@ -10,15 +10,13 @@ import type {
   BbSessionSurfaceOptions,
   BbTheme,
 } from '@aryn/bb-session-surface'
-import { AppLoadingState } from '@/components/app-loading-state'
 import type { AgentNativeSessionSnapshot } from '@/features/agent/types'
 import { BB_SESSION_SURFACE_REVISION } from './bb-session-surface-revision'
+import {
+  getPreloadedBbSessionSurface,
+  preloadBbSessionSurface,
+} from './bb-session-surface-loader'
 import './styles.css'
-
-type BbSurfaceModule = typeof import('@aryn/bb-session-surface')
-
-let surfaceModulePromise: Promise<BbSurfaceModule> | null = null
-let surfaceStylesPromise: Promise<void> | null = null
 
 type OpenCodeHistoryState = {
   key: string
@@ -87,75 +85,6 @@ export function decorateOpenCodeSnapshot(
   }
 }
 
-function loadSurfaceModule() {
-  if (!surfaceModulePromise) {
-    const moduleUrl = surfaceAssetUrl('index.js')
-    surfaceModulePromise = (import(/* @vite-ignore */ moduleUrl) as Promise<BbSurfaceModule>)
-      .catch((error) => {
-        surfaceModulePromise = null
-        throw error
-      })
-  }
-  return surfaceModulePromise
-}
-
-function surfaceAssetUrl(assetName: 'index.js' | 'style.css') {
-  const url = new URL(`./bb-session-surface/${assetName}`, document.baseURI)
-  url.searchParams.set('v', BB_SESSION_SURFACE_REVISION)
-  return url.href
-}
-
-function ensureSurfaceStyles() {
-  const id = 'aryn-bb-session-surface-styles'
-  const href = surfaceAssetUrl('style.css')
-  const current = document.getElementById(id)
-
-  if (
-    surfaceStylesPromise
-    && current instanceof HTMLLinkElement
-    && current.href === href
-  ) return surfaceStylesPromise
-
-  surfaceStylesPromise = null
-  let existing = current
-  if (current instanceof HTMLLinkElement && current.href !== href) {
-    current.remove()
-    existing = null
-  }
-  if (existing instanceof HTMLLinkElement && existing.sheet) return Promise.resolve()
-  if (existing && !(existing instanceof HTMLLinkElement)) existing.remove()
-
-  const link = existing instanceof HTMLLinkElement ? existing : document.createElement('link')
-  const shouldAppend = !(existing instanceof HTMLLinkElement)
-  if (shouldAppend) {
-    link.id = id
-    link.rel = 'stylesheet'
-    link.href = href
-  }
-
-  surfaceStylesPromise = new Promise<void>((resolve, reject) => {
-    const cleanup = () => {
-      link.removeEventListener('load', handleLoad)
-      link.removeEventListener('error', handleError)
-    }
-    const handleLoad = () => {
-      cleanup()
-      resolve()
-    }
-    const handleError = () => {
-      cleanup()
-      link.remove()
-      surfaceStylesPromise = null
-      reject(new Error('统一消息视图样式加载失败。'))
-    }
-    link.addEventListener('load', handleLoad, { once: true })
-    link.addEventListener('error', handleError, { once: true })
-    if (shouldAppend) document.head.append(link)
-  })
-
-  return surfaceStylesPromise
-}
-
 type BbSessionTimelineProps = {
   fileChanges?: BbNativeFileChange[]
   interactionRecords?: BbInteractionTimelineRecord[]
@@ -210,7 +139,7 @@ export const BbSessionTimeline = memo(function BbSessionTimeline({
   }
   const snapshotRef = useRef(snapshot as BbNativeSessionSnapshot)
   const surfaceRef = useRef<BbSessionSurface | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isSurfaceMountPending, setIsSurfaceMountPending] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadRevision, setLoadRevision] = useState(0)
 
@@ -362,14 +291,14 @@ export const BbSessionTimeline = memo(function BbSessionTimeline({
     }
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = containerRef.current
     if (!container) return
 
     let cancelled = false
     let surface: BbSessionSurface | null = null
     setLoadError(null)
-    setIsLoading(true)
+    setIsSurfaceMountPending(true)
 
     const bridge: BbSessionSurfaceOptions['bridge'] = {
       loadOlderTimelineRows,
@@ -380,7 +309,7 @@ export const BbSessionTimeline = memo(function BbSessionTimeline({
       openWorkspaceFile: (filePath) => onOpenWorkspaceFileRef.current?.(filePath),
     }
 
-    void Promise.all([ensureSurfaceStyles(), loadSurfaceModule()]).then(([, module]) => {
+    const mountSurface = (module: typeof import('@aryn/bb-session-surface')) => {
       if (cancelled) return
       surface = module.mountBbSessionSurface(container, {
         bridge,
@@ -398,14 +327,22 @@ export const BbSessionTimeline = memo(function BbSessionTimeline({
         workspacePath,
       })
       surfaceRef.current = surface
-      setIsLoading(false)
-    }).catch((cause) => {
-      if (cancelled) return
-      setIsLoading(false)
-      setLoadError(cause instanceof Error ? cause.message : String(cause))
-    })
+      setIsSurfaceMountPending(false)
+    }
+
+    const preloadedModule = getPreloadedBbSessionSurface()
+    if (preloadedModule) {
+      mountSurface(preloadedModule)
+    } else {
+      void preloadBbSessionSurface().then(mountSurface).catch((cause) => {
+        if (cancelled) return
+        setIsSurfaceMountPending(false)
+        setLoadError(cause instanceof Error ? cause.message : String(cause))
+      })
+    }
 
     return () => {
+      if (cancelled) return
       cancelled = true
       if (surfaceRef.current === surface) surfaceRef.current = null
       surface?.dispose()
@@ -416,17 +353,11 @@ export const BbSessionTimeline = memo(function BbSessionTimeline({
   return (
     <div
       className='bb-session-surface-host'
-      aria-busy={isLoading ? 'true' : undefined}
+      aria-busy={isSurfaceMountPending ? 'true' : undefined}
       data-bb-agent-id={snapshot.agentId}
       data-bb-session-id={sessionId}
       data-bb-surface-revision={BB_SESSION_SURFACE_REVISION}
     >
-      {isLoading ? (
-        <AppLoadingState
-          fill
-          label='正在加载会话'
-        />
-      ) : null}
       {loadError ? (
         <div className='agent-status-inline bb-session-surface-status is-error' role='alert'>
           <p>{loadError}</p>

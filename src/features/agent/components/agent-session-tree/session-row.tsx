@@ -21,6 +21,8 @@ import {
   AgentTreeMenuPopup,
 } from './menus'
 
+const SESSION_PREFETCH_HOVER_DELAY_MS = 80
+
 type AgentSessionTreeRowProps = {
   activity?: 'running' | 'waiting'
   agentId?: AgentId
@@ -39,6 +41,7 @@ type AgentSessionTreeRowProps = {
   onDelete: () => void
   onMenuOpenChange?: (open: boolean) => void
   onRename: (name: string) => Promise<void>
+  onPrefetch?: () => void
   onRequestRename: () => void
 }
 
@@ -60,6 +63,7 @@ export function AgentSessionTreeRow({
   onDelete,
   onMenuOpenChange,
   onRename,
+  onPrefetch,
   onRequestRename,
 }: AgentSessionTreeRowProps) {
   const [draftName, setDraftName] = useState(label)
@@ -69,9 +73,12 @@ export function AgentSessionTreeRow({
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false)
   const rowRef = useRef<HTMLDivElement | null>(null)
   const renameInputRef = useRef<HTMLInputElement | null>(null)
+  const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onMenuOpenChangeRef = useRef(onMenuOpenChange)
+  const onPrefetchRef = useRef(onPrefetch)
   const reportedMenuOpenRef = useRef(false)
   onMenuOpenChangeRef.current = onMenuOpenChange
+  onPrefetchRef.current = onPrefetch
   const isMenuOpen = isActionMenuOpen || isContextMenuOpen
   const accessibleLabel = agentId ? `${label}，${getAgentDefinition(agentId).label}` : label
   const activityLabel = activity === 'waiting' ? '等待操作' : '运行中'
@@ -94,11 +101,29 @@ export function AgentSessionTreeRow({
   }, [isMenuOpen])
 
   useEffect(() => () => {
+    if (prefetchTimerRef.current !== null) clearTimeout(prefetchTimerRef.current)
     if (!reportedMenuOpenRef.current) return
 
     reportedMenuOpenRef.current = false
     onMenuOpenChangeRef.current?.(false)
   }, [])
+
+  const cancelScheduledPrefetch = () => {
+    if (prefetchTimerRef.current === null) return
+    clearTimeout(prefetchTimerRef.current)
+    prefetchTimerRef.current = null
+  }
+  const prefetchImmediately = () => {
+    cancelScheduledPrefetch()
+    onPrefetchRef.current?.()
+  }
+  const schedulePrefetch = () => {
+    if (!onPrefetchRef.current || prefetchTimerRef.current !== null) return
+    prefetchTimerRef.current = setTimeout(() => {
+      prefetchTimerRef.current = null
+      onPrefetchRef.current?.()
+    }, SESSION_PREFETCH_HOVER_DELAY_MS)
+  }
 
   useEffect(() => {
     if (!isRenaming) {
@@ -248,6 +273,10 @@ export function AgentSessionTreeRow({
       itemAs={itemAs}
       itemClassName={`agent-project-session-node${itemClassName ? ` ${itemClassName}` : ''}`}
       ref={rowRef}
+      onFocusCapture={prefetchImmediately}
+      onPointerDown={prefetchImmediately}
+      onPointerEnter={schedulePrefetch}
+      onPointerLeave={cancelScheduledPrefetch}
       rowClassName={`agent-project-session-row${rowClassName ? ` ${rowClassName}` : ''}`}
       isActive={isActive}
       isEditing={isRenaming}

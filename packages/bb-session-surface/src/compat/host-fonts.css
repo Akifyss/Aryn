@@ -1,0 +1,4 @@
+/*
+ * Aryn's document shell owns the Inter webfont request. Keeping this import
+ * target empty prevents the isolated BB bundle from shipping a second copy.
+ */

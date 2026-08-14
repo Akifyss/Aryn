@@ -27,13 +27,22 @@ describe('bb unified session surface build contract', () => {
 
   it('keeps the bb runtime isolated while sharing one React identity internally', () => {
     const config = surfaceConfig as {
+      build?: {
+        assetsInlineLimit?: number
+        lib?: unknown
+        rollupOptions?: { preserveEntrySignatures?: string }
+      }
       resolve?: { alias?: Array<{ find: string; replacement: string }>; dedupe?: string[] }
     }
 
     expect(rootPackage.dependencies['@aryn/bb-session-surface']).toBe('file:packages/bb-session-surface')
     expect(config.resolve?.dedupe).toEqual(expect.arrayContaining(['react', 'react-dom']))
     expect(config.resolve?.alias?.some(({ find }) => find === '@aryn/app-scroll-area')).toBe(true)
+    expect(config.resolve?.alias?.some(({ find }) => find === '@fontsource-variable/inter')).toBe(true)
     expect(config.resolve?.alias?.find(({ find }) => find === '@/components/ui/bottom-anchored-scroll-body.js')).toBeUndefined()
+    expect(config.build?.assetsInlineLimit).toBe(0)
+    expect(config.build?.lib).toBeUndefined()
+    expect(config.build?.rollupOptions?.preserveEntrySignatures).toBe('strict')
   })
 
   it('does not retain provider-specific surface packages or build entry points', async () => {
@@ -155,18 +164,18 @@ describe('bb unified session surface build contract', () => {
 
   it('scopes bb styles and drops document-shell selectors', () => {
     expect(scopeBbSelector(':root')).toEqual([
-      '.aryn-bb-session-surface',
-      '[data-bb-plugin-root]',
+      ':is(.aryn-bb-session-surface,[data-bb-plugin-root])',
     ])
     expect(scopeBbSelector('.timeline-row')).toEqual([
-      '.aryn-bb-session-surface .timeline-row',
-      '[data-bb-plugin-root] .timeline-row',
+      ':is(.aryn-bb-session-surface,[data-bb-plugin-root]) .timeline-row',
       '[data-bb-plugin-root].timeline-row',
     ])
     expect(scopeBbSelector('.dark .timeline-row')).toEqual([
-      '.aryn-bb-session-surface[data-bb-theme="dark"] .timeline-row',
-      '[data-bb-plugin-root][data-bb-theme="dark"] .timeline-row',
+      ':is(.aryn-bb-session-surface,[data-bb-plugin-root])[data-bb-theme="dark"] .timeline-row',
       '[data-bb-plugin-root][data-bb-theme="dark"].timeline-row',
+    ])
+    expect(scopeBbSelector('[data-bb-plugin-root] .transition-all')).toEqual([
+      '[data-bb-plugin-root] .transition-all',
     ])
     expect(scopeBbSelector('.bb-app-shell-root')).toEqual([])
     expect(scopeBbSelector('body[data-sidebar-dragging="true"]')).toEqual([])
@@ -223,8 +232,9 @@ describe('bb unified session surface build contract', () => {
     ])
 
     expect(hostSource).toContain('data-bb-agent-id={snapshot.agentId}')
-    expect(hostSource).toContain("aria-busy={isLoading ? 'true' : undefined}")
-    expect(hostSource).toContain('<AppLoadingState')
+    expect(hostSource).toContain("aria-busy={isSurfaceMountPending ? 'true' : undefined}")
+    expect(hostSource).not.toContain("import { AppLoadingState")
+    expect(hostSource).not.toContain('<AppLoadingState')
     expect(hostSource).toContain("role='alert'")
     expect(hostSource).toContain('setLoadRevision((value) => value + 1)')
     expect(hostSource).not.toContain('requestNativeView')

@@ -9,10 +9,16 @@ import {
   removeMigratedLocalStorageKeys,
 } from '@/features/persistence/local-storage-migration'
 import { initializeRendererPersistentState } from '@/features/persistence/renderer-state'
+import {
+  preloadBbSessionSurfaceResources,
+  scheduleBbSessionSurfacePreload,
+} from '@/features/agent/components/bb-session-timeline/bb-session-surface-loader'
+import { scheduleAgentSessionSnapshotCacheWarmup } from '@/features/agent/lib/agent-session-snapshot-cache'
 
 import './index.css'
 
 async function bootstrap() {
+  preloadBbSessionSurfaceResources()
   try {
     const migrationSnapshot = collectLocalStorageMigration(window.localStorage)
     const persistentState = await window.appApi.initializePersistentState(migrationSnapshot.migration)
@@ -32,6 +38,9 @@ async function bootstrap() {
       </HeroUIProvider>
     </React.StrictMode>,
   )
+
+  scheduleBbSessionSurfacePreload()
+  scheduleAgentSessionSnapshotCacheWarmup()
 
   postMessage({ payload: 'removeLoading' }, '*')
   requestAnimationFrame(() => {

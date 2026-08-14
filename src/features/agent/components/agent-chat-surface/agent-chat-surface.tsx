@@ -13,6 +13,7 @@ import { AppIconButton } from '@/components/app-icon-button'
 import { AppMenu as Menu, shouldCloseClickOpenedMenu } from '@/components/app-menu'
 import { AgentComposerSurface } from '@/features/agent/components/agent-composer-surface/agent-composer-surface'
 import { BbSessionTimeline } from '@/features/agent/components/bb-session-timeline/bb-session-timeline'
+import { preloadBbSessionSurface } from '@/features/agent/components/bb-session-timeline/bb-session-surface-loader'
 import { AgentMessageViewport } from '@/features/agent/components/agent-message-viewport/agent-message-viewport'
 import { AgentNewConversationPrompt } from '@/features/agent/components/agent-new-conversation-prompt/agent-new-conversation-prompt'
 import {
@@ -50,8 +51,6 @@ export function AgentChatSurface() {
   const {
     activeOverlayPanel,
     activeSession,
-    activeSessionPath,
-    activeSessionSelection,
     activeWorkspaceContext,
     agentState,
     codexNativeSession,
@@ -63,6 +62,7 @@ export function AgentChatSurface() {
     iconTheme,
     isAgentLayout,
     isSessionLoading,
+    showSessionLoadingIndicator,
     isViewingActiveRuntime,
     interactionTimelineRecords,
     isThinkingStreaming,
@@ -87,15 +87,17 @@ export function AgentChatSurface() {
     streamStartedAt,
     surfaceMode,
     theme,
+    visibleSessionPath,
+    visibleSessionSelection,
     workspacePath,
   } = useAgentContext()
   const isNewConversation = shouldShowAgentNewConversationPrompt(
     activeWorkspaceContext,
-    activeSessionSelection,
+    visibleSessionSelection,
   )
   const showThreadbarSessionControl = shouldShowAgentThreadbarSessionControl(
     activeWorkspaceContext,
-    activeSessionSelection,
+    visibleSessionSelection,
   )
   const canOpenSessionMenu = Boolean(
     workspacePath && activeWorkspaceContext.kind === 'project',
@@ -118,9 +120,10 @@ export function AgentChatSurface() {
     void onOpenMessageFile?.(filePath, 'updated')
   }, [onOpenMessageFile])
   const nativeSession = codexNativeSession ?? openCodeNativeSession ?? piWebNativeSession
+  const shouldPreloadUnifiedSurface = isSessionLoading || Boolean(nativeSession)
   const unifiedSessionId = codexNativeSession?.thread.id
     ?? piWebNativeSession?.sessionId
-    ?? activeSessionPath
+    ?? visibleSessionPath
     ?? activeSession?.path
     ?? 'agent-session'
   const unifiedOptimisticUserMessages = useMemo(() => {
@@ -155,7 +158,7 @@ export function AgentChatSurface() {
   ), [interactionTimelineRecords, nativeSession, unifiedSessionId])
   const unifiedRuntimeState = useMemo(() => {
     return buildBbSessionRuntimeState({
-      activeSessionPath,
+      activeSessionPath: visibleSessionPath,
       agentId: nativeSession?.agentId ?? null,
       assistantText: draftAssistant,
       isThinkingStreaming,
@@ -168,7 +171,6 @@ export function AgentChatSurface() {
       thinkingText: draftThinking,
     })
   }, [
-    activeSessionPath,
     agentState.runtime,
     draftAssistant,
     draftThinking,
@@ -179,6 +181,7 @@ export function AgentChatSurface() {
     panelError,
     stoppingPrompt,
     streamStartedAt,
+    visibleSessionPath,
   ])
   const [localOverlayRoot, setLocalOverlayRoot] = useState<HTMLDivElement | null>(null)
   const handleLocalOverlayRootRef = useCallback((node: HTMLDivElement | null) => {
@@ -189,6 +192,11 @@ export function AgentChatSurface() {
     : surfaceMode === 'drawer'
       ? localOverlayRoot
       : document.body
+
+  useEffect(() => {
+    if (!shouldPreloadUnifiedSurface) return
+    void preloadBbSessionSurface().catch(() => undefined)
+  }, [shouldPreloadUnifiedSurface])
 
   useEffect(() => {
     if (!canOpenSessionMenu && activeOverlayPanel === 'sessions') {
@@ -309,7 +317,7 @@ export function AgentChatSurface() {
       </div>
       <div ref={handleLocalOverlayRootRef} className='agent-local-overlay-root' />
 
-      {isSessionLoading ? (
+      {showSessionLoadingIndicator ? (
         <AppLoadingState
           className='agent-session-loading-state'
           label='正在加载会话'
@@ -351,7 +359,7 @@ export function AgentChatSurface() {
             />
           ) : (
             <AgentMessageViewport
-              activeSessionPath={activeSessionPath}
+              activeSessionPath={visibleSessionPath}
               iconTheme={iconTheme}
               messages={renderedMessages}
               messagesScrollElement={messagesScrollElement}

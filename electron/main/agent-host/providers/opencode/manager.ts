@@ -1537,10 +1537,10 @@ export class OpenCodeAgentManager {
     clientGeneration: number,
   ): Promise<AgentSessionSnapshot> {
     const { cwd, sessionId: sessionID } = binding
-    const { session } = await this.loadSessionHierarchy(client, cwd, sessionID)
     const hydration = this.messageReducer.beginHydration(sessionID)
     try {
-      const [messagesResponse, diffResponse] = await Promise.all([
+      const [{ session }, messagesResponse, diffResponse] = await Promise.all([
+        this.loadSessionHierarchy(client, cwd, sessionID),
         client.session.messages({ directory: cwd, sessionID, limit: 200 }, { throwOnError: true }),
         client.session.diff({ directory: cwd, sessionID }, { throwOnError: true }).catch(() => ({ data: [] as SnapshotFileDiff[] })),
       ])

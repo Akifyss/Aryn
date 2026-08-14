@@ -477,6 +477,53 @@ function AgentProvider({
   }, [activeComposerMenu])
 
   const {
+    ensureSelectedAgentSessionActive,
+    handleOpenSession,
+    handlePrefetchSession,
+    handleStartNewSession,
+    isAgentSessionOperationCurrent,
+    isSessionSnapshotLoading,
+    openSessionRequestIdRef,
+    sessionPresentation,
+    showSessionSnapshotLoadingIndicator,
+  } = useAgentSessionNavigation({
+    externalRequest: {
+      hasLoadedWorkspaceState,
+      isLoading,
+      onExternalSessionRequestHandled,
+      projectState,
+      request: externalSessionRequest,
+    },
+    model: {
+      newSessionModelDraftRef,
+      syncModelDraft,
+      syncNewSessionModelDraft,
+    },
+    navigation: {
+      activeRuntimeSessionRef,
+      activeSessionSelection,
+      activeSessionSelectionRef,
+      selectedAgentId,
+      selectedAgentIdRef,
+      setSelectedAgentIdValue,
+      syncActiveSessionSelection,
+      workspacePath,
+      workspacePathRef,
+    },
+    state: {
+      agentState,
+      closeSessionOverlay: () => setActiveOverlayPanel(null),
+      resetComposer: () => {
+        setComposerState(EMPTY_AGENT_COMPOSER_STATE)
+        setComposerAttachments([])
+      },
+      setAgentState,
+      setPanelError,
+      setViewedSessionSnapshot,
+    },
+  })
+
+  const {
     activeSession,
     activeSessionPath,
     codexNativeSession,
@@ -491,11 +538,11 @@ function AgentProvider({
     visibleRuntime,
     visibleSessionSnapshot,
   } = useAgentVisibleSession({
-    activeSessionSelection,
+    activeSessionSelection: sessionPresentation.selection,
     activeSessionSnapshot: agentState.activeSession,
     optimisticUserMessages,
     runtime: agentState.runtime,
-    selectedAgentId,
+    selectedAgentId: sessionPresentation.agentId,
     sessions: agentState.sessions,
     setOptimisticUserMessages,
     viewedSessionSnapshot,
@@ -505,7 +552,7 @@ function AgentProvider({
     activeRuntimeSessionId: agentState.activeSession?.sessionId ?? null,
     isViewingActiveRuntime,
     pendingInteractions,
-    selectedAgentId,
+    selectedAgentId: sessionPresentation.agentId,
     workspacePath,
   })
   const visibleInteractionTimelineRecords = useMemo(() => mergeInteractionTimelineRecords(
@@ -596,50 +643,8 @@ function AgentProvider({
     workspacePath,
   })
 
-  const {
-    ensureSelectedAgentSessionActive,
-    handleOpenSession,
-    handleStartNewSession,
-    isAgentSessionOperationCurrent,
-    isSessionSnapshotLoading,
-    openSessionRequestIdRef,
-  } = useAgentSessionNavigation({
-    externalRequest: {
-      hasLoadedWorkspaceState,
-      isLoading,
-      onExternalSessionRequestHandled,
-      projectState,
-      request: externalSessionRequest,
-    },
-    model: {
-      newSessionModelDraftRef,
-      syncModelDraft,
-      syncNewSessionModelDraft,
-    },
-    navigation: {
-      activeRuntimeSessionRef,
-      activeSessionSelectionRef,
-      selectedAgentId,
-      selectedAgentIdRef,
-      setSelectedAgentIdValue,
-      syncActiveSessionSelection,
-      workspacePath,
-      workspacePathRef,
-    },
-    state: {
-      agentState,
-      closeSessionOverlay: () => setActiveOverlayPanel(null),
-      resetComposer: () => {
-        setComposerState(EMPTY_AGENT_COMPOSER_STATE)
-        setComposerAttachments([])
-      },
-      setAgentState,
-      setPanelError,
-      setViewedSessionSnapshot,
-    },
-  })
-  const isSessionLoading = isSessionSnapshotLoading || Boolean(
-    isLoading && (
+  const isWorkspaceSessionLoading = Boolean(
+    isLoading && !visibleSessionSnapshot && (
       (
         activeWorkspaceContext.kind === 'project'
         && !(
@@ -650,6 +655,12 @@ function AgentProvider({
       || activeConversation?.agentSessionPath
     ),
   )
+  const isSessionLoading = isSessionSnapshotLoading || isWorkspaceSessionLoading
+  const showSessionLoadingIndicator = showSessionSnapshotLoadingIndicator
+    || isWorkspaceSessionLoading
+  const selectedSessionPath = activeSessionSelection.kind === 'session'
+    ? activeSessionSelection.sessionPath
+    : null
   const {
     deletingSessionPath,
     handleDeleteSession,
@@ -874,7 +885,7 @@ function AgentProvider({
     activeOverlayPanel,
     activeSession,
     activeSessionSelection,
-    activeSessionPath,
+    activeSessionPath: selectedSessionPath,
     activeWorkspaceContext,
     agentState,
     addComposerFiles,
@@ -893,6 +904,7 @@ function AgentProvider({
     handleComposerKeyDown,
     handleDeleteSession,
     handleOpenSession,
+    handlePrefetchSession,
     handleRenameSession,
     handleSelectModel,
     handleThinkingLevelSelection,
@@ -908,6 +920,7 @@ function AgentProvider({
     isProjectAddMenuOpen,
     isLoading,
     isSessionLoading,
+    showSessionLoadingIndicator,
     isThinkingStreaming,
     isSwitchingModel,
     isSwitchingThinkingLevel,
@@ -960,6 +973,9 @@ function AgentProvider({
     setComposerState,
     setPanelError,
     selectedAgentId,
+    visibleAgentId: sessionPresentation.agentId,
+    visibleSessionPath: activeSessionPath,
+    visibleSessionSelection: sessionPresentation.selection,
     setSelectedAgentId,
     statusMessage,
     stoppingPrompt,
@@ -980,6 +996,7 @@ function AgentProvider({
     activeSession,
     activeSessionSelection,
     activeSessionPath,
+    selectedSessionPath,
     agentState,
     addComposerFiles,
     attachmentCapabilityMessage,
@@ -997,6 +1014,7 @@ function AgentProvider({
     handleComposerKeyDown,
     handleDeleteSession,
     handleOpenSession,
+    handlePrefetchSession,
     handleRenameSession,
     handleSelectModel,
     handleThinkingLevelSelection,
@@ -1012,6 +1030,7 @@ function AgentProvider({
     isProjectAddMenuOpen,
     isLoading,
     isSessionLoading,
+    showSessionLoadingIndicator,
     isThinkingStreaming,
     isSwitchingModel,
     isSwitchingThinkingLevel,
@@ -1059,6 +1078,7 @@ function AgentProvider({
     openCodeOptimisticUserMessages,
     piWebOptimisticUserMessages,
     selectedAgentId,
+    sessionPresentation,
     setSelectedAgentId,
     statusMessage,
     stoppingPrompt,

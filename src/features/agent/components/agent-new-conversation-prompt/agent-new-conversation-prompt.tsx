@@ -11,16 +11,16 @@ function AgentTypeSwitchTrigger({
   menuPortalTarget?: HTMLElement | null
 }) {
   const {
-    activeSessionSelection,
     activeWorkspaceContext,
     agentCatalog,
     agentCatalogRefreshError,
     refreshAgentCatalog,
-    selectedAgentId,
     setSelectedAgentId,
+    visibleAgentId,
+    visibleSessionSelection,
   } = useAgentContext()
   const isLocked = activeWorkspaceContext.kind === 'conversation'
-    || activeSessionSelection.kind === 'session'
+    || visibleSessionSelection.kind === 'session'
 
   return (
     <AgentTypeSwitch
@@ -28,7 +28,7 @@ function AgentTypeSwitchTrigger({
       isLocked={isLocked}
       menuPortalTarget={menuPortalTarget}
       refreshError={agentCatalogRefreshError}
-      selectedAgentId={selectedAgentId}
+      selectedAgentId={visibleAgentId}
       // This trigger is inline with the 24px hero heading.
       triggerIconSize='xl'
       onRefresh={refreshAgentCatalog}

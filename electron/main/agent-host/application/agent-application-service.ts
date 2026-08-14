@@ -1,4 +1,5 @@
 import type {
+  AgentInteractionTimelineRecord,
   AgentInteractionResponse,
   AgentPromptAttachment,
   AgentPromptSendOptions,
@@ -134,10 +135,20 @@ export class AgentApplicationService {
 
   async readSession(rawScope: AgentRequestScope, sessionPath: string) {
     const { backend, cwd, scope } = this.resolveWorkspaceBackend(rawScope)
-    return this.withSnapshotInteractionHistory(
-      scope.agentId,
-      await backend.readSession(cwd, requireExplicitSessionPath(scope, sessionPath)),
-    )
+    const snapshot = await backend.readSession(cwd, requireExplicitSessionPath(scope, sessionPath))
+    this.associateSnapshotInteractionHistory(scope.agentId, snapshot)
+    return snapshot
+  }
+
+  async readSessionInteractionHistory(
+    rawScope: AgentRequestScope,
+    rawSessionId: string,
+  ): Promise<AgentInteractionTimelineRecord[]> {
+    const { cwd, scope } = this.resolveWorkspaceBackend(rawScope)
+    const sessionId = typeof rawSessionId === 'string' ? rawSessionId.trim() : ''
+    if (!sessionId) throw new Error('Agent interaction history requires a session ID.')
+    if (!this.interactionHistory) return []
+    return this.interactionHistory.read(scope.agentId, sessionId, cwd)
   }
 
   async requestOpenCodeSurface(rawScope: AgentRequestScope, rawRequest: OpenCodeSurfaceRequest) {
@@ -328,12 +339,34 @@ export class AgentApplicationService {
           snapshot.workspacePath,
         )
       }
-      const interactionHistory = await this.interactionHistory.read(agentId, snapshot.sessionId)
+      const interactionHistory = await this.interactionHistory.read(
+        agentId,
+        snapshot.sessionId,
+        snapshot.workspacePath,
+      )
       return { ...snapshot, interactionHistory }
     } catch (error) {
       console.warn('[Agent Host] Unable to load interaction history for the session.', error)
       return snapshot
     }
+  }
+
+  private associateSnapshotInteractionHistory(agentId: AgentId, snapshot: AgentSessionSnapshot) {
+    if (
+      agentId !== 'builtin-pi'
+      || !snapshot.sessionId
+      || !snapshot.sessionPath
+      || !snapshot.workspacePath
+      || !this.interactionHistory
+    ) return
+    void this.interactionHistory.associateSession(
+      agentId,
+      snapshot.sessionId,
+      snapshot.sessionPath,
+      snapshot.workspacePath,
+    ).catch((error) => {
+      console.warn('[Agent Host] Unable to associate interaction history with the session.', error)
+    })
   }
 
   private async withInteractionHistory(

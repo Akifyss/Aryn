@@ -197,10 +197,18 @@ export class AgentInteractionHistoryStore {
     })
   }
 
-  async read(agentId: AgentId, sessionId: string) {
+  async read(agentId: AgentId, sessionId: string, workspacePath?: string) {
     await this.initialize()
     const state = await this.store.read()
-    return (state.recordsBySession[sessionKey(agentId, sessionId)] ?? []).map(sanitizeRecord)
+    const normalizedWorkspacePath = workspacePath
+      ? normalizeFileSystemPath(workspacePath)
+      : null
+    return (state.recordsBySession[sessionKey(agentId, sessionId)] ?? [])
+      .filter((record) => (
+        normalizedWorkspacePath === null
+        || normalizeFileSystemPath(record.request.workspacePath) === normalizedWorkspacePath
+      ))
+      .map(sanitizeRecord)
   }
 
   async associateSession(
@@ -212,13 +220,23 @@ export class AgentInteractionHistoryStore {
     if (!path.isAbsolute(sessionPath)) return
     await this.initialize()
     const key = sessionPathKey(agentId, sessionPath)
-    await this.store.update((state) => ({
-      ...state,
-      sessionAliasesByPath: {
-        ...state.sessionAliasesByPath,
-        [key]: { sessionId, workspacePath },
-      },
-    }))
+    await this.store.updateIfChanged((state) => {
+      const currentAlias = state.sessionAliasesByPath[key]
+      if (
+        currentAlias
+        && currentAlias.sessionId === sessionId
+        && normalizeFileSystemPath(currentAlias.workspacePath) === normalizeFileSystemPath(workspacePath)
+      ) {
+        return null
+      }
+      return {
+        ...state,
+        sessionAliasesByPath: {
+          ...state.sessionAliasesByPath,
+          [key]: { sessionId, workspacePath },
+        },
+      }
+    })
   }
 
   async clearSession(agentId: AgentId, sessionIdOrPath: string) {
@@ -268,20 +286,26 @@ export class AgentInteractionHistoryStore {
   }
 
   private initialize() {
-    this.initializePromise ??= this.store.update((state) => ({
-      ...state,
-      recordsBySession: Object.fromEntries(Object.entries(state.recordsBySession).map(([key, records]) => [
-        key,
-        records.map((record) => record.status === 'pending'
-          ? {
-              ...record,
-              resolvedAt: record.resolvedAt ?? Date.now(),
-              status: 'interrupted' as const,
-              statusReason: RESTART_REASON,
-            }
-          : record),
-      ])),
-    })).then(() => undefined)
+    this.initializePromise ??= this.store.updateIfChanged((state) => {
+      const hasPendingRecords = Object.values(state.recordsBySession).some((records) => (
+        records.some((record) => record.status === 'pending')
+      ))
+      if (!hasPendingRecords) return null
+      return {
+        ...state,
+        recordsBySession: Object.fromEntries(Object.entries(state.recordsBySession).map(([key, records]) => [
+          key,
+          records.map((record) => record.status === 'pending'
+            ? {
+                ...record,
+                resolvedAt: record.resolvedAt ?? Date.now(),
+                status: 'interrupted' as const,
+                statusReason: RESTART_REASON,
+              }
+            : record),
+        ])),
+      }
+    }).then(() => undefined)
     return this.initializePromise
   }
 }

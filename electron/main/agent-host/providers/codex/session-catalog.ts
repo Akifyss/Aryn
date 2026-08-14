@@ -21,6 +21,22 @@ type CodexSessionCatalogListOptions = {
   retainIndexedRecord: (record: CodexThreadRecord) => boolean
 }
 
+function nativeThreadRecord(thread: Thread, indexed?: CodexThreadRecord): CodexThreadRecord {
+  return {
+    createdAt: new Date(thread.createdAt * 1_000).toISOString(),
+    cwd: thread.cwd,
+    id: thread.id,
+    materialized: true,
+    model: indexed?.model ?? null,
+    modelExplicit: indexed?.modelExplicit ?? false,
+    name: thread.name,
+    preview: thread.preview || null,
+    reasoningEffort: indexed?.reasoningEffort ?? 'medium',
+    rolloutPath: thread.path,
+    updatedAt: new Date(thread.updatedAt * 1_000).toISOString(),
+  }
+}
+
 /**
  * Reconciles Codex's authoritative thread catalog with Aryn's auxiliary index.
  *
@@ -50,21 +66,9 @@ export class CodexSessionCatalog {
     ])
     const indexedById = new Map(indexedRecords.map((record) => [record.id, record]))
     const nativeIds = new Set(nativeThreads.map((thread) => thread.id))
-    const officialRecords = nativeThreads.map((thread): CodexThreadRecord => {
-      const indexed = indexedById.get(thread.id)
-      return {
-        createdAt: new Date(thread.createdAt * 1_000).toISOString(),
-        cwd: thread.cwd,
-        id: thread.id,
-        materialized: true,
-        model: indexed?.model ?? null,
-        modelExplicit: indexed?.modelExplicit ?? false,
-        name: thread.name,
-        preview: thread.preview || null,
-        reasoningEffort: indexed?.reasoningEffort ?? 'medium',
-        updatedAt: new Date(thread.updatedAt * 1_000).toISOString(),
-      }
-    })
+    const officialRecords = nativeThreads.map((thread) => (
+      nativeThreadRecord(thread, indexedById.get(thread.id))
+    ))
     const liveOrUnmaterializedDrafts = indexedRecords.filter((record) => (
       !nativeIds.has(record.id)
       && (!record.materialized || options.retainIndexedRecord(record))
@@ -87,6 +91,7 @@ export class CodexSessionCatalog {
         sortDirection: 'desc',
         sortKey: 'updated_at',
         sourceKinds: TOP_LEVEL_CODEX_THREAD_SOURCE_KINDS,
+        useStateDbOnly: true,
       })
       for (const thread of response.data) {
         if (thread.ephemeral || thread.parentThreadId || seenThreadIds.has(thread.id)) continue
@@ -108,6 +113,27 @@ export class CodexSessionCatalog {
     return (await this.index.read()).threads
       .filter((record) => workspaceIdentity(record.cwd) === identity)
       .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+  }
+
+  async listAllIndexed() {
+    return (await this.index.read()).threads
+      .slice()
+      .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+  }
+
+  async recordForNativeThread(cwd: string, thread: Thread) {
+    const isTopLevelSource = typeof thread.source === 'string'
+      && TOP_LEVEL_CODEX_THREAD_SOURCE_KINDS.includes(thread.source)
+    if (
+      workspaceIdentity(thread.cwd) !== workspaceIdentity(cwd)
+      || thread.ephemeral
+      || thread.parentThreadId
+      || !isTopLevelSource
+    ) {
+      throw new Error('Codex thread not found for this workspace.')
+    }
+    const indexed = (await this.listIndexed(cwd)).find((record) => record.id === thread.id)
+    return nativeThreadRecord(thread, indexed)
   }
 
   async add(record: CodexThreadRecord) {

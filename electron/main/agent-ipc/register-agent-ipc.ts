@@ -223,6 +223,15 @@ export function registerAgentIpc(options: RegisterAgentIpcOptions) {
     sessionPath: string,
   ) => options.agentHost.readSession(normalizeAgentIpcScope(scopeOrWorkspacePath), sessionPath))
 
+  handle('agent:read-session-interaction-history', async (
+    _event,
+    scopeOrWorkspacePath: AgentRequestScope | string,
+    sessionId: string,
+  ) => options.agentHost.readSessionInteractionHistory(
+    normalizeAgentIpcScope(scopeOrWorkspacePath),
+    sessionId,
+  ))
+
   handle('agent:opencode-surface-request', async (
     _event,
     scope: AgentRequestScope,

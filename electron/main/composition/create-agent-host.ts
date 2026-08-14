@@ -36,6 +36,9 @@ export function createAgentHost(options: CreateAgentHostOptions) {
     agentDir: options.agentDir,
     emitEvent: bindEvent('codex'),
   })
+  if (typeof codexManager.prewarm === 'function') {
+    void codexManager.prewarm()
+  }
   const openCodeManager = new OpenCodeAgentManager({
     agentDir: options.agentDir,
     emitEvent: bindEvent('opencode'),

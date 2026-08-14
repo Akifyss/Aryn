@@ -6,6 +6,7 @@ import postcss from 'postcss'
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(scriptDirectory, '..')
 const cssPath = path.join(root, 'packages', 'bb-session-surface', 'dist', 'style.css')
+const entryPath = path.join(root, 'packages', 'bb-session-surface', 'dist', 'index.js')
 const htmlPath = path.join(root, 'index.html')
 const appCssPath = path.join(root, 'src', 'index.css')
 
@@ -14,12 +15,29 @@ if (!fs.existsSync(cssPath)) {
 }
 
 const css = fs.readFileSync(cssPath, 'utf8')
+const cssBytes = Buffer.byteLength(css)
+if (cssBytes > 400_000) {
+  throw new Error(`Built bb stylesheet exceeds the 400 KB performance budget: ${cssBytes} bytes`)
+}
+if (css.includes('data:font/')) {
+  throw new Error('Built bb stylesheet must emit fonts as lazy assets instead of inline data URLs')
+}
+const entrySource = fs.readFileSync(entryPath, 'utf8')
+const entryChunkName = entrySource.match(/from["']\.\/([^"']+)["']/)?.[1]
+if (!entryChunkName) {
+  throw new Error('Built bb entry must statically forward to a preloadable implementation chunk')
+}
+const entryChunkBytes = fs.statSync(path.join(path.dirname(entryPath), entryChunkName)).size
+if (entryChunkBytes > 2_500_000) {
+  throw new Error(`Built bb entry chunk exceeds the 2.5 MB performance budget: ${entryChunkBytes} bytes`)
+}
 const stylesheet = postcss.parse(css)
 const allowedStarts = [
   '.aryn-bb-session-surface',
   '.dark .aryn-bb-session-surface',
   '[data-bb-plugin-root]',
   '.dark [data-bb-plugin-root]',
+  ':is(.aryn-bb-session-surface,[data-bb-plugin-root])',
 ]
 
 function isInsideKeyframes(rule) {
@@ -57,6 +75,11 @@ stylesheet.walkAtRules('font-face', (fontFace) => {
   })
   fontFace.walkDecls('font-weight', (declaration) => {
     weight = declaration.value.trim()
+  })
+  fontFace.walkDecls('src', (declaration) => {
+    if (/\.(?:woff|ttf)(?:[?#)'"])/.test(declaration.value)) {
+      throw new Error('Built bb stylesheet must target modern Electron with woff2-only font sources')
+    }
   })
   if (family === 'Fira Code' && weight) bundledFiraCodeWeights.add(weight)
 })
@@ -155,7 +178,7 @@ const bbMonoSelectors = bbMonoDeclarations.flatMap((declaration) =>
   declaration.parent?.type === 'rule' ? declaration.parent.selectors : [],
 )
 for (const requiredScope of ['.aryn-bb-session-surface', '[data-bb-plugin-root]']) {
-  if (!bbMonoSelectors.some((selector) => selector.trim().startsWith(requiredScope))) {
+  if (!bbMonoSelectors.some((selector) => selector.includes(requiredScope))) {
     throw new Error(`Built bb monospace token is missing the ${requiredScope} scope`)
   }
 }

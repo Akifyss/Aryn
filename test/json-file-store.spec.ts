@@ -71,6 +71,19 @@ describe('AtomicJsonStore', () => {
     await expect(readFile(filePath, 'utf8').then(JSON.parse)).resolves.toEqual({ count: 7, version: 3 })
   })
 
+  it('does not persist a no-op conditional update', async () => {
+    const rootPath = await createTempDir()
+    const filePath = path.join(rootPath, '.aryn', 'state.json')
+    const store = new AtomicJsonStore<TestState>({
+      defaultState: () => ({ count: 1, version: 0 }),
+      filePath,
+      normalize: normalizeTestState,
+    })
+
+    await expect(store.updateIfChanged(() => null)).resolves.toEqual({ count: 1, version: 3 })
+    await expect(readFile(filePath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('does not silently replace malformed state when no backup is available', async () => {
     const rootPath = await createTempDir()
     const filePath = path.join(rootPath, '.aryn', 'state.json')

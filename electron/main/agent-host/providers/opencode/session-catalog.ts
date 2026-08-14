@@ -17,6 +17,20 @@ import {
   type OpenCodeSessionRecord,
 } from './session-model'
 
+const HIERARCHY_CACHE_TTL_MS = 1_000
+const MAX_CACHED_HIERARCHIES = 16
+
+type OpenCodeSessionHierarchy = {
+  root: Session
+  rootRecord: OpenCodeSessionRecord | undefined
+  session: Session
+}
+
+type CachedOpenCodeSessionHierarchy = {
+  expiresAt: number
+  promise: Promise<OpenCodeSessionHierarchy>
+}
+
 /**
  * Owns OpenCode's official session discovery and Aryn's narrow auxiliary index.
  *
@@ -25,7 +39,10 @@ import {
  * visibility whitelist.
  */
 export class OpenCodeSessionCatalog {
+  private readonly clientIds = new WeakMap<OpencodeClient, number>()
+  private readonly hierarchyCache = new Map<string, CachedOpenCodeSessionHierarchy>()
   private readonly index: AtomicJsonStore<OpenCodeSessionIndex>
+  private nextClientId = 1
 
   constructor(agentDir: string) {
     this.index = new AtomicJsonStore({
@@ -49,7 +66,52 @@ export class OpenCodeSessionCatalog {
     )))
   }
 
-  async loadHierarchy(client: OpencodeClient, cwd: string, sessionId: string) {
+  loadHierarchy(client: OpencodeClient, cwd: string, sessionId: string) {
+    let clientId = this.clientIds.get(client)
+    if (clientId === undefined) {
+      clientId = this.nextClientId
+      this.nextClientId += 1
+      this.clientIds.set(client, clientId)
+    }
+    const cacheKey = `${workspaceIdentity(cwd)}\n${sessionId}\n${clientId}`
+    const cached = this.hierarchyCache.get(cacheKey)
+    if (cached && cached.expiresAt > Date.now()) {
+      this.hierarchyCache.delete(cacheKey)
+      this.hierarchyCache.set(cacheKey, cached)
+      return cached.promise
+    }
+    if (cached) this.hierarchyCache.delete(cacheKey)
+
+    const entry: CachedOpenCodeSessionHierarchy = {
+      expiresAt: Number.POSITIVE_INFINITY,
+      promise: this.loadHierarchyFresh(client, cwd, sessionId),
+    }
+    this.hierarchyCache.set(cacheKey, entry)
+    while (this.hierarchyCache.size > MAX_CACHED_HIERARCHIES) {
+      const oldestKey = this.hierarchyCache.keys().next().value
+      if (typeof oldestKey !== 'string') break
+      this.hierarchyCache.delete(oldestKey)
+    }
+    void entry.promise.then(
+      () => {
+        if (this.hierarchyCache.get(cacheKey) === entry) {
+          entry.expiresAt = Date.now() + HIERARCHY_CACHE_TTL_MS
+        }
+      },
+      () => {
+        if (this.hierarchyCache.get(cacheKey) === entry) {
+          this.hierarchyCache.delete(cacheKey)
+        }
+      },
+    )
+    return entry.promise
+  }
+
+  private async loadHierarchyFresh(
+    client: OpencodeClient,
+    cwd: string,
+    sessionId: string,
+  ): Promise<OpenCodeSessionHierarchy> {
     const response = await client.session.get({
       directory: cwd,
       sessionID: sessionId,
@@ -97,6 +159,7 @@ export class OpenCodeSessionCatalog {
   }
 
   async upsert(record: OpenCodeSessionRecord) {
+    this.invalidateHierarchyCache(record.cwd)
     const identity = workspaceIdentity(record.cwd)
     await this.index.update((state) => ({
       ...state,
@@ -111,6 +174,7 @@ export class OpenCodeSessionCatalog {
   }
 
   async remove(cwd: string, sessionIds: Set<string>) {
+    this.invalidateHierarchyCache(cwd)
     const identity = workspaceIdentity(cwd)
     await this.index.update((state) => ({
       ...state,
@@ -128,6 +192,7 @@ export class OpenCodeSessionCatalog {
     modelKey: string | null,
     thinkingLevel: AgentThinkingLevel,
   ) {
+    this.invalidateHierarchyCache(cwd)
     const sessionId = session.id
     await client.session.update({
       directory: cwd,
@@ -178,6 +243,13 @@ export class OpenCodeSessionCatalog {
         `[opencode] Failed to migrate Aryn session metadata for ${session.id}: ${formatOpenCodeError(error)}`,
       )
       return session
+    }
+  }
+
+  private invalidateHierarchyCache(cwd: string) {
+    const prefix = `${workspaceIdentity(cwd)}\n`
+    for (const cacheKey of this.hierarchyCache.keys()) {
+      if (cacheKey.startsWith(prefix)) this.hierarchyCache.delete(cacheKey)
     }
   }
 }

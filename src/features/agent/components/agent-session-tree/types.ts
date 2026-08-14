@@ -37,6 +37,7 @@ export type AgentSessionTreeController = {
   deletingSessionPath: string | null
   handleDeleteSession: (rootPath: string, agentId: AgentId, sessionPath: string) => Promise<void>
   handleOpenSession: (agentId: AgentId, sessionPath: string) => Promise<void>
+  handlePrefetchSession: (rootPath: string, agentId: AgentId, sessionPath: string) => void
   handleRenameSession: (rootPath: string, agentId: AgentId, sessionPath: string, name: string) => Promise<void>
   handleStartNewSession: () => void
   isProjectAddMenuOpen: boolean

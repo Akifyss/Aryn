@@ -49,7 +49,7 @@ describe('agent sidebar structure', () => {
     expect(projectSessionsSource).toContain('window.appApi.listAgentSessions(')
     expect(projectSessionsSource).toContain('invalidateAgentProjectSessionBuckets')
     expect(sessionNavigationSource).toContain('window.appApi.openAgentSession(')
-    expect(sessionNavigationSource).toContain('window.appApi.readAgentSession(')
+    expect(sessionNavigationSource).toContain('loadAgentSessionSnapshot({')
     expect(sessionMutationsSource).toContain('window.appApi.deleteAgentSession(')
     expect(sessionMutationsSource).toContain('window.appApi.renameAgentSession(')
     expect(projectSessionsSource).not.toContain('agent-sidebar')

@@ -1,4 +1,4 @@
-import type { AgentClientEvent, AgentInteractionResponse, AgentPromptAttachment, AgentPromptSendOptions, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRequestScope, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState, OpenCodeSurfaceRequest, OpenCodeSurfaceResponse } from '@/features/agent/types'
+import type { AgentClientEvent, AgentInteractionResponse, AgentInteractionTimelineRecord, AgentPromptAttachment, AgentPromptSendOptions, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRequestScope, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState, OpenCodeSurfaceRequest, OpenCodeSurfaceResponse } from '@/features/agent/types'
 import type { AgentAvailability } from '@/features/agent/agent-definition'
 import type { ActiveWorkspaceContext, ConversationRecord, ConversationState, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '@/features/conversations/types'
 import type {
@@ -122,6 +122,7 @@ declare global {
       loadAgentDraftState: (agentId?: AgentRequestScope['agentId']) => Promise<AgentWorkspaceState>
       listAgentSessions: (scope: AgentRequestScope) => Promise<AgentWorkspaceState['sessions']>
       readAgentSession: (scope: AgentRequestScope, sessionPath: string) => Promise<AgentSessionSnapshot>
+      readAgentSessionInteractionHistory: (scope: AgentRequestScope, sessionId: string) => Promise<AgentInteractionTimelineRecord[]>
       requestOpenCodeSurface: (scope: AgentRequestScope, request: OpenCodeSurfaceRequest) => Promise<OpenCodeSurfaceResponse>
       agentSessionExists: (scope: AgentRequestScope, sessionPath: string) => Promise<{ exists: boolean }>
       createAgentSession: (scope: AgentRequestScope, options?: string | AgentSessionCreateOptions) => Promise<AgentWorkspaceState>

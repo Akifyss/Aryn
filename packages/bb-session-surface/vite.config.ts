@@ -12,6 +12,7 @@ const appSource = path.join(upstream, 'apps', 'app', 'src')
 const sharedUiSource = path.join(upstream, 'packages', 'shared-ui', 'src')
 const SURFACE = '.aryn-bb-session-surface'
 const PORTAL = '[data-bb-plugin-root]'
+const SURFACE_OR_PORTAL = `:is(${SURFACE},${PORTAL})`
 const KEYFRAME_PREFIX = 'aryn-bb-'
 
 type PostCssContainer = {
@@ -49,21 +50,11 @@ function isInsideKeyframes(rule: PostCssRule) {
   return false
 }
 
-function portalSelectors(value: string) {
-  if (value === ':root' || value === ':host' || value === 'html' || value === 'body') {
-    return [PORTAL]
-  }
-  if (value === '.dark' || value === 'html.dark') {
-    return [`${PORTAL}[data-bb-theme="dark"]`]
-  }
-  if (value.startsWith('.dark ')) {
-    const suffix = value.slice('.dark '.length)
-    return [
-      `${PORTAL}[data-bb-theme="dark"] ${suffix}`,
-      `${PORTAL}[data-bb-theme="dark"]${suffix.startsWith(':') || suffix.startsWith('.') || suffix.startsWith('[') ? suffix : ''}`,
-    ]
-  }
-  return [`${PORTAL} ${value}`, `${PORTAL}${value.startsWith(':') || value.startsWith('.') || value.startsWith('[') ? value : ''}`]
+function portalRootSelector(value: string, theme = '') {
+  const canMatchPortalRoot = value.startsWith(':')
+    || value.startsWith('.')
+    || value.startsWith('[')
+  return `${PORTAL}${theme}${canMatchPortalRoot ? value : ''}`
 }
 
 export function scopeBbSelector(selector: string) {
@@ -71,18 +62,30 @@ export function scopeBbSelector(selector: string) {
   if (!value || value.startsWith('::view-transition-')) return []
   if (value.includes('.bb-app-shell-root') || value.includes('.bb-app-shell')) return []
   if (value.includes('body[data-sidebar-dragging')) return []
-  if (value.startsWith(SURFACE) || value.startsWith(`.dark ${SURFACE}`)) return [value]
+  if (
+    value.startsWith(SURFACE)
+    || value.startsWith(PORTAL)
+    || value.startsWith(`.dark ${SURFACE}`)
+    || value.startsWith(`.dark ${PORTAL}`)
+  ) return [value]
   if (value === ':root' || value === ':host' || value === 'html' || value === 'body') {
-    return [SURFACE, PORTAL]
+    return [SURFACE_OR_PORTAL]
   }
   if (value === '.dark' || value === 'html.dark') {
-    return [`${SURFACE}[data-bb-theme="dark"]`, `${PORTAL}[data-bb-theme="dark"]`]
+    return [`${SURFACE_OR_PORTAL}[data-bb-theme="dark"]`]
   }
   if (value.startsWith('.dark ')) {
     const suffix = value.slice('.dark '.length)
-    return [`${SURFACE}[data-bb-theme="dark"] ${suffix}`, ...portalSelectors(value)]
+    const theme = '[data-bb-theme="dark"]'
+    return [
+      `${SURFACE_OR_PORTAL}${theme} ${suffix}`,
+      portalRootSelector(suffix, theme),
+    ]
   }
-  return [`${SURFACE} ${value}`, ...portalSelectors(value)]
+  return [
+    `${SURFACE_OR_PORTAL} ${value}`,
+    portalRootSelector(value),
+  ]
 }
 
 const scopeBbCss = {
@@ -99,6 +102,13 @@ const scopeBbCss = {
       rule.params = namespaced
     })
     root.walkDecls((declaration) => {
+      if (declaration.prop === 'src' && declaration.value.includes('woff2')) {
+        const modernSources = postcss.list.comma(declaration.value).filter((sourceValue) => (
+          sourceValue.trim().startsWith('local(')
+          || /format\((["']?)woff2\1\)/.test(sourceValue)
+        ))
+        if (modernSources.length > 0) declaration.value = modernSources.join(',')
+      }
       if (declaration.value.includes('/bb-mark.svg')) {
         declaration.value = declaration.value.replaceAll('/bb-mark.svg', './bb-mark.svg')
       }
@@ -130,6 +140,7 @@ const scopeBbCssOutput: Plugin = {
   name: 'aryn-scope-bb-css-output',
   enforce: 'post',
   async generateBundle(_options, bundle) {
+    let bundledCss = ''
     for (const asset of Object.values(bundle)) {
       if (asset.type !== 'asset' || !asset.fileName.endsWith('.css')) continue
       const sourceText = typeof asset.source === 'string'
@@ -140,12 +151,23 @@ const scopeBbCssOutput: Plugin = {
         map: false,
       })
       asset.source = result.css
+      bundledCss += result.css
+    }
+    for (const [fileName, asset] of Object.entries(bundle)) {
+      if (
+        asset.type === 'asset'
+        && /\.(?:woff|ttf)$/.test(asset.fileName)
+        && !bundledCss.includes(asset.fileName)
+      ) {
+        delete bundle[fileName]
+      }
     }
   },
 }
 
 const alias = [
   { find: '@aryn/app-scroll-area', replacement: path.join(arynSource, 'components', 'app-scroll-area', 'index.ts') },
+  { find: '@fontsource-variable/inter', replacement: path.join(source, 'compat', 'host-fonts.css') },
   { find: '@bb/domain', replacement: path.join(upstream, 'packages/domain/src/index.ts') },
   { find: '@bb/core-ui', replacement: path.join(upstream, 'packages/core-ui/src/index.ts') },
   { find: '@bb/server-contract', replacement: path.join(source, 'compat/server-contract.ts') },
@@ -207,17 +229,19 @@ export default defineConfig({
     dedupe: ['react', 'react-dom', 'react-router-dom'],
   },
   build: {
+    assetsInlineLimit: 0,
     cssTarget: 'chrome120',
     cssCodeSplit: false,
     emptyOutDir: true,
-    lib: {
-      entry: path.join(source, 'index.tsx'),
-      formats: ['es'],
-      fileName: () => 'index.js',
-    },
     rollupOptions: {
+      input: path.join(source, 'index.tsx'),
+      preserveEntrySignatures: 'strict',
       output: {
-        assetFileNames: (asset) => asset.name?.endsWith('.css') ? 'style.css' : 'assets/[name][extname]',
+        assetFileNames: (asset) => asset.name?.endsWith('.css')
+          ? 'style.css'
+          : 'assets/[name]-[hash][extname]',
+        chunkFileNames: '[name]-[hash].js',
+        entryFileNames: 'index.js',
       },
     },
   },

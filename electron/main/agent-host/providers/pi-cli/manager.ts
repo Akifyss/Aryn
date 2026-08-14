@@ -14,6 +14,7 @@ import {
   SessionRuntimeCoordinator,
   type SessionRuntimeLease,
 } from '../../runtime/session-runtime-coordinator'
+import { PiSessionFileReader } from '../../sessions/pi-session-file-reader'
 import {
   WorkspaceIntentCoordinator,
   type WorkspaceActivation,
@@ -38,6 +39,7 @@ import {
   createPiCliSessionListItem,
   serializePiCliRuntime,
   serializePiCliSession,
+  serializePiCliSessionFile,
 } from './presentation'
 import type { PiCliRuntime } from './runtime'
 
@@ -62,6 +64,7 @@ export class PiCliAgentManager {
   private disposePromise: Promise<void> | null = null
   private readonly initializingProcesses = new Set<JsonLineProcess>()
   private readonly interactionRegistry: PiCliInteractionRegistry
+  private readonly sessionFileReader = new PiSessionFileReader()
   private readonly runtimeCoordinator: SessionRuntimeCoordinator<PiCliRuntime>
   private readonly sessionCatalog: PiCliSessionCatalog
   // Activation revisions preserve last-user-intent ordering. Operation revisions
@@ -155,6 +158,20 @@ export class PiCliAgentManager {
   }
 
   async readSession(cwd: string, sessionID: string) {
+    const current = this.runtimeCoordinator.current(runtimeKey(cwd, sessionID))
+    if (!current) {
+      const record = await this.sessionCatalog.require(cwd, sessionID)
+      if (record.materialized && record.sessionPath) {
+        const sessionFile = await this.sessionFileReader.read(record.sessionPath)
+        if (
+          sessionFile.sessionId !== record.id
+          || workspaceIdentity(sessionFile.workspacePath) !== workspaceIdentity(cwd)
+        ) {
+          throw new Error('PI CLI session not found for this workspace.')
+        }
+        return serializePiCliSessionFile(record, sessionFile)
+      }
+    }
     return this.withRuntime(cwd, sessionID, serializePiCliSession)
   }
 

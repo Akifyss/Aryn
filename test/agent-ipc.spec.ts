@@ -82,8 +82,9 @@ describe('registerAgentIpc', () => {
     })
     const channels = [...electron.handlers.keys()]
 
-    expect(channels).toHaveLength(23)
+    expect(channels).toHaveLength(24)
     expect(channels).toContain('agent:get-catalog')
+    expect(channels).toContain('agent:read-session-interaction-history')
     expect(channels).toContain('agent:respond-interaction')
 
     registration.dispose()

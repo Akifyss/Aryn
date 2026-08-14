@@ -142,6 +142,7 @@ export function AgentProjectTree({
     deletingSessionPath,
     handleDeleteSession,
     handleOpenSession,
+    handlePrefetchSession,
     handleRenameSession,
     loadProjectSessions,
     onOpenProjectAddMenu,
@@ -507,6 +508,9 @@ export function AgentProjectTree({
             void Promise.resolve(openSession).then(() => {
               onRequestClose?.()
             })
+          }}
+          onPrefetch={() => {
+            handlePrefetchSession(project.path, session.agentId, session.path)
           }}
           onRename={(name) => handleRenameSession(project.path, session.agentId, session.path, name)}
           onRequestRename={() => setRenamingSessionPath(sessionKey)}

@@ -89,6 +89,7 @@ export type AgentContextValue = {
   handleComposerKeyDown: (event: KeyboardEvent<HTMLElement>) => void
   handleDeleteSession: (rootPath: string, agentId: AgentId, sessionPath: string) => Promise<void>
   handleOpenSession: (agentId: AgentId, sessionPath: string) => Promise<void>
+  handlePrefetchSession: (rootPath: string, agentId: AgentId, sessionPath: string) => void
   handleRenameSession: (rootPath: string, agentId: AgentId, sessionPath: string, name: string) => Promise<void>
   handleSelectModel: (modelKey: string) => Promise<void>
   handleThinkingLevelSelection: (level: AgentThinkingLevel, modelKey?: string) => Promise<void>
@@ -104,6 +105,7 @@ export type AgentContextValue = {
   isProjectAddMenuOpen: boolean
   isLoading: boolean
   isSessionLoading: boolean
+  showSessionLoadingIndicator: boolean
   isThinkingStreaming: boolean
   isSwitchingModel: boolean
   isSwitchingThinkingLevel: boolean
@@ -177,6 +179,9 @@ export type AgentContextValue = {
   setComposerState: Dispatch<SetStateAction<AgentComposerState>>
   setPanelError: Dispatch<SetStateAction<string | null>>
   selectedAgentId: AgentId
+  visibleAgentId: AgentId
+  visibleSessionPath: string | null
+  visibleSessionSelection: AgentSessionSelection
   setSelectedAgentId: (agentId: AgentId) => void
   statusMessage: string | null
   stoppingPrompt: AgentStoppingPromptState | null

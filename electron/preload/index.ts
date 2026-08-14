@@ -1,5 +1,5 @@
 import { ipcRenderer, contextBridge, webUtils } from 'electron'
-import type { AgentClientEvent, AgentInteractionResponse, AgentPromptAttachment, AgentPromptSendOptions, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRequestScope, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState, OpenCodeSurfaceRequest, OpenCodeSurfaceResponse } from '../shared/agent-contracts/types'
+import type { AgentClientEvent, AgentInteractionResponse, AgentInteractionTimelineRecord, AgentPromptAttachment, AgentPromptSendOptions, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRequestScope, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState, OpenCodeSurfaceRequest, OpenCodeSurfaceResponse } from '../shared/agent-contracts/types'
 import type { AgentAvailability } from '../shared/agent-contracts/definition'
 import type { ActiveWorkspaceContext, ConversationRecord, ConversationState, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '../shared/contracts/conversations'
 import type {
@@ -144,6 +144,7 @@ contextBridge.exposeInMainWorld('appApi', {
   loadAgentDraftState: (agentId?: AgentRequestScope['agentId']) => ipcRenderer.invoke('agent:load-draft-state', agentId) as Promise<AgentWorkspaceState>,
   listAgentSessions: (scope: AgentRequestScope) => ipcRenderer.invoke('agent:list-sessions', scope) as Promise<AgentWorkspaceState['sessions']>,
   readAgentSession: (scope: AgentRequestScope, sessionPath: string) => ipcRenderer.invoke('agent:read-session', scope, sessionPath) as Promise<AgentSessionSnapshot>,
+  readAgentSessionInteractionHistory: (scope: AgentRequestScope, sessionId: string) => ipcRenderer.invoke('agent:read-session-interaction-history', scope, sessionId) as Promise<AgentInteractionTimelineRecord[]>,
   requestOpenCodeSurface: (scope: AgentRequestScope, request: OpenCodeSurfaceRequest) => (
     ipcRenderer.invoke('agent:opencode-surface-request', scope, request) as Promise<OpenCodeSurfaceResponse>
   ),

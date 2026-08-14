@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -230,6 +230,194 @@ describe('Codex thread binding coordination', () => {
     rpcState.starts = 0
     rpcState.threads.clear()
     rpcState.unsubscribeErrors = []
+  })
+
+  it('reads an inactive thread snapshot without resuming or binding its runtime', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-read-inactive-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    rpcState.threads.set('thread-a', thread(workspace, 'thread-a'))
+    const manager = new CodexAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+    const internals = manager as unknown as { bindings: Map<string, unknown> }
+
+    try {
+      await expect(manager.readSession(workspace, 'thread-a')).resolves.toMatchObject({
+        sessionId: 'thread-a',
+      })
+      expect(resumeCount('thread-a')).toBe(0)
+      expect(internals.bindings.has('thread-a')).toBe(false)
+      expect(rpcState.instances[0]?.requests).toContainEqual({
+        method: 'thread/read',
+        params: { includeTurns: true, threadId: 'thread-a' },
+      })
+
+      await manager.openSession(workspace, 'thread-a')
+      expect(resumeCount('thread-a')).toBe(1)
+      expect(internals.bindings.has('thread-a')).toBe(true)
+      const threadReadCount = rpcState.instances[0]!.requests.filter((request) => (
+        request.method === 'thread/read'
+      )).length
+      await expect(manager.readSession(workspace, 'thread-a')).resolves.toMatchObject({
+        sessionId: 'thread-a',
+      })
+      expect(rpcState.instances[0]!.requests.filter((request) => (
+        request.method === 'thread/read'
+      ))).toHaveLength(threadReadCount)
+    } finally {
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('returns a local rollout snapshot while Codex App Server cold start is still blocked', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-local-read-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    const agentDir = path.join(tempRoot, 'agent-data')
+    const codexHome = path.join(tempRoot, 'codex-home')
+    const threadId = '019fb9a4-708d-7c63-a256-1e7929bf8a10'
+    const rolloutDirectory = path.join(codexHome, 'sessions', '2026', '08', '01')
+    const rolloutPath = path.join(
+      rolloutDirectory,
+      `rollout-2026-08-01T03-26-34-${threadId}.jsonl`,
+    )
+    const originalCodexHome = process.env.CODEX_HOME
+    const allowInitialize = deferred()
+    rpcState.initializeHook = async () => allowInitialize.promise
+    rpcState.threads.set(threadId, thread(workspace, threadId))
+
+    await mkdir(rolloutDirectory, { recursive: true })
+    await mkdir(path.join(agentDir, 'external', 'codex'), { recursive: true })
+    await writeFile(rolloutPath, [
+      JSON.stringify({ timestamp: '2026-07-31T19:26:40.177Z', type: 'session_meta', payload: {
+        cli_version: '0.144.5', cwd: workspace, id: threadId, model_provider: 'openai',
+        session_id: threadId, source: 'vscode', thread_source: 'aryn', timestamp: '2026-07-31T19:26:34.538Z',
+      } }),
+      JSON.stringify({ timestamp: '2026-07-31T19:26:40.200Z', type: 'event_msg', payload: {
+        started_at: 1_785_525_995, turn_id: 'turn-local', type: 'task_started',
+      } }),
+      JSON.stringify({ timestamp: '2026-07-31T19:26:41.000Z', type: 'response_item', payload: {
+        content: [{ text: 'local user message', type: 'input_text' }], role: 'user', type: 'message',
+      } }),
+      JSON.stringify({ timestamp: '2026-07-31T19:26:42.000Z', type: 'response_item', payload: {
+        content: [{ text: 'local assistant response', type: 'output_text' }],
+        id: 'assistant-local', role: 'assistant', type: 'message',
+      } }),
+      JSON.stringify({ timestamp: '2026-07-31T19:26:43.000Z', type: 'event_msg', payload: {
+        completed_at: 1_785_526_003, duration_ms: 8_000, turn_id: 'turn-local', type: 'task_complete',
+      } }),
+    ].join('\n'), 'utf8')
+    await writeFile(
+      path.join(agentDir, 'external', 'codex', 'threads.json'),
+      JSON.stringify({
+        threads: [{
+          createdAt: '2026-07-31T19:26:34.669Z', cwd: workspace, id: threadId,
+          materialized: true, model: 'gpt-5.6-sol', modelExplicit: false, name: null,
+          preview: null, reasoningEffort: 'low', rolloutPath,
+          updatedAt: '2026-07-31T19:29:22.164Z',
+        }],
+        version: 1,
+      }),
+      'utf8',
+    )
+    process.env.CODEX_HOME = codexHome
+    const manager = new CodexAgentManager({ agentDir, emitEvent: () => undefined })
+
+    try {
+      void manager.prewarm()
+      await expect(manager.readSession(workspace, threadId)).resolves.toMatchObject({
+        native: {
+          thread: {
+            id: threadId,
+            turns: [expect.objectContaining({
+              id: 'turn-local',
+              items: expect.arrayContaining([
+                expect.objectContaining({ text: 'local assistant response', type: 'agentMessage' }),
+              ]),
+            })],
+          },
+        },
+        sessionId: threadId,
+      })
+
+      await vi.waitFor(() => expect(rpcState.instances[0]?.requests).toContainEqual({
+        method: 'initialize',
+        params: expect.any(Object),
+      }))
+      expect(rpcState.instances[0]?.requests).not.toContainEqual(expect.objectContaining({
+        method: 'thread/read',
+      }))
+
+      allowInitialize.resolve()
+      await expect(manager.prewarm()).resolves.toBeUndefined()
+      expect(rpcState.instances[0]?.requests).not.toContainEqual(expect.objectContaining({
+        method: 'thread/read',
+      }))
+    } finally {
+      allowInitialize.resolve()
+      manager.dispose()
+      if (originalCodexHome === undefined) delete process.env.CODEX_HOME
+      else process.env.CODEX_HOME = originalCodexHome
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it('reuses an official record discovered by the session list for a local first read', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-listed-local-read-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    const codexHome = path.join(tempRoot, 'codex-home')
+    const threadId = '019fb9a4-708d-7c63-a256-1e7929bf8a11'
+    const rolloutDirectory = path.join(codexHome, 'sessions', '2026', '08', '01')
+    const rolloutPath = path.join(
+      rolloutDirectory,
+      `rollout-2026-08-01T03-26-34-${threadId}.jsonl`,
+    )
+    const originalCodexHome = process.env.CODEX_HOME
+    const officialThread = thread(workspace, threadId)
+    officialThread.path = rolloutPath
+    rpcState.threads.set(threadId, officialThread)
+
+    await mkdir(rolloutDirectory, { recursive: true })
+    await writeFile(rolloutPath, [
+      JSON.stringify({ timestamp: '2026-07-31T19:26:40.177Z', type: 'session_meta', payload: {
+        cli_version: '0.144.5', cwd: workspace, id: threadId, model_provider: 'openai',
+        session_id: threadId, source: 'vscode', thread_source: 'aryn', timestamp: '2026-07-31T19:26:34.538Z',
+      } }),
+      JSON.stringify({ timestamp: '2026-07-31T19:26:41.000Z', type: 'response_item', payload: {
+        content: [{ text: 'listed local snapshot', type: 'output_text' }],
+        id: 'assistant-local', role: 'assistant', type: 'message',
+      } }),
+    ].join('\n'), 'utf8')
+    process.env.CODEX_HOME = codexHome
+    const manager = new CodexAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+
+    try {
+      await expect(manager.listSessionItems(workspace)).resolves.toEqual([
+        expect.objectContaining({ id: threadId }),
+      ])
+      await expect(manager.readSession(workspace, threadId)).resolves.toMatchObject({
+        native: {
+          thread: {
+            id: threadId,
+            turns: [expect.objectContaining({
+              items: [expect.objectContaining({ text: 'listed local snapshot' })],
+            })],
+          },
+        },
+      })
+      expect(rpcState.instances[0]?.requests).not.toContainEqual(expect.objectContaining({
+        method: 'thread/read',
+      }))
+    } finally {
+      manager.dispose()
+      if (originalCodexHome === undefined) delete process.env.CODEX_HOME
+      else process.env.CODEX_HOME = originalCodexHome
+      await rm(tempRoot, { force: true, recursive: true })
+    }
   })
 
   it('single-flights the same thread while keeping another thread bound in the background', async () => {
@@ -814,12 +1002,13 @@ describe('Codex thread binding coordination', () => {
     })
     const internals = manager as unknown as {
       bindings: Map<string, unknown>
+      readBoundSession: (binding: unknown) => Promise<unknown>
       sessionStore: { get: (threadId: string) => unknown }
     }
 
     try {
       await manager.openSession(workspace, 'thread-a')
-      const reading = manager.readSession(workspace, 'thread-a')
+      const reading = internals.readBoundSession(internals.bindings.get('thread-a'))
         .then(() => null, (error: unknown) => error)
       await readEntered.promise
       rpcState.instances[0]!.exit(new Error('connection lost during read'))

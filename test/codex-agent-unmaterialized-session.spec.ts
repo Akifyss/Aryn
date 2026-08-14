@@ -222,7 +222,6 @@ describe('Codex unmaterialized sessions', () => {
       await expect(restoredManager.sessionExists(workspace, threadId)).resolves.toBe(false)
       expect(requests).toEqual(expect.arrayContaining([
         expect.objectContaining({ method: 'thread/resume', params: expect.objectContaining({ cwd: workspace, threadId }) }),
-        expect.objectContaining({ method: 'thread/read', params: expect.objectContaining({ includeTurns: true, threadId }) }),
         expect.objectContaining({ method: 'thread/name/set', params: { name: 'Renamed in Aryn', threadId } }),
         expect.objectContaining({ method: 'thread/delete', params: { threadId } }),
       ]))

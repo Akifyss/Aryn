@@ -1,7 +1,8 @@
 @import "./upstream/bb/apps/app/src/app.css";
 
-/* The host delivers Fira Code and Noto Sans SC; the remaining families keep the surface usable offline. */
+/* The host delivers Inter, Fira Code, and Noto Sans SC; system fallbacks keep the surface usable offline. */
 :root {
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
   --font-mono:
     "Fira Code", "JetBrains Mono", "Cascadia Mono", "Cascadia Code", "SF Mono", SFMono-Regular, Menlo, Monaco,
     Consolas, "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "Noto Sans SC", "Microsoft YaHei UI",
@@ -13,7 +14,7 @@
   color: var(--foreground);
   display: flex;
   flex: 1;
-  font-family: var(--font-sans, "Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-family: var(--font-sans, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif);
   height: 100%;
   min-height: 0;
   min-width: 0;

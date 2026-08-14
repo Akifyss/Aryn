@@ -35,6 +35,7 @@ import {
   filterAnnotationsByDirectToolPaths,
 } from '../../sessions/file-change-extractor'
 import type { AgentProviderAuthLoginCallbacks } from '../../application/agent-backend'
+import { serializePiWebSessionEntries } from '../../sessions/pi-session-presentation'
 import {
   getInputsByModel,
   getProviderPreferredModelKeys,
@@ -53,7 +54,6 @@ import {
   clampText,
   parseEntryTimestamp,
   serializeMessage,
-  serializePiWebSessionEntries,
   serializeSessionEntries,
 } from './session-presentation'
 import {
@@ -178,10 +178,16 @@ export class PiAgentManager {
   }
 
   async readSession(cwd: string, sessionPath: string): Promise<AgentSessionSnapshot> {
-    const resolvedSessionPath = await this.sessionCatalog.resolveFile(cwd, sessionPath)
-    const sessionManager = this.sessionCatalog.open(cwd, resolvedSessionPath)
-
-    return this.serializeSessionManager(cwd, sessionManager)
+    const sessionFile = await this.sessionCatalog.readFile(cwd, sessionPath)
+    return this.serializeSessionBranch({
+      branchEntries: sessionFile.branchEntries,
+      cwd,
+      includeLegacyMessages: false,
+      isStreaming: false,
+      name: sessionFile.name,
+      sessionId: sessionFile.sessionId,
+      sessionPath: sessionFile.sessionPath,
+    })
   }
 
   async createSession(cwd: string, options?: string | AgentSessionCreateOptions): Promise<AgentWorkspaceState> {
@@ -820,9 +826,36 @@ export class PiAgentManager {
     isStreaming = false,
   ): Promise<AgentSessionSnapshot> {
     const branchEntries = sessionManager.getBranch()
-    const messages = serializeSessionEntries(branchEntries)
+    return this.serializeSessionBranch({
+      branchEntries,
+      cwd,
+      includeLegacyMessages: true,
+      isStreaming,
+      name: sessionManager.getSessionName() ?? null,
+      sessionId,
+      sessionPath: sessionManager.getSessionFile() ?? null,
+    })
+  }
+
+  private async serializeSessionBranch({
+    branchEntries,
+    cwd,
+    includeLegacyMessages,
+    isStreaming,
+    name,
+    sessionId,
+    sessionPath,
+  }: {
+    branchEntries: Parameters<typeof serializeSessionEntries>[0]
+    cwd: string
+    includeLegacyMessages: boolean
+    isStreaming: boolean
+    name: string | null
+    sessionId: string
+    sessionPath: string | null
+  }): Promise<AgentSessionSnapshot> {
+    const messages = includeLegacyMessages ? serializeSessionEntries(branchEntries) : []
     const nativeMessages = serializePiWebSessionEntries(branchEntries)
-    const sessionPath = sessionManager.getSessionFile() ?? null
     const annotations = sessionPath
       ? filterAnnotationsByDirectToolPaths(
         await this.annotationStore.read(sessionPath),
@@ -844,7 +877,7 @@ export class PiAgentManager {
         modelNames: {},
         sessionId,
       },
-      name: sessionManager.getSessionName() ?? null,
+      name,
       sessionId,
       sessionPath,
       workspacePath: cwd,

@@ -135,6 +135,27 @@ describe('AgentInteractionHistoryStore', () => {
     ])
   })
 
+  it('does not expose a colliding session ID outside the requested workspace', async () => {
+    const { store } = await createStore()
+    await store.observeEvent(store.enrichEvent({
+      agentId: 'codex',
+      request: {
+        agentId: 'codex',
+        id: 'request-1',
+        kind: 'permission',
+        message: 'Continue?',
+        options: [{ id: 'allow', label: 'Allow' }],
+        sessionId: 'shared-session-id',
+        title: 'Permission',
+        workspacePath: 'C:\\workspace-a',
+      },
+      type: 'interaction_requested',
+    }, 100))
+
+    expect(await store.read('codex', 'shared-session-id', 'C:\\workspace-b')).toEqual([])
+    expect(await store.read('codex', 'shared-session-id', 'C:\\workspace-a')).toHaveLength(1)
+  })
+
   it('clears a builtin PI session by its persisted file-path alias', async () => {
     const { directory, store } = await createStore()
     const sessionPath = path.join(directory, 'sessions', 'session.jsonl')

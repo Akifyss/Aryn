@@ -283,6 +283,28 @@ export class AtomicJsonStore<TState> {
     return structuredClone(nextState!)
   }
 
+  async updateIfChanged(updater: (currentState: TState) => TState | null) {
+    let nextState: TState | null = null
+
+    this.writeQueue = this.writeQueue
+      .catch(() => undefined)
+      .then(async () => {
+        const currentState = structuredClone(await this.getCachedState())
+        const updatedState = updater(currentState)
+        if (updatedState === null) {
+          nextState = currentState
+          return
+        }
+
+        nextState = this.options.normalize(updatedState)
+        await writeJsonFileAtomic(this.options.filePath, nextState)
+        this.cachedState = nextState
+      })
+
+    await this.writeQueue
+    return structuredClone(nextState!)
+  }
+
   private async getCachedState() {
     if (!this.cachedState) {
       this.cachedState = await this.load()

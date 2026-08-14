@@ -73,7 +73,6 @@ export function AgentComposerSurface({
   const runningPromptEnterBehavior = useSettingsStore((state) => state.agent.runningPromptEnterBehavior)
   const {
     activeComposerMenu,
-    activeSessionPath,
     activeWorkspaceContext,
     addComposerFiles,
     agentState,
@@ -95,6 +94,7 @@ export function AgentComposerSurface({
     iconTheme,
     isLoading,
     isSessionLoading,
+    isViewingActiveRuntime,
     isSwitchingModel,
     isSwitchingThinkingLevel,
     modelFieldRef,
@@ -106,7 +106,6 @@ export function AgentComposerSurface({
     removeComposerAttachment,
     resolvedSelectedProviderValue,
     respondToInteraction,
-    selectedAgentId,
     setActiveComposerMenu,
     setComposerState,
     setPanelError,
@@ -115,6 +114,8 @@ export function AgentComposerSurface({
     surfaceMode,
     thinkingLevel,
     thinkingLevelLabel,
+    visibleAgentId,
+    visibleSessionPath,
     workspacePath,
     workspaceTree,
   } = useAgentContext()
@@ -128,10 +129,6 @@ export function AgentComposerSurface({
   const supportsAlternateRunningPromptBehavior = agentState.runtime.supportedRunningPromptBehaviors
     .includes(alternateRunningPromptBehavior)
   const isOpenCodeChildSession = Boolean(openCodeNativeSession?.parentSessionId)
-  const isViewingActiveRuntime = Boolean(
-    activeSessionPath
-    && agentState.activeSession?.sessionPath === activeSessionPath,
-  )
   const queuedComposerMessages = useMemo(
     () => isViewingActiveRuntime ? buildQueuedComposerMessages(agentState.runtime) : [],
     [agentState.runtime, isViewingActiveRuntime],
@@ -309,7 +306,7 @@ export function AgentComposerSurface({
       <div className={`agent-composer-shell${projectSwitchBar ? ' has-project-bar' : ''}`}>
         {projectSwitchBar}
         <AgentComposerMentionInput
-          aria-label={`向 ${getAgentDefinition(selectedAgentId).label} 发送消息`}
+          aria-label={`向 ${getAgentDefinition(visibleAgentId).label} 发送消息`}
           disabled={
             isOpenCodeChildSession
             || (!workspacePath && !canUseComposerWithoutWorkspace)

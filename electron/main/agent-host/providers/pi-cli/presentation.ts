@@ -18,6 +18,8 @@ import {
   type PiCliSessionRecord,
 } from './session-model'
 import type { PiCliRuntime } from './runtime'
+import { serializePiWebSessionEntries } from '../../sessions/pi-session-presentation'
+import type { PiSessionFileSnapshot } from '../../sessions/pi-session-file-reader'
 
 function piMessageIdentity(message: PiWebAgentMessage) {
   const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : ''
@@ -98,6 +100,29 @@ export async function serializePiCliSession(runtime: PiCliRuntime): Promise<Agen
     sessionId: runtime.record.id,
     sessionPath: runtime.record.id,
     workspacePath: runtime.record.cwd,
+  }
+}
+
+export function serializePiCliSessionFile(
+  record: PiCliSessionRecord,
+  sessionFile: PiSessionFileSnapshot,
+): AgentSessionSnapshot {
+  const nativeMessages = serializePiWebSessionEntries(sessionFile.branchEntries)
+  return {
+    annotations: projectPiFileAnnotations(nativeMessages.messages),
+    messages: [],
+    native: {
+      agentId: 'pi',
+      entryIds: nativeMessages.entryIds,
+      isStreaming: false,
+      messages: nativeMessages.messages,
+      modelNames: {},
+      sessionId: record.id,
+    },
+    name: record.name ?? sessionFile.name,
+    sessionId: record.id,
+    sessionPath: record.id,
+    workspacePath: record.cwd,
   }
 }
 

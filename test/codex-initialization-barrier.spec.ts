@@ -10,6 +10,7 @@ const processState = vi.hoisted(() => ({
   initializeRequests: [] as Array<Record<string, unknown>>,
   initializeStarted: 0,
   instances: 0,
+  modelListGate: null as Promise<void> | null,
   modelListErrors: [] as Error[],
   modelListRequests: [] as Array<Record<string, unknown>>,
   modelPages: [] as Array<{ data: Array<Record<string, unknown>>, nextCursor: string | null }>,
@@ -41,6 +42,7 @@ vi.mock('../electron/main/json-line-process', () => ({
       }
       if (message.method === 'model/list') {
         processState.modelListRequests.push(message.params ?? {})
+        await processState.modelListGate
         const queuedError = processState.modelListErrors.shift()
         if (queuedError) throw queuedError
         return { result: processState.modelPages.shift() ?? { data: [], nextCursor: null } }
@@ -57,6 +59,7 @@ vi.mock('../electron/main/json-line-process', () => ({
 }))
 
 import { CodexAgentManager } from '../electron/main/agent-host/providers/codex/manager'
+import { CodexClientSupervisor } from '../electron/main/agent-host/providers/codex/client-supervisor'
 
 describe('Codex App Server initialization', () => {
   beforeEach(() => {
@@ -66,6 +69,7 @@ describe('Codex App Server initialization', () => {
     processState.initializeRequests = []
     processState.initializeStarted = 0
     processState.instances = 0
+    processState.modelListGate = null
     processState.modelListErrors = []
     processState.modelListRequests = []
     processState.modelPages = []
@@ -113,6 +117,35 @@ describe('Codex App Server initialization', () => {
       })
     } finally {
       manager.dispose()
+    }
+  })
+
+  it('exposes an initialized client before model discovery finishes', async () => {
+    let releaseModels!: () => void
+    processState.modelListGate = new Promise<void>((resolve) => {
+      releaseModels = resolve
+    })
+    const supervisor = new CodexClientSupervisor({
+      onExit: () => undefined,
+      onNotification: () => undefined,
+      onRequest: () => undefined,
+    })
+
+    try {
+      let fullStartupSettled = false
+      const fullStartup = supervisor.ensureClient().finally(() => {
+        fullStartupSettled = true
+      })
+      await vi.waitFor(() => expect(processState.modelListRequests).toHaveLength(1))
+
+      await expect(supervisor.ensureInitializedClient()).resolves.toBeTruthy()
+      expect(fullStartupSettled).toBe(false)
+
+      releaseModels()
+      await fullStartup
+      expect(fullStartupSettled).toBe(true)
+    } finally {
+      supervisor.dispose()
     }
   })
 

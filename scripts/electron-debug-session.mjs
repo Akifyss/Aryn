@@ -363,7 +363,9 @@ async function applyDebugScenario(page) {
 
   if (debugScenario === 'bb-unified-surface') {
     if (!await page.$('.bb-session-surface-host .aryn-bb-session-surface')) {
-      const sessionRow = page.locator('.agent-project-list').getByText('bb unified surface debug', { exact: true }).first()
+      const sessionRow = page.locator('.agent-project-session-label')
+        .filter({ hasText: /^bb unified surface debug$/ })
+        .first()
       await sessionRow.waitFor({ state: 'visible', timeout: Math.min(timeoutMs, 10_000) })
       await sessionRow.click()
     }
@@ -1952,8 +1954,10 @@ function assertDebugScenarioResult(result) {
       : Number.NaN
     if (
       !result.productionAgentIcons
-      || result.productionAgentIcons.maskCount < 1
-      || result.productionAgentIcons.visibleMaskCount < 1
+      || (
+        result.productionAgentIcons.visibleMaskCount < 1
+        && result.productionAgentIcons.imageCount < 1
+      )
       || result.productionAgentIcons.maskResources.some((resource) => !resource.loaded)
       || result.productionAgentIcons.bundledResources.length !== 4
       || result.productionAgentIcons.bundledResources.some((resource) => !resource.loaded)

@@ -17,6 +17,7 @@ export type CodexThreadRecord = {
   modelExplicit: boolean
   name: string | null
   preview?: string | null
+  rolloutPath?: string | null
   reasoningEffort: AgentThinkingLevel
   updatedAt: string
 }
@@ -76,6 +77,7 @@ export function normalizeCodexThreadIndex(value: unknown): CodexThreadIndex {
           modelExplicit: thread.modelExplicit === true,
           name: nullableString(thread.name),
           preview: nullableString(thread.preview),
+          rolloutPath: nullableString(thread.rolloutPath),
           reasoningEffort: normalizeCodexReasoningEffort(thread.reasoningEffort),
           updatedAt: nullableString(thread.updatedAt) ?? createdAt,
         }]

@@ -4,6 +4,7 @@ import { AgentApplicationService } from '../electron/main/agent-host/application
 import { AgentBackendRegistry } from '../electron/main/agent-host/application/backend-registry'
 import type { AgentBackend } from '../electron/main/agent-host/application/agent-backend'
 import type { AgentInteractionHistoryStore } from '../electron/main/agent-host/sessions/interaction-history'
+import type { AgentSessionSnapshot } from '../src/features/agent/types'
 
 function createBackend(agentId: AgentId) {
   return { agentId, capabilities: {} } as AgentBackend
@@ -119,6 +120,36 @@ describe('AgentBackendRegistry', () => {
     } finally {
       warn.mockRestore()
     }
+  })
+
+  it('returns a session snapshot before loading its interaction history', async () => {
+    const snapshot = {
+      interactionHistory: [],
+      messages: [],
+      name: 'Fast snapshot',
+      sessionId: 'session-1',
+      sessionPath: 'session-1',
+      workspacePath: 'C:/workspace',
+    } as unknown as AgentSessionSnapshot
+    const readSession = vi.fn(async () => snapshot)
+    const readHistory = vi.fn(async () => [{ id: 'interaction-1' }])
+    const history = { read: readHistory } as unknown as AgentInteractionHistoryStore
+    const backends = AGENT_IDS.map((agentId) => agentId === 'codex'
+      ? { ...createBackend(agentId), readSession } as AgentBackend
+      : createBackend(agentId))
+    const service = new AgentApplicationService(new AgentBackendRegistry(backends), history)
+    const scope = {
+      agentId: 'codex' as const,
+      sessionPath: null,
+      workspacePath: 'C:/workspace',
+    }
+
+    await expect(service.readSession(scope, 'session-1')).resolves.toBe(snapshot)
+    expect(readHistory).not.toHaveBeenCalled()
+
+    await expect(service.readSessionInteractionHistory(scope, 'session-1'))
+      .resolves.toEqual([{ id: 'interaction-1' }])
+    expect(readHistory).toHaveBeenCalledWith('codex', 'session-1', 'C:/workspace')
   })
 
   it('waits for pending interaction-history writes during disposal', async () => {

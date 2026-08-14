@@ -73,6 +73,7 @@ export function FlatAgentSessionTree({
     deletingSessionPath,
     handleDeleteSession,
     handleOpenSession,
+    handlePrefetchSession,
     handleRenameSession,
     handleStartNewSession,
     loadProjectSessions,
@@ -196,6 +197,9 @@ export function FlatAgentSessionTree({
             onRequestClose?.()
           })
         }}
+        onPrefetch={workspacePath ? () => {
+          handlePrefetchSession(workspacePath, session.agentId, session.path)
+        } : undefined}
         onRename={(name) => workspacePath
           ? handleRenameSession(workspacePath, session.agentId, session.path, name)
           : Promise.resolve()}

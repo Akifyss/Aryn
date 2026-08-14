@@ -18,11 +18,46 @@ type CodexClientSupervisorOptions = {
   onRequest: (client: CodexRpcClient, request: ServerRequest) => void
 }
 
+type CodexClientInitializationBarrier = {
+  promise: Promise<CodexRpcClient>
+  reject: (error: Error) => void
+  resolve: (client: CodexRpcClient) => void
+  revision: number
+  settled: boolean
+}
+
+function createInitializationBarrier(revision: number): CodexClientInitializationBarrier {
+  let rejectPromise!: (error: Error) => void
+  let resolvePromise!: (client: CodexRpcClient) => void
+  const barrier: CodexClientInitializationBarrier = {
+    promise: new Promise<CodexRpcClient>((resolve, reject) => {
+      rejectPromise = reject
+      resolvePromise = resolve
+    }),
+    reject: (error) => {
+      if (barrier.settled) return
+      barrier.settled = true
+      rejectPromise(error)
+    },
+    resolve: (client) => {
+      if (barrier.settled) return
+      barrier.settled = true
+      resolvePromise(client)
+    },
+    revision,
+    settled: false,
+  }
+  void barrier.promise.catch(() => undefined)
+  return barrier
+}
+
 /** Owns the single Codex App Server process, startup recovery and model cache. */
 export class CodexClientSupervisor {
   private client: CodexRpcClient | null = null
   private clientPromise: Promise<CodexRpcClient> | null = null
   private disposed = false
+  private initializationBarrier: CodexClientInitializationBarrier | null = null
+  private initializedClient: CodexRpcClient | null = null
   private modelsValue: Model[] = []
   private serviceTierCompatibilityOverrideValue = false
   private startRevision = 0
@@ -47,31 +82,67 @@ export class CodexClientSupervisor {
 
   async ensureClient() {
     if (this.disposed) throw new Error('Codex client supervisor has been disposed.')
-    if (!this.clientPromise) {
-      if (this.client) return this.client
-      this.startRevision += 1
-      this.clientPromise = this.startClient(this.startRevision)
-    }
+    this.startIfNeeded()
     const clientPromise = this.clientPromise
+    if (!clientPromise) throw new Error('Codex App Server failed to start.')
     try {
       return await clientPromise
     } catch (error) {
       if (this.clientPromise === clientPromise) {
+        this.initializationBarrier?.reject(
+          error instanceof Error ? error : new Error(String(error)),
+        )
         this.client = null
         this.clientPromise = null
+        this.initializedClient = null
       }
       throw error
     }
+  }
+
+  async ensureInitializedClient() {
+    if (this.disposed) throw new Error('Codex client supervisor has been disposed.')
+    this.startIfNeeded()
+    if (this.initializedClient) return this.initializedClient
+    const barrier = this.initializationBarrier
+    if (!barrier) throw new Error('Codex App Server failed to initialize.')
+    return barrier.promise
   }
 
   dispose() {
     if (this.disposed) return
     this.disposed = true
     this.startRevision += 1
+    this.initializationBarrier?.reject(new Error('Codex client supervisor was disposed during App Server initialization.'))
     this.client?.stop()
     this.client = null
     this.clientPromise = null
+    this.initializationBarrier = null
+    this.initializedClient = null
     this.modelsValue = []
+  }
+
+  private startIfNeeded() {
+    if (this.clientPromise) return
+    if (this.client) {
+      this.initializedClient = this.client
+      this.initializationBarrier = createInitializationBarrier(this.startRevision)
+      this.initializationBarrier.resolve(this.client)
+      this.clientPromise = Promise.resolve(this.client)
+      return
+    }
+    this.startRevision += 1
+    const startRevision = this.startRevision
+    this.initializationBarrier = createInitializationBarrier(startRevision)
+    const startup = this.startClient(startRevision)
+    this.clientPromise = startup
+    void startup.catch((error) => {
+      if (this.clientPromise !== startup) return
+      this.initializationBarrier?.reject(error instanceof Error ? error : new Error(String(error)))
+      this.client = null
+      this.clientPromise = null
+      this.initializedClient = null
+    })
   }
 
   private async startClient(startRevision: number) {
@@ -79,6 +150,13 @@ export class CodexClientSupervisor {
     for (;;) {
       if (startRevision !== this.startRevision) {
         throw new Error('Codex App Server startup was superseded.')
+      }
+      if (
+        !this.initializationBarrier
+        || this.initializationBarrier.revision !== startRevision
+        || (this.initializationBarrier.settled && !this.initializedClient)
+      ) {
+        this.initializationBarrier = createInitializationBarrier(startRevision)
       }
       const args = this.serviceTierCompatibilityOverrideValue
         ? ['app-server', '-c', 'service_tier=fast']
@@ -150,6 +228,11 @@ export class CodexClientSupervisor {
         clientInfo: { name: 'aryn', title: 'Aryn', version: '0.1.0' },
       })
       client.notifyInitialized()
+      if (this.disposed || this.client !== client) {
+        throw new Error('Codex App Server initialization was superseded.')
+      }
+      this.initializedClient = client
+      this.initializationBarrier?.resolve(client)
       const [models] = await Promise.all([
         this.loadModels(client),
         client.request('account/read', { refreshToken: false }).catch(() => null),
@@ -161,6 +244,7 @@ export class CodexClientSupervisor {
       this.modelsValue = models
       return client
     } catch (error) {
+      if (this.initializedClient === client) this.initializedClient = null
       if (this.client === client) this.client = null
       client.stop()
       throw error
@@ -170,8 +254,11 @@ export class CodexClientSupervisor {
   private handleExit(client: CodexRpcClient, error: Error) {
     if (this.client !== client) return
     this.startRevision += 1
+    this.initializationBarrier?.reject(error)
     this.client = null
     this.clientPromise = null
+    this.initializationBarrier = null
+    this.initializedClient = null
     this.modelsValue = []
     if (!this.disposed) this.options.onExit(client, error)
   }
