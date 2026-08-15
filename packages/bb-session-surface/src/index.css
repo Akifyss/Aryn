@@ -1,7 +1,9 @@
 @import "./upstream/bb/apps/app/src/app.css";
 
 /* The host delivers Inter, Fira Code, and Noto Sans SC; system fallbacks keep the surface usable offline. */
-:root {
+:root,
+.aryn-bb-session-surface[data-bb-theme],
+[data-bb-plugin-root][data-bb-theme] {
   --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
   --font-mono:
     "Fira Code", "JetBrains Mono", "Cascadia Mono", "Cascadia Code", "SF Mono", SFMono-Regular, Menlo, Monaco,

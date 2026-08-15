@@ -3,6 +3,7 @@ import * as monaco from 'monaco-editor'
 import { AddLine, Back2Line } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import { AppIconButton } from '@/components/app-icon-button'
+import { EDITOR_FONT_FAMILY } from '@/features/editor/lib/editor-font-family'
 import type { GitChangeItem, GitDiffSelection, GitFileDiffResult } from '@/features/git/types'
 import { getCodeLanguage } from '@/features/workspace/lib/file-types'
 import {
@@ -31,7 +32,7 @@ configureMonaco()
 const DEFAULT_DIFF_OPTIONS: MonacoDiffEditorOptions = {
   automaticLayout: true,
   diffWordWrap: 'on',
-  fontFamily: '"SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace',
+  fontFamily: EDITOR_FONT_FAMILY,
   fontLigatures: true,
   fontSize: 13.5,
   ignoreTrimWhitespace: false,

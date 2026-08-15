@@ -1359,7 +1359,7 @@
   box-sizing: border-box;
   color: var(--editor-foreground);
   background: var(--sideBar-background);
-  font-family: var(--editor-font-family, monospace);
+  font-family: var(--editor-font-family, var(--font-mono));
   font-size: var(--editor-font-size, 13px);
 }
 

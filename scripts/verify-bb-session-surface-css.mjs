@@ -170,6 +170,27 @@ function verifyMonoDeclarations(declarations, label) {
 const bbMonoDeclarations = findMonoDeclarations(stylesheet, 'Fira Code')
 verifyMonoDeclarations(bbMonoDeclarations, 'Built bb stylesheet')
 
+const allBbMonoDeclarations = []
+stylesheet.walkDecls('--font-mono', (declaration) => {
+  allBbMonoDeclarations.push(declaration)
+})
+const finalBbMonoDeclaration = allBbMonoDeclarations.at(-1)
+if (!finalBbMonoDeclaration || !bbMonoDeclarations.includes(finalBbMonoDeclaration)) {
+  throw new Error('Built bb stylesheet must end its monospace cascade with the safe host stack')
+}
+const finalBbMonoSelectors = finalBbMonoDeclaration.parent?.type === 'rule'
+  ? finalBbMonoDeclaration.parent.selectors
+  : []
+for (const requiredSelector of [
+  ':is(.aryn-bb-session-surface,[data-bb-plugin-root])',
+  '.aryn-bb-session-surface[data-bb-theme]',
+  '[data-bb-plugin-root][data-bb-theme]',
+]) {
+  if (!finalBbMonoSelectors.includes(requiredSelector)) {
+    throw new Error(`Built bb monospace cascade is missing the final ${requiredSelector} override`)
+  }
+}
+
 const appStylesheet = postcss.parse(appCss)
 const appMonoDeclarations = findMonoDeclarations(appStylesheet, 'IBM Plex Mono')
 verifyMonoDeclarations(appMonoDeclarations, 'App stylesheet')

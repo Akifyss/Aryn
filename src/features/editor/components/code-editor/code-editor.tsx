@@ -8,6 +8,7 @@ import {
   type MonacoEditorOptions,
   type MonacoThemePreference,
 } from '@/features/editor/lib/monaco'
+import { EDITOR_FONT_FAMILY } from '@/features/editor/lib/editor-font-family'
 import './styles.css'
 
 type CodeEditorProps = {
@@ -24,7 +25,7 @@ configureMonaco()
 
 const DEFAULT_EDITOR_OPTIONS: MonacoEditorOptions = {
   automaticLayout: true,
-  fontFamily: '"SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace',
+  fontFamily: EDITOR_FONT_FAMILY,
   fontLigatures: true,
   fontSize: 13.5,
   lineNumbersMinChars: 3,

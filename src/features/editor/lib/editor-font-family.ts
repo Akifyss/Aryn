@@ -1,0 +1,21 @@
+export const EDITOR_FONT_FAMILY = [
+  '"IBM Plex Mono"',
+  '"JetBrains Mono"',
+  '"Cascadia Mono"',
+  '"Cascadia Code"',
+  '"SF Mono"',
+  'SFMono-Regular',
+  'Menlo',
+  'Monaco',
+  'Consolas',
+  '"DejaVu Sans Mono"',
+  '"Liberation Mono"',
+  '"Noto Sans Mono"',
+  // Generic monospace can resolve missing CJK glyphs to a serif font on Windows.
+  '"Noto Sans SC"',
+  '"Microsoft YaHei UI"',
+  '"Microsoft YaHei"',
+  '"PingFang SC"',
+  '"Noto Sans CJK SC"',
+  'sans-serif',
+].join(', ')
