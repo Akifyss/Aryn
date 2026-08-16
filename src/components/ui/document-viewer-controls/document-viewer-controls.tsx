@@ -48,10 +48,13 @@ export function ViewerToolbarButton({
 }
 
 export function ViewerToolbar({
+  as: Component = "div",
   className,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
-  return <div {...props} className={cn("viewer-toolbar", className)} />;
+}: React.HTMLAttributes<HTMLElement> & {
+  as?: "div" | "header";
+}) {
+  return <Component {...props} className={cn("viewer-toolbar", className)} />;
 }
 
 export function ViewerToolbarGroup({

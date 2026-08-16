@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process'
-import { readFile, rm } from 'node:fs/promises'
+import { lstat, readFile, readlink, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import type {
@@ -15,11 +15,20 @@ import type {
   GitDiffBlockAction,
   GitDiffSelection,
   GitFileChangeItem,
+  GitFileDiffPresentation,
   GitFileDiffResult,
   GitRecentPullItem,
   GitRepositoryState,
 } from '../shared/contracts/git'
 import { getSupportedWorkspaceEditorKind } from '../shared/contracts/workspace-files'
+import {
+  GIT_DIFF_MAX_PATCH_BYTES,
+  getGitDiffReadLimit,
+  resolveGitDiffContent,
+  type GitDiffBlobSnapshot,
+  type GitDiffFileKind,
+  type GitDiffTextMetadata,
+} from './git-diff-content'
 
 const execFileAsync = promisify(execFile)
 
@@ -27,6 +36,7 @@ type GitCommandOptions = {
   allowFailure?: boolean
   cwd: string
   encoding?: BufferEncoding
+  maxBuffer?: number
 }
 
 type ParsedBranchStatus = {
@@ -53,6 +63,26 @@ type ParsedGitPatchHunk = GitDiffSelection & {
 type ParsedGitPatch = {
   headerLines: string[]
   hunks: ParsedGitPatchHunk[]
+}
+
+type GitPatchMetadata = {
+  gitBinary: boolean | null
+  modifiedFileKind?: GitDiffFileKind
+  originalFileKind?: GitDiffFileKind
+  textconvDriver: string | null
+  textMetadata: GitDiffTextMetadata | null
+}
+
+function getGitProcessEnvironment(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    // GitHub Desktop ships Git without Git for Windows' system gitattributes.
+    // The system file associates PDF/Office documents with `astextplain`, which
+    // would otherwise turn those binary files into Pierre text diffs in Aryn.
+    // Keep repository and user attributes, but match Desktop by skipping only
+    // the Git installation's system-wide attributes.
+    GIT_ATTR_NOSYSTEM: '1',
+  }
 }
 
 function toPosixPath(filePath: string) {
@@ -95,6 +125,8 @@ async function runGit(
     const result = await execFileAsync('git', commandArgs, {
       cwd: options.cwd,
       encoding,
+      env: getGitProcessEnvironment(),
+      maxBuffer: options.maxBuffer,
       windowsHide: true,
     })
 
@@ -130,6 +162,8 @@ async function runGitAllowOutputOnFailure(
     const result = await execFileAsync('git', commandArgs, {
       cwd: options.cwd,
       encoding,
+      env: getGitProcessEnvironment(),
+      maxBuffer: options.maxBuffer,
       windowsHide: true,
     })
 
@@ -137,6 +171,10 @@ async function runGitAllowOutputOnFailure(
   } catch (error) {
     if (isGitMissingError(error)) {
       throw new Error('Git is not available on this machine.')
+    }
+
+    if ((error as { code?: unknown }).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+      return null
     }
 
     const stdout = typeof (error as { stdout?: unknown }).stdout === 'string'
@@ -169,6 +207,7 @@ async function runGitWithInput(
   return await new Promise<string | null>((resolve, reject) => {
     const child = spawn('git', commandArgs, {
       cwd: options.cwd,
+      env: getGitProcessEnvironment(),
       stdio: 'pipe',
       windowsHide: true,
     })
@@ -295,6 +334,105 @@ function parseGitPatch(patch: string): ParsedGitPatch | null {
   }
 }
 
+function getFileKindFromGitMode(mode: string | undefined): GitDiffFileKind | undefined {
+  if (mode === '120000') return 'symlink'
+  if (mode === '160000') return 'submodule'
+  if (mode) return 'file'
+  return undefined
+}
+
+function getPatchMode(patch: string, pattern: RegExp) {
+  return pattern.exec(patch)?.[1]
+}
+
+function getGitPatchMetadata(
+  patch: string | null,
+  configuredTextconvDriver: string | null = null,
+): GitPatchMetadata {
+  if (!patch) {
+    return {
+      gitBinary: null,
+      textconvDriver: null,
+      textMetadata: null,
+    }
+  }
+
+  const parsedPatch = parseGitPatch(patch)
+  const sharedMode = getPatchMode(patch, /^index [0-9a-f]+\.\.[0-9a-f]+(?: (\d{6}))?\s*$/m)
+  const originalMode = getPatchMode(patch, /^old mode (\d{6})\s*$/m)
+    ?? getPatchMode(patch, /^deleted file mode (\d{6})\s*$/m)
+    ?? sharedMode
+  const modifiedMode = getPatchMode(patch, /^new mode (\d{6})\s*$/m)
+    ?? getPatchMode(patch, /^new file mode (\d{6})\s*$/m)
+    ?? sharedMode
+  const patchMaxLineCharacters = parsedPatch?.hunks.reduce((maximum, hunk) => (
+    hunk.bodyLines.reduce((hunkMaximum, line) => Math.max(hunkMaximum, line.length), maximum)
+  ), 0) ?? 0
+  const gitBinary = /^(?:Binary files .* differ|GIT binary patch)\s*$/m.test(patch)
+    ? true
+    : parsedPatch
+      ? false
+      : null
+
+  return {
+    gitBinary,
+    modifiedFileKind: getFileKindFromGitMode(modifiedMode),
+    originalFileKind: getFileKindFromGitMode(originalMode),
+    textconvDriver: parsedPatch ? configuredTextconvDriver : null,
+    textMetadata: parsedPatch
+      ? {
+        patchByteSize: Buffer.byteLength(patch),
+        patchMaxLineCharacters,
+      }
+      : null,
+  }
+}
+
+async function getConfiguredTextconvDriver(
+  repositoryRootPath: string,
+  relativePaths: string[],
+) {
+  const uniqueRelativePaths = Array.from(new Set(relativePaths.filter(Boolean)))
+  if (uniqueRelativePaths.length === 0) return null
+
+  const attributes = await runGit([
+    'check-attr',
+    '-z',
+    'diff',
+    '--',
+    ...uniqueRelativePaths,
+  ], {
+    allowFailure: true,
+    cwd: repositoryRootPath,
+  })
+  const tokens = attributes?.split('\0') ?? []
+  const drivers = new Set<string>()
+
+  for (let index = 0; index + 2 < tokens.length; index += 3) {
+    const attribute = tokens[index + 1]
+    const value = tokens[index + 2]
+    if (
+      attribute === 'diff'
+      && value
+      && value !== 'set'
+      && value !== 'unset'
+      && value !== 'unspecified'
+    ) {
+      drivers.add(value)
+    }
+  }
+
+  for (const driver of drivers) {
+    const command = await runGit(['config', '--get', `diff.${driver}.textconv`], {
+      allowFailure: true,
+      cwd: repositoryRootPath,
+    })
+    if (command?.trim()) return driver
+  }
+
+  return null
+}
+
 function toComparablePath(filePath: string) {
   return normalizeComparablePath(filePath).replace(/[\\/]+/g, '/')
 }
@@ -356,6 +494,7 @@ async function getPatchForGitChange(repositoryRootPath: string, change: GitChang
     ], {
       allowFailure: true,
       cwd: repositoryRootPath,
+      maxBuffer: GIT_DIFF_MAX_PATCH_BYTES,
     })
 
     return patch?.length ? patch : null
@@ -368,6 +507,7 @@ async function getPatchForGitChange(repositoryRootPath: string, change: GitChang
   const patch = await runGit(args, {
     allowFailure: true,
     cwd: repositoryRootPath,
+    maxBuffer: GIT_DIFF_MAX_PATCH_BYTES,
   })
 
   return patch?.length ? patch : null
@@ -573,14 +713,6 @@ function parseStatusLines(repositoryRootPath: string, statusOutput: string) {
     ...branchStatus,
     stagedChanges,
     unstagedChanges,
-  }
-}
-
-async function readFileIfPresent(filePath: string) {
-  try {
-    return await readFile(filePath, 'utf8')
-  } catch {
-    return null
   }
 }
 
@@ -875,6 +1007,343 @@ function parseNameStatusOutput(repositoryRootPath: string, diffOutput: string) {
   return changes
 }
 
+type GitDiffBlobSource =
+  | {
+    fileKind?: GitDiffFileKind
+    filePath: string
+    kind: 'working-tree'
+  }
+  | {
+    fileKind?: GitDiffFileKind
+    filePath: string
+    kind: 'git-object'
+    objectSpec: string
+  }
+
+async function runGitBuffer(
+  args: string[],
+  cwd: string,
+  maxBuffer: number,
+): Promise<Buffer | null> {
+  const commandArgs = ['-c', 'core.quotepath=false', ...args]
+
+  try {
+    const result = await execFileAsync('git', commandArgs, {
+      cwd,
+      encoding: 'buffer',
+      env: getGitProcessEnvironment(),
+      maxBuffer,
+      windowsHide: true,
+    })
+
+    return Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.from(result.stdout)
+  } catch (error) {
+    if (isGitMissingError(error)) {
+      throw new Error('Git is not available on this machine.')
+    }
+
+    return null
+  }
+}
+
+async function readSubmoduleWorkingTree(submodulePath: string) {
+  const topLevelOutput = await runGit(['rev-parse', '--show-toplevel'], {
+    allowFailure: true,
+    cwd: submodulePath,
+  })
+  const topLevelPath = topLevelOutput?.trim()
+
+  if (!topLevelPath || !isSameComparablePath(topLevelPath, submodulePath)) {
+    return {
+      objectId: null,
+      workingTree: null,
+    }
+  }
+
+  const [objectIdOutput, statusOutput] = await Promise.all([
+    runGit(['rev-parse', '--verify', 'HEAD'], {
+      allowFailure: true,
+      cwd: submodulePath,
+    }),
+    runGit(['status', '--porcelain=v1', '--untracked-files=normal'], {
+      allowFailure: true,
+      cwd: submodulePath,
+    }),
+  ])
+  const statusLines = statusOutput?.split(/\r?\n/).filter(Boolean) ?? []
+
+  return {
+    objectId: objectIdOutput?.trim() || null,
+    workingTree: statusOutput === null
+      ? null
+      : {
+        modifiedChanges: statusLines.some((line) => !line.startsWith('??')),
+        untrackedChanges: statusLines.some((line) => line.startsWith('??')),
+      },
+  }
+}
+
+async function readWorkingTreeDiffBlob(
+  source: Extract<GitDiffBlobSource, { kind: 'working-tree' }>,
+  gitBinary: boolean | null,
+  textConverted: boolean,
+) {
+
+  try {
+    const fileStats = await lstat(source.filePath)
+
+    if (fileStats.isSymbolicLink()) {
+      const buffer = Buffer.from(await readlink(source.filePath), 'utf8')
+
+      return {
+        buffer,
+        byteSize: buffer.length,
+        fileKind: 'symlink',
+        filePath: source.filePath,
+        status: 'loaded',
+      } satisfies GitDiffBlobSnapshot
+    }
+
+    if (!fileStats.isFile()) {
+      const submodule = await readSubmoduleWorkingTree(source.filePath)
+
+      return {
+        buffer: null,
+        byteSize: fileStats.size,
+        fileKind: 'submodule',
+        filePath: source.filePath,
+        objectId: submodule.objectId,
+        status: 'submodule',
+        submoduleWorkingTree: submodule.workingTree,
+      } satisfies GitDiffBlobSnapshot
+    }
+
+    const fileKind = source.fileKind ?? 'file'
+    const limitBytes = getGitDiffReadLimit(source.filePath, {
+      fileKind,
+      gitBinary,
+      textConverted,
+    })
+
+    if (limitBytes === 0) {
+      return {
+        buffer: null,
+        byteSize: fileStats.size,
+        fileKind,
+        filePath: source.filePath,
+        status: 'metadata-only',
+      } satisfies GitDiffBlobSnapshot
+    }
+
+    if (fileStats.size > limitBytes) {
+      return {
+        buffer: null,
+        byteSize: fileStats.size,
+        fileKind,
+        filePath: source.filePath,
+        status: 'too-large',
+      } satisfies GitDiffBlobSnapshot
+    }
+
+    return {
+      buffer: await readFile(source.filePath),
+      byteSize: fileStats.size,
+      fileKind,
+      filePath: source.filePath,
+      status: 'loaded',
+    } satisfies GitDiffBlobSnapshot
+  } catch {
+    return {
+      buffer: null,
+      byteSize: 0,
+      fileKind: source.fileKind,
+      filePath: source.filePath,
+      status: 'unreadable',
+    } satisfies GitDiffBlobSnapshot
+  }
+}
+
+async function readGitObjectDiffBlob(
+  repositoryRootPath: string,
+  source: Extract<GitDiffBlobSource, { kind: 'git-object' }>,
+  gitBinary: boolean | null,
+  textConverted: boolean,
+) {
+  if (source.fileKind === 'submodule') {
+    const indexPrefix = ':0:'
+    let objectId: string | null = null
+
+    if (source.objectSpec.startsWith(indexPrefix)) {
+      const relativePath = source.objectSpec.slice(indexPrefix.length)
+      const entryOutput = await runGit(['ls-files', '--stage', '--', relativePath], {
+        allowFailure: true,
+        cwd: repositoryRootPath,
+      })
+      objectId = /^160000\s+([0-9a-f]{40})\s+\d\t/m.exec(entryOutput ?? '')?.[1] ?? null
+    } else {
+      const separatorIndex = source.objectSpec.indexOf(':')
+      const revision = separatorIndex > 0 ? source.objectSpec.slice(0, separatorIndex) : ''
+      const relativePath = separatorIndex > 0 ? source.objectSpec.slice(separatorIndex + 1) : ''
+
+      if (revision && relativePath) {
+        const entryOutput = await runGit(['ls-tree', revision, '--', relativePath], {
+          allowFailure: true,
+          cwd: repositoryRootPath,
+        })
+        objectId = /^160000\s+commit\s+([0-9a-f]{40})\t/m.exec(entryOutput ?? '')?.[1] ?? null
+      }
+    }
+
+    return {
+      buffer: null,
+      byteSize: 0,
+      fileKind: 'submodule',
+      filePath: source.filePath,
+      objectId,
+      status: 'submodule',
+    } satisfies GitDiffBlobSnapshot
+  }
+
+  const [objectTypeOutput, objectSizeOutput] = await Promise.all([
+    runGit(['cat-file', '-t', source.objectSpec], {
+      allowFailure: true,
+      cwd: repositoryRootPath,
+    }),
+    runGit(['cat-file', '-s', source.objectSpec], {
+      allowFailure: true,
+      cwd: repositoryRootPath,
+    }),
+  ])
+  const objectType = objectTypeOutput?.trim()
+  const byteSize = Number.parseInt(objectSizeOutput?.trim() ?? '', 10)
+
+  if (objectType === 'commit') {
+    const objectIdOutput = await runGit(['rev-parse', '--verify', '--end-of-options', source.objectSpec], {
+      allowFailure: true,
+      cwd: repositoryRootPath,
+    })
+
+    return {
+      buffer: null,
+      byteSize: Number.isFinite(byteSize) ? byteSize : 0,
+      fileKind: 'submodule',
+      filePath: source.filePath,
+      objectId: objectIdOutput?.trim() || null,
+      status: 'submodule',
+    } satisfies GitDiffBlobSnapshot
+  }
+
+  if (objectType !== 'blob' || !Number.isFinite(byteSize)) {
+    return {
+      buffer: null,
+      byteSize: 0,
+      fileKind: source.fileKind,
+      filePath: source.filePath,
+      status: 'unreadable',
+    } satisfies GitDiffBlobSnapshot
+  }
+
+  const fileKind = source.fileKind ?? 'file'
+  const limitBytes = getGitDiffReadLimit(source.filePath, {
+    fileKind,
+    gitBinary,
+    textConverted,
+  })
+
+  if (limitBytes === 0) {
+    return {
+      buffer: null,
+      byteSize,
+      fileKind,
+      filePath: source.filePath,
+      status: 'metadata-only',
+    } satisfies GitDiffBlobSnapshot
+  }
+
+  if (byteSize > limitBytes) {
+    return {
+      buffer: null,
+      byteSize,
+      fileKind,
+      filePath: source.filePath,
+      status: 'too-large',
+    } satisfies GitDiffBlobSnapshot
+  }
+
+  const buffer = await runGitBuffer(
+    ['show', source.objectSpec],
+    repositoryRootPath,
+    Math.max(1024, limitBytes + 1024),
+  )
+
+  return {
+    buffer,
+    byteSize,
+    fileKind,
+    filePath: source.filePath,
+    status: buffer ? 'loaded' : 'unreadable',
+  } satisfies GitDiffBlobSnapshot
+}
+
+async function readGitDiffBlob(
+  repositoryRootPath: string,
+  source: GitDiffBlobSource | null,
+  gitBinary: boolean | null,
+  textConverted: boolean,
+) {
+  if (!source) {
+    return null
+  }
+
+  return source.kind === 'working-tree'
+    ? readWorkingTreeDiffBlob(source, gitBinary, textConverted)
+    : readGitObjectDiffBlob(repositoryRootPath, source, gitBinary, textConverted)
+}
+
+async function getSubmoduleUrl(repositoryRootPath: string, relativePath: string) {
+  const pathEntries = await runGit([
+    'config',
+    '--file',
+    '.gitmodules',
+    '--get-regexp',
+    '^submodule\\..*\\.path$',
+  ], {
+    allowFailure: true,
+    cwd: repositoryRootPath,
+  })
+
+  for (const line of pathEntries?.split(/\r?\n/) ?? []) {
+    const separatorIndex = line.search(/\s/)
+    if (separatorIndex <= 0) continue
+
+    const key = line.slice(0, separatorIndex)
+    const configuredPath = line.slice(separatorIndex).trim()
+    if (toPosixPath(configuredPath) !== toPosixPath(relativePath)) continue
+
+    const urlKey = `${key.slice(0, -'.path'.length)}.url`
+    const urlOutput = await runGit(['config', '--file', '.gitmodules', '--get', urlKey], {
+      allowFailure: true,
+      cwd: repositoryRootPath,
+    })
+    return urlOutput?.trim() || null
+  }
+
+  return null
+}
+
+async function enrichSubmodulePresentation(
+  presentation: GitFileDiffPresentation,
+  repositoryRootPath: string,
+  relativePath: string,
+): Promise<GitFileDiffPresentation> {
+  if (presentation.kind !== 'submodule') return presentation
+
+  return {
+    ...presentation,
+    url: await getSubmoduleUrl(repositoryRootPath, relativePath),
+  }
+}
+
 function parseGitCommitRecord(record: string): GitCommitItem | null {
   const [
     hash,
@@ -990,6 +1459,7 @@ async function getCommitPatchForChange(
       '--no-ext-diff',
       '--no-color',
       '--find-renames',
+      '--textconv',
       '--unified=0',
       parentHash,
       commitHash,
@@ -1002,6 +1472,7 @@ async function getCommitPatchForChange(
       '--patch',
       '--no-ext-diff',
       '--no-color',
+      '--textconv',
       '--unified=0',
       commitHash,
       '--',
@@ -1010,6 +1481,7 @@ async function getCommitPatchForChange(
   const patch = await runGit(args, {
     allowFailure: true,
     cwd: repositoryRootPath,
+    maxBuffer: GIT_DIFF_MAX_PATCH_BYTES,
   })
 
   return patch?.length ? patch : null
@@ -1495,9 +1967,79 @@ export async function getGitFileDiff(
 ): Promise<GitFileDiffResult> {
   const { change, repositoryRootPath } = await resolveChangeForPath(workspacePath, targetPath, scope)
   const relativePath = toWorkspaceRelativePath(repositoryRootPath, change.path)
+  const originalPath = change.originalPath ?? change.path
+  const originalRelativePath = toWorkspaceRelativePath(repositoryRootPath, originalPath)
   const editorKind = getSupportedWorkspaceEditorKind(change.path) ?? 'code'
-  const patch = await getPatchForGitChange(repositoryRootPath, change)
-  const parsedPatch = patch ? parseGitPatch(patch) : null
+  const [patch, configuredTextconvDriver] = await Promise.all([
+    getPatchForGitChange(repositoryRootPath, change),
+    getConfiguredTextconvDriver(repositoryRootPath, [originalRelativePath, relativePath]),
+  ])
+  const patchMetadata = getGitPatchMetadata(patch, configuredTextconvDriver)
+  const originalSource: GitDiffBlobSource | null = scope === 'staged'
+    ? (change.kind === 'added' ? null : {
+      fileKind: patchMetadata.originalFileKind,
+      filePath: originalPath,
+      kind: 'git-object',
+      objectSpec: `HEAD:${originalRelativePath}`,
+    })
+    : (change.kind === 'untracked' ? null : {
+      fileKind: patchMetadata.originalFileKind,
+      filePath: originalPath,
+      kind: 'git-object',
+      objectSpec: `:0:${originalRelativePath}`,
+    })
+  const modifiedSource: GitDiffBlobSource | null = change.kind === 'deleted'
+    ? null
+    : scope === 'staged'
+      ? {
+        fileKind: patchMetadata.modifiedFileKind,
+        filePath: change.path,
+        kind: 'git-object',
+        objectSpec: `:0:${relativePath}`,
+      }
+      : {
+        fileKind: patchMetadata.modifiedFileKind,
+        filePath: change.path,
+        kind: 'working-tree',
+      }
+  const [originalBlob, modifiedBlob] = await Promise.all([
+    readGitDiffBlob(
+      repositoryRootPath,
+      originalSource,
+      patchMetadata.gitBinary,
+      patchMetadata.textconvDriver !== null,
+    ),
+    readGitDiffBlob(
+      repositoryRootPath,
+      modifiedSource,
+      patchMetadata.gitBinary,
+      patchMetadata.textconvDriver !== null,
+    ),
+  ])
+  const resolvedContent = resolveGitDiffContent({
+    gitBinary: patchMetadata.gitBinary,
+    modified: modifiedBlob,
+    original: originalBlob,
+    textPatch: patchMetadata.textconvDriver ? null : patch,
+    textConversion: patch && patchMetadata.textconvDriver
+      ? {
+          driver: patchMetadata.textconvDriver,
+          patch,
+        }
+      : null,
+    textMetadata: patchMetadata.textMetadata,
+  })
+  const presentation = await enrichSubmodulePresentation(
+    resolvedContent.presentation,
+    repositoryRootPath,
+    relativePath,
+  )
+  const parsedPatch = presentation.kind === 'text'
+    || presentation.kind === 'large-text'
+    || presentation.kind === 'converted-text'
+    || presentation.kind === 'patch-text'
+    ? (patch ? parseGitPatch(patch) : null)
+    : null
   const selections = parsedPatch?.hunks.map((hunk) => ({
     modifiedLineCount: hunk.modifiedLineCount,
     modifiedStartLine: hunk.modifiedStartLine,
@@ -1505,47 +2047,16 @@ export async function getGitFileDiff(
     originalStartLine: hunk.originalStartLine,
   })) ?? []
 
-  if (scope === 'staged') {
-    const originalContent = change.kind === 'added'
-      ? null
-      : await readGitRevisionFile(repositoryRootPath, 'HEAD', relativePath)
-    const modifiedContent = change.kind === 'deleted'
-      ? null
-      : await readGitIndexFile(repositoryRootPath, relativePath)
-
-    return {
-      change,
-      editorKind,
-      modifiedContent: modifiedContent ?? '',
-      modifiedExists: modifiedContent !== null,
-      modifiedLabel: 'Index',
-      originalContent: originalContent ?? '',
-      originalExists: originalContent !== null,
-      originalLabel: 'HEAD',
-      repositoryRootPath,
-      selections,
-      source: {
-        kind: 'working-tree',
-      },
-    }
-  }
-
-  const originalContent = change.kind === 'untracked'
-    ? null
-    : await readGitIndexFile(repositoryRootPath, relativePath)
-  const modifiedContent = change.kind === 'deleted'
-    ? null
-    : await readFileIfPresent(change.path)
-
   return {
     change,
     editorKind,
-    modifiedContent: modifiedContent ?? '',
-    modifiedExists: modifiedContent !== null,
-    modifiedLabel: 'Working tree',
-    originalContent: originalContent ?? '',
-    originalExists: originalContent !== null,
-    originalLabel: 'Index',
+    modifiedContent: resolvedContent.modifiedContent,
+    modifiedExists: modifiedSource !== null,
+    modifiedLabel: scope === 'staged' ? 'Index' : 'Working tree',
+    originalContent: resolvedContent.originalContent,
+    originalExists: originalSource !== null,
+    originalLabel: scope === 'staged' ? 'HEAD' : 'Index',
+    presentation,
     repositoryRootPath,
     selections,
     source: {
@@ -1585,20 +2096,76 @@ export async function getGitCommitFileDiff(
     ? toWorkspaceRelativePath(repositoryRootPath, matchingChange.originalPath)
     : relativePath
   const editorKind = getSupportedWorkspaceEditorKind(matchingChange.path) ?? 'code'
-  const patch = await getCommitPatchForChange(repositoryRootPath, commitHash, parentHash, matchingChange)
-  const parsedPatch = patch ? parseGitPatch(patch) : null
+  const [patch, configuredTextconvDriver] = await Promise.all([
+    getCommitPatchForChange(
+      repositoryRootPath,
+      commitHash,
+      parentHash,
+      matchingChange,
+    ),
+    getConfiguredTextconvDriver(repositoryRootPath, [originalRelativePath, relativePath]),
+  ])
+  const patchMetadata = getGitPatchMetadata(patch, configuredTextconvDriver)
+  const originalSource: GitDiffBlobSource | null = !parentHash || matchingChange.kind === 'added'
+    ? null
+    : {
+      fileKind: patchMetadata.originalFileKind,
+      filePath: matchingChange.originalPath ?? matchingChange.path,
+      kind: 'git-object',
+      objectSpec: `${parentHash}:${originalRelativePath}`,
+    }
+  const modifiedSource: GitDiffBlobSource | null = matchingChange.kind === 'deleted'
+    ? null
+    : {
+      fileKind: patchMetadata.modifiedFileKind,
+      filePath: matchingChange.path,
+      kind: 'git-object',
+      objectSpec: `${commitHash}:${relativePath}`,
+    }
+  const [originalBlob, modifiedBlob] = await Promise.all([
+    readGitDiffBlob(
+      repositoryRootPath,
+      originalSource,
+      patchMetadata.gitBinary,
+      patchMetadata.textconvDriver !== null,
+    ),
+    readGitDiffBlob(
+      repositoryRootPath,
+      modifiedSource,
+      patchMetadata.gitBinary,
+      patchMetadata.textconvDriver !== null,
+    ),
+  ])
+  const resolvedContent = resolveGitDiffContent({
+    gitBinary: patchMetadata.gitBinary,
+    modified: modifiedBlob,
+    original: originalBlob,
+    textPatch: patchMetadata.textconvDriver ? null : patch,
+    textConversion: patch && patchMetadata.textconvDriver
+      ? {
+          driver: patchMetadata.textconvDriver,
+          patch,
+        }
+      : null,
+    textMetadata: patchMetadata.textMetadata,
+  })
+  const presentation = await enrichSubmodulePresentation(
+    resolvedContent.presentation,
+    repositoryRootPath,
+    relativePath,
+  )
+  const parsedPatch = presentation.kind === 'text'
+    || presentation.kind === 'large-text'
+    || presentation.kind === 'converted-text'
+    || presentation.kind === 'patch-text'
+    ? (patch ? parseGitPatch(patch) : null)
+    : null
   const selections = parsedPatch?.hunks.map((hunk) => ({
     modifiedLineCount: hunk.modifiedLineCount,
     modifiedStartLine: hunk.modifiedStartLine,
     originalLineCount: hunk.originalLineCount,
     originalStartLine: hunk.originalStartLine,
   })) ?? []
-  const originalContent = !parentHash || matchingChange.kind === 'added'
-    ? null
-    : await readGitRevisionFile(repositoryRootPath, parentHash, originalRelativePath)
-  const modifiedContent = matchingChange.kind === 'deleted'
-    ? null
-    : await readGitRevisionFile(repositoryRootPath, commitHash, relativePath)
   const change: GitChangeItem = {
     kind: matchingChange.kind,
     originalPath: matchingChange.originalPath,
@@ -1612,12 +2179,13 @@ export async function getGitCommitFileDiff(
   return {
     change,
     editorKind,
-    modifiedContent: modifiedContent ?? '',
-    modifiedExists: modifiedContent !== null,
+    modifiedContent: resolvedContent.modifiedContent,
+    modifiedExists: modifiedSource !== null,
     modifiedLabel: commit.shortHash,
-    originalContent: originalContent ?? '',
-    originalExists: originalContent !== null,
+    originalContent: resolvedContent.originalContent,
+    originalExists: originalSource !== null,
     originalLabel: parentShortHash ?? '空树',
+    presentation,
     repositoryRootPath,
     selections,
     source: {
@@ -1646,7 +2214,19 @@ export async function applyGitDiffSelection(
     throw new Error('Only staged changes can be unstaged by block.')
   }
 
-  const patch = await getPatchForGitChange(repositoryRootPath, change)
+  const relativePath = toWorkspaceRelativePath(repositoryRootPath, change.path)
+  const originalRelativePath = toWorkspaceRelativePath(
+    repositoryRootPath,
+    change.originalPath ?? change.path,
+  )
+  const [patch, configuredTextconvDriver] = await Promise.all([
+    getPatchForGitChange(repositoryRootPath, change),
+    getConfiguredTextconvDriver(repositoryRootPath, [originalRelativePath, relativePath]),
+  ])
+
+  if (configuredTextconvDriver) {
+    throw new Error('Block actions are unavailable for text converted file diffs.')
+  }
 
   if (!patch) {
     throw new Error('No Git patch is available for that block action.')

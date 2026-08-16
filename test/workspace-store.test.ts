@@ -687,6 +687,56 @@ describe('useWorkspaceStore', () => {
     })
   })
 
+  it('never creates editable drafts for non-text diff presentations', () => {
+    const store = useWorkspaceStore.getState()
+    const imagePath = 'C:/workspace/image.png'
+    const diffTabId = createDiffTabId(imagePath, 'unstaged')
+
+    store.openDiffTab({
+      draftContent: null,
+      diff: {
+        change: {
+          kind: 'modified',
+          originalPath: null,
+          path: imagePath,
+          relativePath: 'image.png',
+          scope: 'unstaged',
+          statusCode: 'M',
+        },
+        editorKind: 'code',
+        modifiedContent: '',
+        modifiedExists: true,
+        modifiedLabel: 'Working tree',
+        originalContent: '',
+        originalExists: true,
+        originalLabel: 'Index',
+        presentation: {
+          kind: 'image',
+          modified: null,
+          original: null,
+        },
+        repositoryRootPath: 'C:/workspace',
+        selections: [],
+        source: { kind: 'working-tree' },
+      },
+      exists: true,
+      filePath: diffTabId,
+      id: diffTabId,
+      isDirty: false,
+      kind: 'diff',
+      title: 'image.png',
+    })
+
+    store.updateDiffTabDraft(diffTabId, 'must not be written')
+    store.markDiffTabSaved(diffTabId, 'must not be written')
+
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      draftContent: null,
+      isDirty: false,
+      kind: 'diff',
+    })
+  })
+
   it('stores diff navigation requests when opening a diff tab', () => {
     const store = useWorkspaceStore.getState()
     const diffTabId = createDiffTabId('C:/workspace/file.md', 'unstaged')

@@ -6,6 +6,7 @@ import {
   WorkspaceEditorDirectoryToggle,
   WorkspaceEditorDirectoryToggleSlot,
   WorkspaceEditorEmptyState,
+  WorkspaceEditorLoadingState,
   WorkspaceEditorSurface,
   WorkspaceEditorView,
 } from '../src/features/workspace/components/workspace-editor-surface/workspace-editor-surface'
@@ -58,7 +59,9 @@ describe('WorkspaceEditorSurface', () => {
       />,
     )
 
-    expect(missingWorkspaceMarkup).toContain('class="editor-empty-state is-workspace-missing"')
+    expect(missingWorkspaceMarkup).toContain(
+      'class="app-empty-state is-fill editor-workspace-empty-state"',
+    )
     expect(missingWorkspaceMarkup).toContain('选择工作目录')
     expect(missingWorkspaceMarkup).toContain('连接一个文件夹后')
     expect(missingWorkspaceMarkup).toContain(
@@ -69,6 +72,17 @@ describe('WorkspaceEditorSurface', () => {
     )
     expect(unopenedFileMarkup).toContain('未打开文件')
     expect(unopenedFileMarkup).not.toContain('选择工作目录')
+  })
+
+  it('uses the shared loading state for lazy editor surfaces', () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceEditorLoadingState label='正在加载差异编辑器…' />,
+    )
+
+    expect(markup).toContain('class="app-loading-state editor-lazy-fallback"')
+    expect(markup).toContain('role="status"')
+    expect(markup).toContain('aria-live="polite"')
+    expect(markup).toContain('正在加载差异编辑器…')
   })
 })
 
@@ -92,7 +106,8 @@ describe('workspace editor component styles', () => {
     expect(editorSurfaceCss).toMatch(
       /\.editor-directory-toggle\[aria-pressed='true'\]\s*\{[^}]*color:\s*var\(--foreground-primary\);/s,
     )
-    expect(editorSurfaceCss).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(editorSurfaceCss).not.toContain('.editor-lazy-spinner')
+    expect(editorSurfaceCss).not.toContain('@keyframes editor-lazy-spin')
     expect(fileTabsCss).toContain('@media (prefers-reduced-motion: reduce)')
     expect(`${editorSurfaceCss}\n${fileTabsCss}`).not.toContain('transition: all')
     expect(fileTabsSource).toContain("import './styles.css'")

@@ -156,7 +156,7 @@ describe('shared icon tooltip button', () => {
 
   it('reuses the shared icon-button size for AppItem trailing controls without business overrides', async () => {
     const [
-      segmentedIconTabsCss,
+      segmentedTabsCss,
       appItemCss,
       treeCss,
       queuedTrayCss,
@@ -166,7 +166,7 @@ describe('shared icon tooltip button', () => {
       await Promise.all([
         readFile(
           new URL(
-            '../src/components/ui/segmented-icon-tabs/styles.css',
+            '../src/components/ui/segmented-tabs/styles.css',
             import.meta.url,
           ),
           'utf8',
@@ -199,7 +199,7 @@ describe('shared icon tooltip button', () => {
         ),
       ])
 
-    expect(segmentedIconTabsCss).not.toContain('--app-icon-button-')
+    expect(segmentedTabsCss).not.toContain('--app-icon-button-')
     expect(appItemCss).toContain('min-width: var(--app-icon-button-size-md);')
     expect(appItemCss).not.toMatch(/\.app-item-action\s*\{/)
     expect(appItemCss).not.toContain('.app-item-action.is-menu-open')

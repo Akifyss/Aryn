@@ -89,7 +89,7 @@ export function WorkspaceEditorContent({
 
   if (contentKind === 'diff' && activeDiffTab) {
     return (
-      <Suspense fallback={<WorkspaceEditorLoadingState label='Loading diff editor...' />}>
+      <Suspense fallback={<WorkspaceEditorLoadingState label='正在加载差异编辑器…' />}>
         <GitDiffEditor
           key={activeDiffTab.id}
           diff={activeDiffTab.diff}
@@ -185,7 +185,7 @@ export function WorkspaceEditorContent({
   if (contentKind === 'file') {
     return (
       <WorkspaceEditorView>
-        <Suspense fallback={<WorkspaceEditorLoadingState label='正在加载文件...' />}>
+        <Suspense fallback={<WorkspaceEditorLoadingState label='正在加载文件…' />}>
           <WorkspaceFilePreview
             key={activeFileTab.id}
             filePath={activeFileTab.filePath}

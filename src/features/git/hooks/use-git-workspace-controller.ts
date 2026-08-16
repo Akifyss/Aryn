@@ -345,7 +345,7 @@ export function useGitWorkspaceController({
 
     const confirmed = await requestConfirmation({
       title: '放弃更改',
-      message: `要放弃 ${changes.length} 个工作区更改吗？`,
+      message: `要放弃 ${changes.length} 个工作树更改吗？`,
       confirmLabel: '全部放弃',
       isDanger: true,
     })
@@ -483,7 +483,7 @@ export function useGitWorkspaceController({
 
     const confirmed = await requestConfirmation({
       title: '放弃所有更改',
-      message: '要放弃所有工作区更改吗？\n\n这会还原已跟踪文件，并删除未跟踪文件。',
+      message: '要放弃所有工作树更改吗？\n\n这会还原已跟踪文件，并删除未跟踪文件。',
       confirmLabel: '全部放弃',
       isDanger: true,
     })
@@ -492,13 +492,13 @@ export function useGitWorkspaceController({
       return
     }
 
-    await runGitAction(workspacePath, '正在放弃所有工作区更改...', async ({ isCurrent, publishRepositoryState }) => {
+    await runGitAction(workspacePath, '正在放弃所有工作树更改...', async ({ isCurrent, publishRepositoryState }) => {
       const nextState = await window.appApi.discardAllGitChanges(workspacePath)
       if (!publishRepositoryState(nextState)) return
       await loadWorkspaceTree(workspacePath)
       await syncOpenDiffTabs(workspacePath)
       if (!isCurrent()) return
-      setStatusMessage('工作区更改已放弃')
+      setStatusMessage('工作树更改已放弃')
     })
   }
 

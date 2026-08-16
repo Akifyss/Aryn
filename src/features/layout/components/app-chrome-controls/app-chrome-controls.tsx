@@ -1,6 +1,6 @@
 import { Chat3Line, FolderLine, LayoutLeftLine, SearchLine } from '@mingcute/react'
 import { AppIconButton } from '@/components/app-icon-button'
-import { SegmentedIconTabs } from '@/components/ui/segmented-icon-tabs/segmented-icon-tabs'
+import { SegmentedTabs } from '@/components/ui/segmented-tabs/segmented-tabs'
 import type { AppLayoutPreference } from '@/hooks/use-settings-store'
 import './styles.css'
 
@@ -16,7 +16,7 @@ export function AppLayoutModeSwitch({
   onValueChange,
 }: AppLayoutModeSwitchProps) {
   return (
-    <SegmentedIconTabs<AppLayoutPreference>
+    <SegmentedTabs<AppLayoutPreference>
       ariaLabel='Layout mode'
       className='app-layout-mode-switch'
       value={value}

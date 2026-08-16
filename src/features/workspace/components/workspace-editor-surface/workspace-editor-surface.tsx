@@ -7,7 +7,8 @@ import {
 } from '@mingcute/react'
 import { AppButton } from '@/components/app-button'
 import { AppIconButton } from '@/components/app-icon-button'
-import { EmptyState } from '@/components/empty-state'
+import { AppLoadingState } from '@/components/app-loading-state'
+import { EMPTY_STATE_ICONS, EmptyState } from '@/components/empty-state'
 import { recordOpenFileProfile } from '@/lib/open-file-profile'
 import './styles.css'
 
@@ -92,30 +93,26 @@ export function WorkspaceEditorEmptyState({
   }
 
   return (
-    <div className='editor-empty-state is-workspace-missing'>
-      <div className='editor-empty-content'>
-        <div className='editor-empty-logo-shell' aria-hidden='true'>
-          <FolderOpenLine className='editor-empty-folder-icon' />
-        </div>
-        <div className='editor-empty-copy'>
-          <h3>选择工作目录</h3>
-          <p>当前对话会保留在右侧。连接一个文件夹后，可以在这里浏览、搜索和编辑文件。</p>
-        </div>
-        <div className='editor-empty-actions'>
-          <AppButton
-            ref={workspaceTriggerRef}
-            variant='primary'
-            onClick={() => {
-              onOpenWorkspaceSwitch(workspaceTriggerRef.current?.getBoundingClientRect())
-            }}
-            disabled={isPickingWorkspace}
-          >
-            <FolderOpenLine aria-hidden='true' />
-            选择工作目录
-          </AppButton>
-        </div>
-      </div>
-    </div>
+    <EmptyState
+      fill
+      className='editor-workspace-empty-state'
+      description='当前对话会保留在右侧。连接一个文件夹后，可以在这里浏览、搜索和编辑文件。'
+      icon={EMPTY_STATE_ICONS.newFolder}
+      title='选择工作目录'
+      actions={(
+        <AppButton
+          ref={workspaceTriggerRef}
+          variant='primary'
+          onClick={() => {
+            onOpenWorkspaceSwitch(workspaceTriggerRef.current?.getBoundingClientRect())
+          }}
+          disabled={isPickingWorkspace}
+        >
+          <FolderOpenLine aria-hidden='true' />
+          选择工作目录
+        </AppButton>
+      )}
+    />
   )
 }
 
@@ -135,7 +132,7 @@ export function WorkspaceEditorView({
   )
 }
 
-export function WorkspaceEditorLoadingState({ label = 'Loading editor...' }: { label?: string }) {
+export function WorkspaceEditorLoadingState({ label = '正在加载编辑器…' }: { label?: string }) {
   useEffect(() => {
     recordOpenFileProfile('editor:fallback:mounted', { label })
 
@@ -144,10 +141,5 @@ export function WorkspaceEditorLoadingState({ label = 'Loading editor...' }: { l
     }
   }, [label])
 
-  return (
-    <div className='editor-lazy-fallback' role='status' aria-live='polite'>
-      <span className='editor-lazy-spinner' aria-hidden='true' />
-      <span>{label}</span>
-    </div>
-  )
+  return <AppLoadingState className='editor-lazy-fallback' label={label} />
 }

@@ -1,15 +1,15 @@
 import { readFile } from 'node:fs/promises'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { SegmentedIconTabs } from '../src/components/ui/segmented-icon-tabs/segmented-icon-tabs'
+import { SegmentedTabs } from '../src/components/ui/segmented-tabs/segmented-tabs'
 import { WorkspaceTreeEmptyState } from '../src/features/workspace/components/workspace-tree/workspace-tree-empty-state'
 
 const noop = () => {}
 
 describe('shared application components', () => {
-  it('renders segmented icon tabs with owned structure and disabled state', () => {
+  it('renders icon, icon-and-label, and label segmented tabs with one owned structure', () => {
     const markup = renderToStaticMarkup(
-      <SegmentedIconTabs<'agent' | 'editor'>
+      <SegmentedTabs<'agent' | 'editor' | 'diff'>
         ariaLabel='Layout mode'
         className='app-layout-mode-switch'
         controlClassName='custom-control'
@@ -24,8 +24,13 @@ describe('shared application components', () => {
             ariaLabel: 'Editor mode',
             disabled: true,
             icon: <span>Editor</span>,
+            label: 'Files',
             tooltip: 'Editor mode',
             value: 'editor',
+          },
+          {
+            label: 'Diff',
+            value: 'diff',
           },
         ]}
         value='agent'
@@ -33,12 +38,17 @@ describe('shared application components', () => {
       />,
     )
 
-    expect(markup).toContain('class="segmented-icon-tabs-root app-layout-mode-switch"')
-    expect(markup).toContain('class="segmented-icon-tabs-control custom-control"')
-    expect(markup).toContain('class="segmented-icon-tabs-option is-active"')
+    expect(markup).toContain('class="segmented-tabs-root app-layout-mode-switch"')
+    expect(markup).toContain('class="segmented-tabs-control custom-control"')
+    expect(markup).toContain('class="segmented-tabs-option is-active"')
+    expect(markup).toContain('data-content="icon"')
+    expect(markup).toContain('data-content="icon-label"')
+    expect(markup).toContain('data-content="label"')
+    expect(markup).toContain('class="segmented-tabs-label">Files</span>')
+    expect(markup).toContain('class="segmented-tabs-label">Diff</span>')
     expect(markup).toContain('aria-label="Editor mode"')
     expect(markup).toContain('disabled=""')
-    expect(markup.match(/role="tab"/g)).toHaveLength(2)
+    expect(markup.match(/role="tab"/g)).toHaveLength(3)
   })
 
   it('renders workspace tree empty states through one presentation component', () => {
@@ -99,7 +109,7 @@ describe('application stylesheet ownership', () => {
         new URL('../src/features/workspace/components/workspace-file-preview/workspace-file-preview.tsx', import.meta.url),
         'utf8',
       ),
-      readFile(new URL('../src/components/ui/segmented-icon-tabs/styles.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/components/ui/segmented-tabs/styles.css', import.meta.url), 'utf8'),
     ])
 
     expect(appSource).not.toContain("import './App.css'")
@@ -115,6 +125,7 @@ describe('application stylesheet ownership', () => {
     expect(treePanelCss).not.toContain('.sidebar-stack-pane')
     expect(treeSource).toContain("import './styles.css'")
     expect(previewSource).toContain("import './styles.css'")
+    expect(segmentedTabsCss).toContain('height: 32px;')
     expect(segmentedTabsCss).toContain('@media (prefers-reduced-motion: reduce)')
   })
 })

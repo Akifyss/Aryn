@@ -42,7 +42,7 @@ describe('MEO React chrome boundary', () => {
     expect(shellSource).toContain("from '@iconify-icons/lucide/whole-word'")
     expect(shellSource).toContain("import { Input } from '@heroui/react'")
     expect(shellSource).toContain("import { AppIconButton } from '@/components/app-icon-button'")
-    expect(shellSource).toContain('SegmentedIconTabs')
+    expect(shellSource).toContain('SegmentedTabs')
     expect(shellSource).toContain("AppMenu as Menu")
     expect(shellSource).toContain('const MeoNativeEditorChromeImpl = forwardRef')
     expect(shellSource).toContain('memo(MeoNativeEditorChromeImpl)')

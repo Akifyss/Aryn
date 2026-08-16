@@ -1,5 +1,11 @@
 import { isLineWithinVisualDiff } from '@/features/editor/lib/git-diff-navigation'
-import type { GitChangeItem, GitFileDiffResult } from '@/features/git/types'
+import {
+  getGitFileDiffPresentation,
+  isEditableGitFileDiff,
+  isTextGitFileDiff,
+  type GitChangeItem,
+  type GitFileDiffResult,
+} from '@/features/git/types'
 import { getBaseName, normalizeFilePath } from '@/features/workspace/lib/workspace-paths'
 import type {
   WorkspaceDiffNavigationRequest,
@@ -68,6 +74,17 @@ export function shouldOpenGitDiffForLine(
     return true
   }
 
+  if (!isTextGitFileDiff(diff)) {
+    return true
+  }
+
+  // Patch-backed payloads contain hunks rather than complete file contents,
+  // so content-based visual-line bounds do not apply to them.
+  const presentationKind = getGitFileDiffPresentation(diff).kind
+  if (presentationKind === 'converted-text' || presentationKind === 'patch-text') {
+    return true
+  }
+
   return isLineWithinVisualDiff(diff.originalContent, diff.modifiedContent, source, lineNumber)
 }
 
@@ -132,7 +149,9 @@ export function deriveWorkspaceTabViewState({
   const activeTab = openTabs.find((tab) => tab.id === activeTabId) ?? null
   const activeFileTab = isWorkspaceFileTab(activeTab) ? activeTab : null
   const activeDiffTab = isWorkspaceDiffTab(activeTab) ? activeTab : null
-  const activeDiffDraftContent = activeDiffTab?.draftContent ?? activeDiffTab?.diff.modifiedContent ?? ''
+  const activeDiffDraftContent = activeDiffTab && isEditableGitFileDiff(activeDiffTab.diff)
+    ? activeDiffTab.draftContent ?? activeDiffTab.diff.modifiedContent
+    : ''
   const activeDiffPath = activeDiffTab ? normalizeFilePath(activeDiffTab.diff.change.path) : null
   const activeDiffHasDirtyRelatedFileTab = activeDiffPath !== null && openTabs.some((tab) => (
     isWorkspaceAutosaveTab(tab)

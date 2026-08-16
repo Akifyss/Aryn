@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { toast } from '@heroui/react'
+import { isEditableGitFileDiff } from '@/features/git/types'
 import {
   getDirtyWorkspaceTabs,
   getDirtyWorkspaceTabsForNodePath,
@@ -197,6 +198,7 @@ export function useWorkspaceDocumentPersistence({
       || !tab.isDirty
       || tab.diff.change.scope !== 'unstaged'
       || !tab.diff.modifiedExists
+      || !isEditableGitFileDiff(tab.diff)
     ) {
       return false
     }
@@ -615,6 +617,7 @@ export function useWorkspaceDocumentPersistence({
         && tab.diff.source.kind === 'working-tree'
         && tab.diff.change.path === filePath
         && tab.isDirty
+        && isEditableGitFileDiff(tab.diff)
       ),
     ) ?? activeDiffTab
 
@@ -690,6 +693,7 @@ export function useWorkspaceDocumentPersistence({
       || activeDiffTab.diff.source.kind !== 'working-tree'
       || activeDiffTab.diff.change.scope !== 'unstaged'
       || !activeDiffTab.diff.modifiedExists
+      || !isEditableGitFileDiff(activeDiffTab.diff)
       || isActiveEditorComposing
       || activeDiffHasDirtyRelatedFileTab
     ) {

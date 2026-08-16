@@ -104,6 +104,81 @@ export type GitBaselinePayload = {
   reason?: 'not-repo' | 'untracked' | 'git-unavailable' | 'error'
 }
 
+export type GitDiffImage = {
+  byteSize: number
+  contentType: string
+  dataUrl: string
+}
+
+export type GitDiffSubmoduleWorkingTree = {
+  modifiedChanges: boolean
+  untrackedChanges: boolean
+}
+
+export type GitFileDiffPresentation =
+  | {
+    kind: 'text'
+  }
+  | {
+    /**
+     * A read-only textual representation produced by Git's configured
+     * textconv driver. The patch is the source of truth; the original binary
+     * blobs must never be decoded as UTF-8 or written back through the editor.
+     */
+    driver: string
+    isLarge: boolean
+    kind: 'converted-text'
+    modifiedByteSize: number
+    originalByteSize: number
+    patch: string
+    patchByteSize: number
+  }
+  | {
+    /**
+     * A regular Git text diff whose complete blobs exceed Aryn's editable
+     * document read limit. Git's patch remains renderable and is kept as the
+     * source of truth, matching GitHub Desktop's patch-first behavior.
+     */
+    isLarge: boolean
+    kind: 'patch-text'
+    modifiedByteSize: number
+    originalByteSize: number
+    patch: string
+    patchByteSize: number
+  }
+  | {
+    kind: 'large-text'
+    modifiedByteSize: number
+    originalByteSize: number
+  }
+  | {
+    kind: 'image'
+    modified: GitDiffImage | null
+    original: GitDiffImage | null
+  }
+  | {
+    kind: 'binary'
+    modifiedByteSize: number
+    originalByteSize: number
+  }
+  | {
+    kind: 'submodule'
+    modifiedCommit: string | null
+    originalCommit: string | null
+    url: string | null
+    workingTree: GitDiffSubmoduleWorkingTree | null
+  }
+  | {
+    kind: 'unsupported'
+    reason: 'submodule' | 'type-change' | 'unreadable'
+  }
+  | {
+    kind: 'too-large'
+    limitBytes: number
+    modifiedByteSize: number
+    originalByteSize: number
+  }
+
 export type GitFileDiffResult = {
   change: GitChangeItem
   editorKind: SupportedWorkspaceEditorKind
@@ -113,6 +188,11 @@ export type GitFileDiffResult = {
   originalContent: string
   originalExists: boolean
   originalLabel: string
+  /**
+   * Selects the renderer for this payload. It is optional only so tabs restored
+   * from versions before typed diff presentations continue to open as text.
+   */
+  presentation?: GitFileDiffPresentation
   repositoryRootPath: string
   selections: GitDiffSelection[]
   source:
@@ -125,6 +205,22 @@ export type GitFileDiffResult = {
       parentHash: string | null
       parentShortHash: string | null
     }
+}
+
+export function getGitFileDiffPresentation(diff: GitFileDiffResult): GitFileDiffPresentation {
+  return diff.presentation ?? { kind: 'text' }
+}
+
+export function isEditableGitFileDiff(diff: GitFileDiffResult) {
+  return getGitFileDiffPresentation(diff).kind === 'text'
+}
+
+export function isTextGitFileDiff(diff: GitFileDiffResult) {
+  const kind = getGitFileDiffPresentation(diff).kind
+  return kind === 'text'
+    || kind === 'large-text'
+    || kind === 'converted-text'
+    || kind === 'patch-text'
 }
 
 export type GitDiffSelection = {

@@ -6,6 +6,8 @@ import {
 } from 'react'
 import { Icon } from '@iconify/react'
 import { Back2Line, GitCommitFill, GitCommitLine } from '@mingcute/react'
+import { AppLoadingState } from '@/components/app-loading-state'
+import { EMPTY_STATE_ICONS, EmptyState } from '@/components/empty-state'
 import {
   AppItem,
   AppItemActionButton,
@@ -441,10 +443,10 @@ export function GitCommitDetail({
     return (
       <div className='git-commit-detail'>
         {summary ? renderHeader(summary) : null}
-        <div className='git-commit-detail-state'>
-          <p>正在加载提交文件...</p>
-          {summary ? <span>{summary.subject}</span> : null}
-        </div>
+        <AppLoadingState
+          className='git-commit-detail-state'
+          label='正在加载提交文件…'
+        />
       </div>
     )
   }
@@ -453,9 +455,13 @@ export function GitCommitDetail({
     return (
       <div className='git-commit-detail'>
         {summary ? renderHeader(summary) : null}
-        <div className='git-commit-detail-state git-panel-error'>
-          <p>{error}</p>
-        </div>
+        <EmptyState
+          className='git-commit-detail-state git-commit-detail-error'
+          description={error}
+          icon={EMPTY_STATE_ICONS.renderError}
+          role='alert'
+          title='无法加载提交文件'
+        />
       </div>
     )
   }
@@ -464,9 +470,11 @@ export function GitCommitDetail({
     return (
       <div className='git-commit-detail'>
         {summary ? renderHeader(summary) : null}
-        <div className='git-commit-detail-state'>
-          <p>选择一个提交查看文件变更。</p>
-        </div>
+        <EmptyState
+          className='git-commit-detail-state'
+          icon={EMPTY_STATE_ICONS.history}
+          title='选择一个提交查看文件变更'
+        />
       </div>
     )
   }
@@ -480,9 +488,11 @@ export function GitCommitDetail({
         viewportRef={viewportRef}
       >
         {details.changes.length === 0 ? (
-          <div className='git-panel-empty-state git-commit-detail-state'>
-            <p>这个提交没有文件变更。</p>
-          </div>
+          <EmptyState
+            className='git-commit-detail-state'
+            icon={EMPTY_STATE_ICONS.fileSuccess}
+            title='这个提交没有文件变更'
+          />
         ) : (
           <GitChangeSection
             title='变更文件'

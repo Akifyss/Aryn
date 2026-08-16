@@ -214,4 +214,17 @@ describe('workspace tab helpers', () => {
     expect(shouldOpenGitDiffForLine(diff, 'revision', 2)).toBe(true)
     expect(shouldOpenGitDiffForLine(diff, 'worktree', 1)).toBe(false)
   })
+
+  it('opens non-text presentations without applying text-line filtering', () => {
+    const diff = createDiff()
+    diff.modifiedContent = ''
+    diff.originalContent = ''
+    diff.presentation = {
+      kind: 'binary',
+      modifiedByteSize: 200,
+      originalByteSize: 100,
+    }
+
+    expect(shouldOpenGitDiffForLine(diff, 'worktree', 999)).toBe(true)
+  })
 })

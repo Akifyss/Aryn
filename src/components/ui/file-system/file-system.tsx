@@ -36,7 +36,7 @@ import {
 } from "@/components/app-menu"
 import { AppScrollArea } from "@/components/app-scroll-area"
 import { AppTooltip } from "@/components/app-tooltip"
-import { SegmentedIconTabs } from "@/components/ui/segmented-icon-tabs/segmented-icon-tabs"
+import { SegmentedTabs } from "@/components/ui/segmented-tabs/segmented-tabs"
 import {
   DEFAULT_WORKSPACE_FOLDER_GLYPH_DATA_URL as FOLDER_GLYPH_DATA_URL,
   DefaultWorkspaceFileIconAssets as FileSystemIconSpriteSheet,
@@ -3208,7 +3208,7 @@ export function FileSystem({
         </SelectContent>
       </Select>
     ) : (
-      <SegmentedIconTabs<FileSystemView>
+      <SegmentedTabs<FileSystemView>
         ariaLabel={FILE_SYSTEM_COPY.toolbar.view}
         value={view}
         className="file-system-toolbar-view-switch"

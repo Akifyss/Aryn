@@ -1,10 +1,26 @@
-import type { ReactNode } from 'react'
+import type { HTMLAttributes, ReactNode } from 'react'
 import { Icon } from '@iconify/react'
 
-export type EmptyStateProps = {
+export const EMPTY_STATE_ICONS = {
+  binaryFile: 'streamline-flex-color:file-code-1-flat',
+  clean: 'streamline-plump-color:check-thick-flat',
+  fileSuccess: 'streamline-plump-color:file-check-alternate-flat',
+  folder: 'streamline-plump-color:file-folder-flat',
+  history: 'streamline-flex-color:search-history-browser-flat',
+  image: 'streamline-plump-color:gallery-2-flat',
+  imageUnavailable: 'streamline-plump-color:no-photo-taking-zone-flat',
+  multipleFiles: 'streamline-plump-color:multiple-file-1-flat',
+  newFolder: 'streamline-plump-color:new-folder-flat',
+  renderError: 'streamline-flex-color:monitor-error-flat',
+  repository: 'streamline-plump-color:end-point-branches-flat',
+  unavailable: 'streamline-plump-color:block-1-flat',
+  unreadable: 'streamline-plump-color:broken-link-2-flat',
+  warning: 'streamline-plump-color:warning-diamond-flat',
+} as const
+
+export type EmptyStateProps = Omit<HTMLAttributes<HTMLDivElement>, 'children' | 'title'> & {
   title: ReactNode
   actions?: ReactNode
-  className?: string
   description?: ReactNode
   fill?: boolean
   icon?: string
@@ -21,11 +37,15 @@ export function EmptyState({
   className,
   description,
   fill = false,
-  icon = 'streamline-plump-color:file-folder-flat',
+  icon = EMPTY_STATE_ICONS.folder,
   iconClassName,
+  ...props
 }: EmptyStateProps) {
   return (
-    <div className={joinClasses('app-empty-state', fill && 'is-fill', className)}>
+    <div
+      className={joinClasses('app-empty-state', fill && 'is-fill', className)}
+      {...props}
+    >
       <div className='app-empty-state-content'>
         {icon ? (
           <Icon

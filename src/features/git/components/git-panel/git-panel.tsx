@@ -12,7 +12,8 @@ import {
 } from '@mingcute/react'
 import { Icon } from '@iconify/react'
 import { AppButton } from '@/components/app-button'
-import { EmptyState } from '@/components/empty-state'
+import { AppLoadingState } from '@/components/app-loading-state'
+import { EMPTY_STATE_ICONS, EmptyState } from '@/components/empty-state'
 import {
   AppItem,
   AppItemActionButton,
@@ -341,25 +342,23 @@ export function GitPanel({
 
   if (!workspacePath) {
     return (
-      <div className='git-panel-empty-state'>
-        <p>选择一个工作区以查看 Git 状态。</p>
-      </div>
+      <EmptyState
+        className='git-panel-no-workspace-state'
+        icon={EMPTY_STATE_ICONS.newFolder}
+        title='选择一个工作区以查看 Git 状态'
+      />
     )
   }
 
   if (isLoading) {
-    return (
-      <div className='git-panel-empty-state'>
-        <p>正在加载 Git 状态...</p>
-      </div>
-    )
+    return <AppLoadingState className='git-panel-loading-state' label='正在加载 Git 状态…' />
   }
 
   if (!repositoryState?.isRepository) {
     return (
       <EmptyState
         className='git-panel-init-state'
-        icon='streamline-flex-color:search-history-browser-flat'
+        icon={EMPTY_STATE_ICONS.repository}
         title='当前工作区尚未初始化 Git'
         actions={(
           <AppButton variant='primary' onClick={onInitialize}>
@@ -552,46 +551,47 @@ export function GitPanel({
         viewportRef={sectionsViewportRef}
       >
         {!currentRepositoryState.hasChanges ? (
-          <div className='git-panel-empty-state git-panel-clean-state'>
-            <div className='git-empty-illustration'>
-              <CheckLine aria-hidden='true' />
-            </div>
-            <p>工作区干净</p>
-            <span className='git-empty-subtext'>{cleanStateSubtext}</span>
-            <div className='git-clean-actions'>
-              {hasUnpushedCommits ? (
+          <EmptyState
+            className='git-panel-clean-state'
+            description={cleanStateSubtext}
+            icon={EMPTY_STATE_ICONS.clean}
+            title='工作区干净'
+            actions={(
+              <>
+                {hasUnpushedCommits ? (
+                  <AppButton
+                    type='button'
+                    variant='outline'
+                    disabled={Boolean(syncDisabledReason)}
+                    onClick={onPush}
+                  >
+                    <ArrowUpLine aria-hidden='true' />
+                    <span>推送</span>
+                  </AppButton>
+                ) : null}
+                {currentRepositoryState.behind > 0 ? (
+                  <AppButton
+                    type='button'
+                    variant='outline'
+                    disabled={Boolean(syncDisabledReason)}
+                    onClick={onPull}
+                  >
+                    <ArrowDownLine aria-hidden='true' />
+                    <span>拉取</span>
+                  </AppButton>
+                ) : null}
                 <AppButton
                   type='button'
                   variant='outline'
-                  disabled={Boolean(syncDisabledReason)}
-                  onClick={onPush}
+                  disabled={Boolean(busyLabel)}
+                  onClick={onRefresh}
                 >
-                  <ArrowUpLine aria-hidden='true' />
-                  <span>推送</span>
+                  <Refresh2Line aria-hidden='true' />
+                  <span>刷新</span>
                 </AppButton>
-              ) : null}
-              {currentRepositoryState.behind > 0 ? (
-                <AppButton
-                  type='button'
-                  variant='outline'
-                  disabled={Boolean(syncDisabledReason)}
-                  onClick={onPull}
-                >
-                  <ArrowDownLine aria-hidden='true' />
-                  <span>拉取</span>
-                </AppButton>
-              ) : null}
-              <AppButton
-                type='button'
-                variant='outline'
-                disabled={Boolean(busyLabel)}
-                onClick={onRefresh}
-              >
-                <Refresh2Line aria-hidden='true' />
-                <span>刷新</span>
-              </AppButton>
-            </div>
-          </div>
+              </>
+            )}
+          />
         ) : (
           <>
             <GitChangeSection

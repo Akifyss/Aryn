@@ -123,6 +123,219 @@ describe('git helpers', () => {
     })
   })
 
+  it('returns image payloads and keeps binary document diffs metadata-only', async () => {
+    const rootPath = await createTempWorkspace()
+    const imagePath = path.join(rootPath, 'pixel.png')
+    const pdfPath = path.join(rootPath, 'report.pdf')
+    const wordDocumentPath = path.join(rootPath, 'report.docx')
+    const openDocumentPath = path.join(rootPath, 'report.odt')
+    const workbookPath = path.join(rootPath, 'report.xlsx')
+    const originalImage = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64',
+    )
+    const modifiedImage = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl2QAAAAASUVORK5CYII=',
+      'base64',
+    )
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(imagePath, originalImage)
+    await writeFile(pdfPath, Buffer.from('%PDF-1.7\noriginal\u0000', 'binary'))
+    await writeFile(wordDocumentPath, Buffer.from('PK\u0003\u0004word-original\u0000', 'binary'))
+    await writeFile(openDocumentPath, Buffer.from('PK\u0003\u0004odt-original\u0000', 'binary'))
+    await writeFile(workbookPath, Buffer.from('PK\u0003\u0004original\u0000', 'binary'))
+    await stageGitPaths(rootPath, [
+      imagePath,
+      openDocumentPath,
+      pdfPath,
+      wordDocumentPath,
+      workbookPath,
+    ])
+    await commitGitChanges(rootPath, 'initial binary files')
+    await writeFile(imagePath, modifiedImage)
+    await writeFile(pdfPath, Buffer.from('%PDF-1.7\nmodified\u0000', 'binary'))
+    await writeFile(wordDocumentPath, Buffer.from('PK\u0003\u0004word-modified\u0000', 'binary'))
+    await writeFile(openDocumentPath, Buffer.from('PK\u0003\u0004odt-modified\u0000', 'binary'))
+    await writeFile(workbookPath, Buffer.from('PK\u0003\u0004modified\u0000', 'binary'))
+
+    const imageDiff = await getGitFileDiff(rootPath, imagePath, 'unstaged')
+    expect(imageDiff).toMatchObject({
+      modifiedContent: '',
+      originalContent: '',
+      presentation: {
+        kind: 'image',
+        modified: {
+          byteSize: modifiedImage.length,
+          contentType: 'image/png',
+        },
+        original: {
+          byteSize: originalImage.length,
+          contentType: 'image/png',
+        },
+      },
+    })
+    expect(imageDiff.presentation?.kind === 'image' && imageDiff.presentation.modified?.dataUrl)
+      .toBe(`data:image/png;base64,${modifiedImage.toString('base64')}`)
+
+    for (const documentPath of [pdfPath, wordDocumentPath, openDocumentPath, workbookPath]) {
+      await expect(getGitFileDiff(rootPath, documentPath, 'unstaged')).resolves.toMatchObject({
+        modifiedContent: '',
+        originalContent: '',
+        presentation: {
+          kind: 'binary',
+        },
+      })
+    }
+  })
+
+  it('uses Git attributes as the source of truth for text and binary diffs', async () => {
+    const rootPath = await createTempWorkspace()
+    const attributesPath = path.join(rootPath, '.gitattributes')
+    const forcedTextPath = path.join(rootPath, 'archive.zip')
+    const forcedBinaryPath = path.join(rootPath, 'notes.txt')
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(attributesPath, '*.zip text\n*.txt -diff\n', 'utf8')
+    await writeFile(forcedTextPath, 'original archive description\n', 'utf8')
+    await writeFile(forcedBinaryPath, 'original note\n', 'utf8')
+    await stageGitPaths(rootPath, [attributesPath, forcedTextPath, forcedBinaryPath])
+    await commitGitChanges(rootPath, 'configure diff attributes')
+    await writeFile(forcedTextPath, 'updated archive description\n', 'utf8')
+    await writeFile(forcedBinaryPath, 'updated note\n', 'utf8')
+
+    await expect(getGitFileDiff(rootPath, forcedTextPath, 'unstaged')).resolves.toMatchObject({
+      modifiedContent: 'updated archive description\n',
+      originalContent: 'original archive description\n',
+      presentation: { kind: 'text' },
+    })
+    await expect(getGitFileDiff(rootPath, forcedBinaryPath, 'unstaged')).resolves.toMatchObject({
+      modifiedContent: '',
+      originalContent: '',
+      presentation: { kind: 'binary' },
+    })
+  })
+
+  it('renders configured textconv output without decoding document blobs as UTF-8', async () => {
+    const rootPath = await createTempWorkspace()
+    const attributesPath = path.join(rootPath, '.gitattributes')
+    const converterPath = path.join(rootPath, 'textconv.cjs')
+    const documentPath = path.join(rootPath, 'report.docx')
+    const originalDocument = Buffer.from('PK\u0003\u0004Original paragraph\n\u0000', 'binary')
+    const modifiedDocument = Buffer.from('PK\u0003\u0004Updated paragraph\n\u0000', 'binary')
+
+    await initializeGitRepository(rootPath)
+    await configureGitIdentity(rootPath)
+    await writeFile(attributesPath, '*.docx diff=testdoc\n', 'utf8')
+    await writeFile(converterPath, [
+      "const fs = require('node:fs')",
+      "const contents = fs.readFileSync(process.argv[2]).toString('binary')",
+      "process.stdout.write(contents.replace(/^PK\\x03\\x04/, '').replace(/\\x00/g, ''))",
+      '',
+    ].join('\n'), 'utf8')
+    await runGit(rootPath, ['config', 'diff.testdoc.textconv', 'node textconv.cjs'])
+    await writeFile(documentPath, originalDocument)
+    await stageGitPaths(rootPath, [attributesPath, converterPath, documentPath])
+    await commitGitChanges(rootPath, 'add converted document')
+    const rootCommitHash = await runGit(rootPath, ['rev-parse', 'HEAD'])
+    const rootCommitDiff = await getGitCommitFileDiff(rootPath, rootCommitHash, documentPath)
+    expect(rootCommitDiff.presentation).toMatchObject({
+      driver: 'testdoc',
+      kind: 'converted-text',
+    })
+
+    await writeFile(documentPath, modifiedDocument)
+
+    const workingTreeDiff = await getGitFileDiff(rootPath, documentPath, 'unstaged')
+    expect(workingTreeDiff).toMatchObject({
+      modifiedContent: '',
+      originalContent: '',
+      presentation: {
+        driver: 'testdoc',
+        isLarge: false,
+        kind: 'converted-text',
+        modifiedByteSize: modifiedDocument.length,
+        originalByteSize: originalDocument.length,
+      },
+    })
+    expect(workingTreeDiff.presentation?.kind === 'converted-text'
+      ? normalizeLineEndings(workingTreeDiff.presentation.patch)
+      : '').toContain('-Original paragraph\n+Updated paragraph\n')
+    await expect(applyGitDiffSelection(
+      rootPath,
+      documentPath,
+      'unstaged',
+      workingTreeDiff.selections[0],
+      'stage',
+    )).rejects.toThrow('Block actions are unavailable for text converted file diffs.')
+    await expect(readFile(documentPath)).resolves.toEqual(modifiedDocument)
+
+    await stageGitPaths(rootPath, [documentPath])
+    const stagedDiff = await getGitFileDiff(rootPath, documentPath, 'staged')
+    expect(stagedDiff.presentation).toMatchObject({
+      driver: 'testdoc',
+      kind: 'converted-text',
+    })
+
+    await commitGitChanges(rootPath, 'update converted document')
+    const commitHash = await runGit(rootPath, ['rev-parse', 'HEAD'])
+    const commitDiff = await getGitCommitFileDiff(rootPath, commitHash, documentPath)
+    expect(commitDiff.presentation).toMatchObject({
+      driver: 'testdoc',
+      kind: 'converted-text',
+    })
+  })
+
+  it('returns GitHub Desktop-style submodule commit and working-tree details', async () => {
+    const submoduleSourcePath = await createTempWorkspace()
+    const parentPath = await createTempWorkspace()
+    const submodulePath = path.join(parentPath, 'vendor', 'module')
+
+    await initializeGitRepository(submoduleSourcePath)
+    await configureGitIdentity(submoduleSourcePath)
+    await writeFile(path.join(submoduleSourcePath, 'README.md'), 'first\n', 'utf8')
+    await stageGitPaths(submoduleSourcePath, [path.join(submoduleSourcePath, 'README.md')])
+    await commitGitChanges(submoduleSourcePath, 'initial submodule commit')
+    const originalCommit = await runGit(submoduleSourcePath, ['rev-parse', 'HEAD'])
+
+    await initializeGitRepository(parentPath)
+    await configureGitIdentity(parentPath)
+    await runGit(parentPath, [
+      '-c',
+      'protocol.file.allow=always',
+      'submodule',
+      'add',
+      submoduleSourcePath,
+      'vendor/module',
+    ])
+    await commitGitChanges(parentPath, 'add submodule')
+
+    await writeFile(path.join(submoduleSourcePath, 'README.md'), 'second\n', 'utf8')
+    await stageGitPaths(submoduleSourcePath, [path.join(submoduleSourcePath, 'README.md')])
+    await commitGitChanges(submoduleSourcePath, 'update submodule')
+    const modifiedCommit = await runGit(submoduleSourcePath, ['rev-parse', 'HEAD'])
+    await runGit(submodulePath, ['fetch'])
+    await runGit(submodulePath, ['checkout', modifiedCommit])
+    await writeFile(path.join(submodulePath, 'untracked.txt'), 'local\n', 'utf8')
+
+    const diff = await getGitFileDiff(parentPath, submodulePath, 'unstaged')
+    expect(diff).toMatchObject({
+      presentation: {
+        kind: 'submodule',
+        modifiedCommit,
+        originalCommit,
+        workingTree: {
+          modifiedChanges: false,
+          untrackedChanges: true,
+        },
+      },
+    })
+    expect(diff.presentation?.kind === 'submodule' ? normalizePath(diff.presentation.url ?? '') : '')
+      .toContain(normalizePath(submoduleSourcePath))
+  })
+
   it('stages files with non-ascii names without quoted path corruption', async () => {
     const rootPath = await createTempWorkspace()
     const unicodeFileName = '\u4f60\u597d\u4e16\u754c.md'

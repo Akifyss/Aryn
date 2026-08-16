@@ -54,6 +54,23 @@ function isBundledElectronRuntimeExternal(id: string) {
   return builtinModules.some((moduleName) => id === moduleName || id.startsWith(`${moduleName}/`))
 }
 
+function pierreDiffsShikiAlias() {
+  const replacement = path.join(__dirname, 'src/lib/pierre-diffs-shiki.ts')
+
+  return {
+    enforce: 'pre' as const,
+    name: 'pierre-diffs-shiki-alias',
+    resolveId(source: string, importer: string | undefined) {
+      if (source !== 'shiki' || !importer) return null
+
+      const normalizedImporter = importer.replaceAll('\\', '/')
+      return normalizedImporter.includes('/node_modules/@pierre/diffs/')
+        ? replacement
+        : null
+    },
+  }
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
   rmSync('dist-electron', { recursive: true, force: true })
@@ -61,23 +78,34 @@ export default defineConfig(({ command }) => {
   const isServe = command === 'serve'
   const isBuild = command === 'build'
   const sourcemap = isServe || !!process.env.VSCODE_DEBUG
-  const devServerOptions = process.env.VSCODE_DEBUG
+  const devServerOptions = isServe
     ? (() => {
-        const url = new URL(pkg.debug.env.VITE_DEV_SERVER_URL)
+        const url = new URL(
+          process.env.VITE_DEV_SERVER_URL ?? pkg.debug.env.VITE_DEV_SERVER_URL,
+        )
         return {
           host: url.hostname,
           port: +url.port,
+          // VS Code launches Electron separately with the configured URL, so
+          // silently moving to another port would leave it pointing at the
+          // wrong renderer. Normal `npm run dev` may still fall back if 7777
+          // is temporarily occupied.
+          strictPort: Boolean(process.env.VSCODE_DEBUG),
         }
       })()
     : {}
 
   return {
     resolve: {
-      alias: {
-        '@': path.join(__dirname, 'src')
-      },
+      alias: [
+        {
+          find: '@',
+          replacement: path.join(__dirname, 'src'),
+        },
+      ],
     },
     plugins: [
+      pierreDiffsShikiAlias(),
       tailwindcss(),
       react(),
       electron({

@@ -4,19 +4,35 @@
   min-width: 0;
   min-height: 0;
   flex-direction: column;
+  background: var(--background-primary);
 }
 
-.git-diff-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.git-diff-header[data-has-center-action] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.git-diff-header-start {
+  flex: 1 1 0;
   gap: var(--editor-toolbar-gap, 8px);
-  padding: 0 20px 0 var(--editor-directory-toggle-left, 6px);
-  flex: 0 0 var(--editor-surface-header-height, 44px);
-  height: var(--editor-surface-header-height, 44px);
-  min-height: var(--editor-surface-header-height, 44px);
-  border-bottom: 1px solid var(--separator);
-  background: var(--background-primary);
+}
+
+.git-diff-header[data-has-center-action] .git-diff-header-start {
+  grid-column: 1;
+}
+
+.git-diff-header-center-action {
+  grid-column: 2;
+  justify-content: center;
+}
+
+.git-diff-header-actions {
+  justify-content: flex-end;
+}
+
+.git-diff-header[data-has-center-action] .git-diff-header-actions {
+  grid-column: 3;
+  margin-left: 0;
 }
 
 .git-diff-header-leading-slot {
@@ -29,54 +45,414 @@
 }
 
 .git-diff-header-title-area {
-  flex: 1;
-  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .git-diff-header-title {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
-  color: var(--foreground-primary);
-  font-size: 13px;
-  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.git-diff-view-modes {
+.git-diff-header-kind {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--background-secondary);
+  color: var(--foreground-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
 }
 
-.git-diff-monaco-shell {
-  display: flex;
+.git-diff-header-kind svg {
+  width: 13px;
+  height: 13px;
+}
+
+.git-diff-scroll-area {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
-  padding: 0;
   background: var(--background-primary);
 }
 
-.git-diff-monaco-shell .monaco-diff-editor,
-.git-diff-monaco-shell .monaco-editor,
-.git-diff-monaco-shell .overflow-guard {
+.git-diff-pierre-viewport {
   width: 100%;
   height: 100%;
 }
 
-.git-diff-monaco-navigation-line {
-  background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 72%, transparent);
+.git-diff-pierre-content {
+  min-width: 100%;
+  padding-block-start: 8px;
+  padding-block-end: 24px;
 }
 
-@media (max-width: 860px) {
-  .git-diff-header {
-    padding-right: 16px;
+.git-diff-pierre-surface {
+  min-width: 100%;
+}
+
+.git-diff-pierre-mount,
+.git-diff-pierre-file {
+  display: block;
+  min-width: 100%;
+}
+
+.git-diff-render-error {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: var(--background-primary);
+}
+
+.git-diff-image-shell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  container-type: inline-size;
+}
+
+.git-diff-image-viewport {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.git-diff-image-view {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  container-type: inline-size;
+}
+
+.git-diff-image-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.git-diff-image-grid[data-single-image] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.git-diff-image-version {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  flex-direction: column;
+}
+
+.git-diff-image-version + .git-diff-image-version {
+  border-inline-start: 1px solid var(--separator);
+}
+
+.git-diff-image-caption {
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 38px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--separator);
+  background: color-mix(in srgb, var(--background-primary) 94%, transparent);
+  color: var(--foreground-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  flex: 0 0 auto;
+  backdrop-filter: blur(10px);
+}
+
+.git-diff-image-caption-label {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 8px;
+}
+
+.git-diff-image-status {
+  color: var(--foreground-primary);
+}
+
+:is(.git-diff-image-caption, .git-diff-image-comparison-summary)[data-tone='added']
+.git-diff-image-status {
+  color: color-mix(in oklab, var(--status-added) 72%, var(--foreground-primary));
+}
+
+:is(.git-diff-image-caption, .git-diff-image-comparison-summary)[data-tone='removed']
+.git-diff-image-status {
+  color: color-mix(in oklab, var(--status-deleted) 72%, var(--foreground-primary));
+}
+
+.git-diff-image-source {
+  color: var(--foreground-tertiary);
+  font-weight: 400;
+}
+
+.git-diff-image-metadata {
+  color: var(--foreground-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.git-diff-image-canvas {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--background-primary);
+  flex: 1;
+}
+
+.git-diff-image-canvas[data-checkerboard],
+.git-diff-image-overlay-stage[data-checkerboard] {
+  background-color: var(--background-secondary);
+  background-image:
+    linear-gradient(45deg, color-mix(in srgb, var(--foreground-primary) 5%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--foreground-primary) 5%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--foreground-primary) 5%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--foreground-primary) 5%, transparent) 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+}
+
+.git-diff-image-canvas img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  object-fit: contain;
+  user-select: none;
+}
+
+.git-diff-image-error {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.git-diff-image-overlay-view {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  flex-direction: column;
+}
+
+.git-diff-image-overlay-stage-viewport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  flex: 1;
+}
+
+.git-diff-image-overlay-stage {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  flex: 0 0 auto;
+  min-height: 240px;
+  background: var(--background-secondary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--foreground-primary) 12%, transparent);
+}
+
+.git-diff-image-overlay-stage[data-ready] {
+  min-height: 0;
+}
+
+.git-diff-image-overlay-layer {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
+.git-diff-image-overlay-stage[data-mode='difference'] .is-modified {
+  mix-blend-mode: difference;
+}
+
+.git-diff-image-swipe-divider {
+  position: absolute;
+  z-index: 1;
+  inset-block: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--foreground-primary) 70%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--background-primary) 55%, transparent);
+  pointer-events: none;
+}
+
+.git-diff-image-range-control {
+  display: grid;
+  grid-template-columns: max-content minmax(180px, 320px) 42px;
+  grid-column: 2;
+  align-items: center;
+  gap: 10px;
+  color: var(--foreground-secondary);
+  font-size: 12px;
+}
+
+.git-diff-image-comparison-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  box-sizing: border-box;
+  column-gap: 32px;
+  min-height: 38px;
+  padding: 4px 14px;
+  border-bottom: 1px solid var(--separator);
+  background: var(--background-primary);
+  flex: 0 0 auto;
+}
+
+.git-diff-image-comparison-summary {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+  color: var(--foreground-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.git-diff-image-comparison-summary.is-original {
+  grid-column: 1;
+  justify-content: flex-start;
+}
+
+.git-diff-image-comparison-summary.is-modified {
+  grid-column: 3;
+  justify-content: flex-end;
+}
+
+.git-diff-image-range-control input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.git-diff-image-range-control output {
+  color: var(--foreground-tertiary);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+@container (max-width: 980px) {
+  .git-diff-image-comparison-bar {
+    column-gap: 20px;
+  }
+
+  .git-diff-image-comparison-summary .git-diff-image-metadata {
+    display: none;
+  }
+
+  .git-diff-image-range-control {
+    grid-template-columns: max-content minmax(120px, 240px) 42px;
+  }
+}
+
+@container (max-width: 720px) {
+  .git-diff-image-comparison-summary .git-diff-image-source,
+  .git-diff-image-range-label {
+    display: none;
+  }
+
+  .git-diff-image-range-control {
+    grid-template-columns: minmax(96px, 1fr) 38px;
+  }
+}
+
+.git-diff-image-overlay-error {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+@container (max-width: 820px) {
+  .git-diff-image-grid:not([data-single-image]) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .git-diff-image-grid:not([data-single-image])
+  .git-diff-image-version + .git-diff-image-version {
+    border-block-start: 1px solid var(--separator);
+    border-inline-start: 0;
+  }
+}
+
+.git-diff-unavailable {
+  flex: 1;
+  min-height: 0;
+}
+
+.git-diff-open-action {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.git-diff-open-error {
+  max-width: 360px;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.git-diff-submodule code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--background-secondary);
+  color: var(--foreground-primary);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.git-diff-submodule-url {
+  overflow-wrap: anywhere;
+}
+
+@media (forced-colors: active) {
+  .git-diff-image-canvas img,
+  .git-diff-image-version + .git-diff-image-version {
+    border: 1px solid CanvasText;
   }
 }

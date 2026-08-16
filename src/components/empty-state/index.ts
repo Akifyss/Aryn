@@ -1,3 +1,7 @@
 import './styles.css'
 
-export { EmptyState, type EmptyStateProps } from './empty-state'
+export {
+  EMPTY_STATE_ICONS,
+  EmptyState,
+  type EmptyStateProps,
+} from './empty-state'

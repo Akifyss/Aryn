@@ -1,5 +1,9 @@
 import { create } from 'zustand'
-import type { GitChangeScope, GitFileDiffResult } from '@/features/git/types'
+import {
+  isEditableGitFileDiff,
+  type GitChangeScope,
+  type GitFileDiffResult,
+} from '@/features/git/types'
 import type { WorkspaceNode } from '@/features/workspace/types'
 import {
   getWorkspaceFileTabEditorKind,
@@ -161,8 +165,13 @@ export function dedupeWorkspaceTabs(tabs: WorkspaceTab[]) {
 }
 
 function mergeWorkspaceDiffTab(existingTab: WorkspaceDiffTab, nextTab: WorkspaceDiffTab): WorkspaceDiffTab {
-  const preservedDraftContent = existingTab.isDirty ? existingTab.draftContent : null
-  const nextIsDirty = preservedDraftContent !== null && preservedDraftContent !== nextTab.diff.modifiedContent
+  const canPreserveDraft = isEditableGitFileDiff(existingTab.diff)
+    && isEditableGitFileDiff(nextTab.diff)
+  const preservedDraftContent = canPreserveDraft && existingTab.isDirty
+    ? existingTab.draftContent
+    : null
+  const nextIsDirty = preservedDraftContent !== null
+    && preservedDraftContent !== nextTab.diff.modifiedContent
 
   return {
     ...nextTab,
@@ -250,7 +259,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     let didChange = false
 
     const openTabs = state.openTabs.map((tab) => {
-      if (tab.kind !== 'diff' || tab.id !== tabId) {
+      if (tab.kind !== 'diff' || tab.id !== tabId || !isEditableGitFileDiff(tab.diff)) {
         return tab
       }
 
@@ -487,7 +496,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     let didChange = false
 
     const openTabs = state.openTabs.map((tab) => {
-      if (tab.kind !== 'diff' || tab.id !== tabId) {
+      if (tab.kind !== 'diff' || tab.id !== tabId || !isEditableGitFileDiff(tab.diff)) {
         return tab
       }
 

@@ -99,26 +99,6 @@
 }
 
 .git-commit-detail-state {
-  display: flex;
   flex: 1;
   min-height: 0;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 6px;
-  padding: 18px;
-  color: var(--foreground-secondary);
-  text-align: center;
-}
-
-.git-commit-detail-state p {
-  margin: 0;
-}
-
-.git-commit-detail-state span {
-  max-width: 100%;
-  overflow: hidden;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

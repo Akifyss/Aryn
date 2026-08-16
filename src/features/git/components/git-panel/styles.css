@@ -111,58 +111,14 @@
   z-index: 1;
 }
 
-.git-panel-empty-state {
-  display: flex;
+.git-panel-no-workspace-state,
+.git-panel-loading-state,
+.git-panel-clean-state {
   flex: 1;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 16px;
-  text-align: center;
 }
 
 .git-panel-init-state {
   flex: 1;
-}
-
-.git-panel-clean-state {
-  flex-direction: column;
-  padding: 40px 24px;
-}
-
-.git-empty-illustration {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 61px;
-  height: 61px;
-  margin-bottom: 18px;
-  border-radius: 22px;
-  background: var(--success);
-  color: var(--foreground-on-success);
-}
-
-.git-empty-illustration > svg,
-.git-empty-illustration > .iconify {
-  width: var(--icon-size-xl);
-  height: var(--icon-size-xl);
-}
-
-.git-empty-subtext {
-  display: block;
-  margin-top: 6px;
-  color: var(--foreground-secondary);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.git-clean-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 16px;
 }
 
 .git-panel-status,

@@ -49,9 +49,9 @@ import {
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppMenu as Menu } from '@/components/app-menu'
 import {
-  SegmentedIconTabs,
-  type SegmentedIconTabOption,
-} from '@/components/ui/segmented-icon-tabs/segmented-icon-tabs'
+  SegmentedTabs,
+  type SegmentedTabOption,
+} from '@/components/ui/segmented-tabs/segmented-tabs'
 import {
   MeoNativeOutline,
   type MeoNativeOutlineController,
@@ -98,7 +98,7 @@ const MODE_OPTIONS = [
     tooltip: 'Unified diff',
     value: 'diff-unified',
   },
-] satisfies readonly SegmentedIconTabOption<MeoEditorMode>[]
+] satisfies readonly SegmentedTabOption<MeoEditorMode>[]
 
 type NativeMeoButtonMap = {
   bulletListBtn: HTMLButtonElement
@@ -553,7 +553,7 @@ function MeoEditorToolbar({
         ref={bindElementSlot(refs.modeGroup)}
         className='meo-editor-mode-switch'
       >
-        <SegmentedIconTabs<MeoEditorMode>
+        <SegmentedTabs<MeoEditorMode>
           ariaLabel='Markdown editor mode'
           options={MODE_OPTIONS}
           value={mode}

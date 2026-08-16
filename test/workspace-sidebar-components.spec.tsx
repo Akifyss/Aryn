@@ -94,7 +94,7 @@ describe('WorkspaceSidebarTabs', () => {
       />,
     )
 
-    expect(gitMarkup).toContain('class="sidebar-workspace-tabs"')
+    expect(gitMarkup).toContain('class="segmented-tabs-root sidebar-workspace-tabs"')
     expect(gitMarkup.match(/role="tab"/g)).toHaveLength(2)
     expect(gitMarkup).toContain('>文件</span>')
     expect(gitMarkup).toContain('>更改</span>')
@@ -108,10 +108,11 @@ describe('WorkspaceSidebarTabs', () => {
 
 describe('workspace sidebar styles', () => {
   it('keeps component styles local, focus-visible, and reduced-motion aware', async () => {
-    const [globalCss, sidebarCss, tabsCss] = await Promise.all([
+    const [globalCss, sidebarCss, tabsCss, segmentedTabsCss] = await Promise.all([
       readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/workspace/components/workspace-sidebar/styles.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/workspace/components/workspace-sidebar-tabs/styles.css', import.meta.url), 'utf8'),
+      readFile(new URL('../src/components/ui/segmented-tabs/styles.css', import.meta.url), 'utf8'),
     ])
 
     expect(globalCss).not.toContain('.sidebar-workspace-tabs')
@@ -159,9 +160,10 @@ describe('workspace sidebar styles', () => {
     expect(sidebarFooterInteractiveRule).toContain(
       '--app-item-current-icon-foreground: var(--foreground-primary);',
     )
-    expect(tabsCss).toContain('.sidebar-workspace-tab:focus-visible')
+    expect(tabsCss).not.toContain('.segmented-tabs-option')
+    expect(segmentedTabsCss).toContain('.segmented-tabs-option:focus-visible')
     expect(sidebarCss).toContain('@media (prefers-reduced-motion: reduce)')
-    expect(tabsCss).toContain('@media (prefers-reduced-motion: reduce)')
-    expect(`${sidebarCss}\n${tabsCss}`).not.toContain('transition: all')
+    expect(segmentedTabsCss).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(`${sidebarCss}\n${tabsCss}\n${segmentedTabsCss}`).not.toContain('transition: all')
   })
 })

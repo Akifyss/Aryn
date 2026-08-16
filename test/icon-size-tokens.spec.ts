@@ -38,7 +38,7 @@ describe('shared icon-size tokens', () => {
       sessionTreeCss,
       queuedComposerCss,
       appShellCss,
-      workspaceTabsCss,
+      segmentedTabsCss,
     ] = await Promise.all([
       readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/icon-size.ts', import.meta.url), 'utf8'),
@@ -69,7 +69,7 @@ describe('shared icon-size tokens', () => {
         'utf8',
       ),
       readFile(
-        new URL('../src/features/workspace/components/workspace-sidebar-tabs/styles.css', import.meta.url),
+        new URL('../src/components/ui/segmented-tabs/styles.css', import.meta.url),
         'utf8',
       ),
     ])
@@ -89,7 +89,7 @@ describe('shared icon-size tokens', () => {
     expect(sessionTreeCss).toMatch(/\.agent-session-new-button > svg[\s\S]*width: var\(--icon-size-md\)/)
     expect(queuedComposerCss).toMatch(/\.agent-queued-row-leading > svg[\s\S]*width: var\(--icon-size-md\)/)
     expect(appShellCss).toMatch(/\.panel-toggle-icon > svg[\s\S]*width: 100%/)
-    expect(workspaceTabsCss).toMatch(/\.sidebar-workspace-tab-icon[\s\S]*width: var\(--icon-size-md\)/)
+    expect(segmentedTabsCss).toMatch(/\.segmented-tabs-icon[\s\S]*width: var\(--icon-size-md\)/)
   })
 
   it('does not reintroduce numeric glyph props or Tailwind size aliases', async () => {

@@ -1,4 +1,4 @@
-import { createRef } from 'react'
+import { createRef, type ComponentProps } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type {
@@ -67,6 +67,40 @@ const ignoreChanges = () => undefined
 const ignorePath = () => undefined
 const scrollElementRef = createRef<HTMLDivElement>()
 
+function renderGitPanel(overrides: Partial<ComponentProps<typeof GitPanel>> = {}) {
+  return renderToStaticMarkup(
+    <GitPanel
+      busyLabel={null}
+      commitMessage=''
+      historyRefreshVersion={0}
+      iconTheme={null}
+      isLoading={false}
+      layout='list'
+      menuPortalTarget={null}
+      repositoryState={nonRepositoryState}
+      workspacePath='C:\\workspace'
+      onCommit={ignoreChange}
+      onCommitAndSync={ignoreChange}
+      onCommitMessageChange={ignorePath}
+      onDiscardAll={ignoreChange}
+      onDiscardMany={ignoreChanges}
+      onInitialize={ignoreChange}
+      onLayoutChange={ignorePath}
+      onOpenCommitFileDiff={ignoreChange}
+      onOpenDiff={ignoreChange}
+      onOpenFile={ignorePath}
+      onOpenMeoDiff={ignoreChange}
+      onPull={ignoreChange}
+      onPush={ignoreChange}
+      onRefresh={ignoreChange}
+      onRevertCommit={ignoreChange}
+      onStage={ignorePath}
+      onUnstage={ignorePath}
+      {...overrides}
+    />,
+  )
+}
+
 function createCommit(index: number): GitCommitItem {
   return {
     authorEmail: null,
@@ -80,41 +114,36 @@ function createCommit(index: number): GitCommitItem {
 
 describe('Git panel presentation components', () => {
   it('uses the shared empty state for a workspace without a Git repository', () => {
-    const markup = renderToStaticMarkup(
-      <GitPanel
-        busyLabel={null}
-        commitMessage=''
-        historyRefreshVersion={0}
-        iconTheme={null}
-        isLoading={false}
-        layout='list'
-        menuPortalTarget={null}
-        repositoryState={nonRepositoryState}
-        workspacePath='C:\\workspace'
-        onCommit={ignoreChange}
-        onCommitAndSync={ignoreChange}
-        onCommitMessageChange={ignorePath}
-        onDiscardAll={ignoreChange}
-        onDiscardMany={ignoreChanges}
-        onInitialize={ignoreChange}
-        onLayoutChange={ignorePath}
-        onOpenCommitFileDiff={ignoreChange}
-        onOpenDiff={ignoreChange}
-        onOpenFile={ignorePath}
-        onOpenMeoDiff={ignoreChange}
-        onPull={ignoreChange}
-        onPush={ignoreChange}
-        onRefresh={ignoreChange}
-        onRevertCommit={ignoreChange}
-        onStage={ignorePath}
-        onUnstage={ignorePath}
-      />,
-    )
+    const markup = renderGitPanel()
 
     expect(markup).toContain('class="app-empty-state git-panel-init-state"')
     expect(markup).toContain('class="app-empty-state-actions"')
     expect(markup).toContain('当前工作区尚未初始化 Git')
     expect(markup).toContain('初始化 Git')
+  })
+
+  it('uses shared states while the Git panel is unavailable, loading, or clean', () => {
+    const noWorkspaceMarkup = renderGitPanel({
+      repositoryState: null,
+      workspacePath: null,
+    })
+    const loadingMarkup = renderGitPanel({ isLoading: true })
+    const cleanMarkup = renderGitPanel({
+      repositoryState: {
+        ...nonRepositoryState,
+        branch: 'main',
+        hasCommits: true,
+        isRepository: true,
+        repositoryRootPath: 'C:\\workspace',
+      },
+    })
+
+    expect(noWorkspaceMarkup).toContain('class="app-empty-state git-panel-no-workspace-state"')
+    expect(loadingMarkup).toContain('class="app-loading-state git-panel-loading-state"')
+    expect(loadingMarkup).toContain('role="status"')
+    expect(cleanMarkup).toContain('class="app-empty-state git-panel-clean-state"')
+    expect(cleanMarkup).toContain('工作区干净')
+    expect(cleanMarkup).toContain('刷新')
   })
 
   it('preserves editable file actions in list and tree layouts', () => {
