@@ -122,7 +122,6 @@
 
 .segmented-tabs-option:hover:not(:disabled):not([data-disabled]):not([aria-disabled='true']):not(.is-active),
 .segmented-tabs-option:focus-visible:not(:disabled):not([data-disabled]):not([aria-disabled='true']):not(.is-active) {
-  outline: none;
   color: var(--foreground-primary);
 }
 

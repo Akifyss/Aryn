@@ -31,7 +31,10 @@ import {
   ViewerToolbar,
   ViewerToolbarGroup,
 } from '@/components/ui/document-viewer-controls'
-import { SegmentedTabs } from '@/components/ui/segmented-tabs/segmented-tabs'
+import {
+  SegmentedTabs,
+  type SegmentedTabOption,
+} from '@/components/ui/segmented-tabs/segmented-tabs'
 import {
   getGitFileDiffPresentation,
   isEditableGitFileDiff,
@@ -700,16 +703,12 @@ function ImageVersion({
 
 type ImageDiffMode = 'difference' | 'onion-skin' | 'swipe' | 'two-up'
 
-const IMAGE_DIFF_MODES: ReadonlyArray<{
-  label: string
-  value: ImageDiffMode
-  title: string
-}> = [
-  { label: '并排', value: 'two-up', title: '并排显示两个版本' },
-  { label: '滑动', value: 'swipe', title: '拖动分割线比较两个版本' },
-  { label: '叠加', value: 'onion-skin', title: '叠加两个版本并调整修改后版本的透明度' },
-  { label: '差异', value: 'difference', title: '突出显示像素差异' },
-]
+const IMAGE_DIFF_MODES = [
+  { label: '并排', value: 'two-up', tooltip: '并排显示两个版本' },
+  { label: '滑动', value: 'swipe', tooltip: '拖动分割线比较两个版本' },
+  { label: '叠加', value: 'onion-skin', tooltip: '叠加两个版本并调整修改后版本的透明度' },
+  { label: '差异', value: 'difference', tooltip: '突出显示像素差异' },
+] satisfies readonly SegmentedTabOption<ImageDiffMode>[]
 
 function ImageDiffModePicker({
   mode,

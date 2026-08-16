@@ -126,6 +126,12 @@ describe('application stylesheet ownership', () => {
     expect(treeSource).toContain("import './styles.css'")
     expect(previewSource).toContain("import './styles.css'")
     expect(segmentedTabsCss).toContain('height: 32px;')
+    expect(segmentedTabsCss).toMatch(
+      /\.segmented-tabs-option:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus\);/s,
+    )
+    expect(segmentedTabsCss).not.toMatch(
+      /\.segmented-tabs-option:focus-visible[^{}]*\{[^}]*outline:\s*none;/s,
+    )
     expect(segmentedTabsCss).toContain('@media (prefers-reduced-motion: reduce)')
   })
 })
