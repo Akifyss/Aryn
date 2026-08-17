@@ -41,8 +41,11 @@
   --app-item-row-radius: 8px;
   --app-item-font-size: 13px;
   --app-item-list-gap: 2px;
+  --workspace-surface-edge-gap: 6px;
+  --workspace-surface-radius: 8px;
   --file-tabs-top-gap: 6px;
-  --file-tab-radius: 8px;
+  --file-tabs-frame-gap: var(--workspace-surface-edge-gap);
+  --file-tab-radius: var(--workspace-surface-radius);
   --file-tab-shadow-handoff-duration: 100ms;
   --file-tab-shadow-handoff-easing: cubic-bezier(0.16, 1, 0.3, 1);
   --app-menu-content-padding: 6px;

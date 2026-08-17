@@ -100,6 +100,10 @@ const RIGHT_PANEL_CONTENT_INSET =
   'calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) + var(--right-chrome-content-gap))'
 const RIGHT_WINDOW_CONTROLS_WIDTH =
   'calc(var(--window-control-button-width) * var(--window-control-button-count))'
+const LEFT_CHROME_CONTROLS_END =
+  'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size))'
+const LEFT_PANEL_CONTENT_INSET =
+  'calc(var(--left-chrome-controls-end) + var(--left-chrome-content-gap))'
 
 const SHELL_CHROME_VARS = {
   macos: {
@@ -118,7 +122,8 @@ const SHELL_CHROME_VARS = {
     '--left-panel-toggle-anchor': '84px',
     '--right-panel-toggle-anchor': RIGHT_PANEL_TOGGLE_ANCHOR,
     '--right-panel-control-inset': RIGHT_PANEL_CONTROL_INSET,
-    '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
+    '--left-chrome-controls-end': LEFT_CHROME_CONTROLS_END,
+    '--left-panel-content-inset': LEFT_PANEL_CONTENT_INSET,
     '--right-panel-content-inset': RIGHT_PANEL_CONTENT_INSET,
     '--sidebar-icon-x': '20px',
   },
@@ -138,7 +143,8 @@ const SHELL_CHROME_VARS = {
     '--left-panel-toggle-anchor': '6px',
     '--right-panel-toggle-anchor': RIGHT_PANEL_TOGGLE_ANCHOR,
     '--right-panel-control-inset': RIGHT_PANEL_CONTROL_INSET,
-    '--left-panel-content-inset': 'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))',
+    '--left-chrome-controls-end': LEFT_CHROME_CONTROLS_END,
+    '--left-panel-content-inset': LEFT_PANEL_CONTENT_INSET,
     '--right-panel-content-inset': RIGHT_PANEL_CONTENT_INSET,
     '--sidebar-icon-x': '20px',
   },

@@ -14,6 +14,7 @@ export type FileTabsBoundaryShape =
 export type FileTabsBoundaryPathOptions = {
   frameHeight: number
   frameWidth: number
+  hasBottomBoundary?: boolean
   radius: number
   shape: FileTabsBoundaryShape
 }
@@ -69,6 +70,7 @@ type BoundaryVariantBase = {
   activeFillPath: string | null
   boundaryY: number
   currentBoundaryX: number
+  hasLeftBoundary: boolean
   outlineCommands: string[]
   surfaceLeftX: number
 }
@@ -197,6 +199,7 @@ function createBoundaryVariantBase({
     activeFillPath,
     boundaryY,
     currentBoundaryX,
+    hasLeftBoundary,
     outlineCommands,
     surfaceLeftX: hasLeftBoundary ? STROKE_CENTER_INSET : 0,
   }
@@ -228,6 +231,7 @@ function createRightBoundaryPaths(
   frameHeight: number,
   frameWidth: number,
   radius: number,
+  hasBottomBoundary: boolean,
 ): SelectedBoundaryPaths {
   const rightBoundaryX = frameWidth - STROKE_CENTER_INSET
   const rightCornerRadius = Math.min(
@@ -252,19 +256,67 @@ function createRightBoundaryPaths(
     )
   }
 
-  rightBoundaryCommands.push(
-    `L ${formatPathValue(rightBoundaryX)} ${formatPathValue(frameHeight)}`,
+  if (!hasBottomBoundary) {
+    rightBoundaryCommands.push(
+      `L ${formatPathValue(rightBoundaryX)} ${formatPathValue(frameHeight)}`,
+    )
+
+    const outlinePath = rightBoundaryCommands.join(' ')
+
+    return {
+      outlinePath,
+      surfacePath: [
+        outlinePath,
+        `L ${formatPathValue(base.surfaceLeftX)} ${formatPathValue(frameHeight)}`,
+        'Z',
+      ].join(' '),
+    }
+  }
+
+  const bottomBoundaryY = frameHeight - STROKE_CENTER_INSET
+  const bottomCornerRadius = Math.min(
+    radius,
+    Math.max(0, bottomBoundaryY - (base.boundaryY + rightCornerRadius)),
+    Math.max(0, (rightBoundaryX - base.surfaceLeftX) / 2),
   )
+  const bottomControlOffset = curveControlOffset(bottomCornerRadius)
+  const bottomLeftRadius = base.hasLeftBoundary ? bottomCornerRadius : 0
+
+  if (base.hasLeftBoundary) {
+    rightBoundaryCommands[0] = `M ${STROKE_CENTER_INSET} ${formatPathValue(bottomBoundaryY - bottomLeftRadius)}`
+  }
+
+  rightBoundaryCommands.push(
+    `L ${formatPathValue(rightBoundaryX)} ${formatPathValue(bottomBoundaryY - bottomCornerRadius)}`,
+  )
+
+  if (bottomCornerRadius > 0) {
+    rightBoundaryCommands.push(
+      `C ${formatPathValue(rightBoundaryX)} ${formatPathValue(bottomBoundaryY - bottomCornerRadius + bottomControlOffset)}`,
+      `${formatPathValue(rightBoundaryX - bottomCornerRadius + bottomControlOffset)} ${formatPathValue(bottomBoundaryY)}`,
+      `${formatPathValue(rightBoundaryX - bottomCornerRadius)} ${formatPathValue(bottomBoundaryY)}`,
+    )
+  }
+
+  const bottomLeftCornerEndX = base.surfaceLeftX + bottomLeftRadius
+  rightBoundaryCommands.push(
+    `L ${formatPathValue(bottomLeftCornerEndX)} ${formatPathValue(bottomBoundaryY)}`,
+  )
+
+  if (bottomLeftRadius > 0) {
+    const bottomLeftControlOffset = curveControlOffset(bottomLeftRadius)
+    rightBoundaryCommands.push(
+      `C ${formatPathValue(bottomLeftCornerEndX - bottomLeftControlOffset)} ${formatPathValue(bottomBoundaryY)}`,
+      `${formatPathValue(base.surfaceLeftX)} ${formatPathValue(bottomBoundaryY - bottomLeftRadius + bottomLeftControlOffset)}`,
+      `${formatPathValue(base.surfaceLeftX)} ${formatPathValue(bottomBoundaryY - bottomLeftRadius)}`,
+    )
+  }
 
   const outlinePath = rightBoundaryCommands.join(' ')
 
   return {
     outlinePath,
-    surfacePath: [
-      outlinePath,
-      `L ${formatPathValue(base.surfaceLeftX)} ${formatPathValue(frameHeight)}`,
-      'Z',
-    ].join(' '),
+    surfacePath: `${outlinePath} Z`,
   }
 }
 
@@ -282,6 +334,7 @@ function createBoundaryVariant(options: FileTabsBoundaryPathOptions & {
     options.frameHeight,
     options.frameWidth,
     options.radius,
+    options.hasBottomBoundary ?? false,
   )
 
   return {
@@ -296,6 +349,7 @@ function createBoundaryVariant(options: FileTabsBoundaryPathOptions & {
 function normalizeFileTabsBoundaryPathOptions({
   frameHeight,
   frameWidth,
+  hasBottomBoundary = false,
   radius,
   shape,
 }: FileTabsBoundaryPathOptions): FileTabsBoundaryPathOptions | null {
@@ -330,6 +384,7 @@ function normalizeFileTabsBoundaryPathOptions({
   return {
     frameHeight,
     frameWidth,
+    hasBottomBoundary,
     radius: resolvedRadius,
     shape: normalizedShape,
   }
@@ -353,12 +408,16 @@ export function createFileTabsBoundaryRenderablePaths({
     ...normalizedOptions,
     hasLeftBoundary,
   })
-  const selectedPaths = hasRightBoundary
+  // A visible bottom edge necessarily returns through the right edge. Treat
+  // that geometric invariant here so callers cannot request a bottom boundary
+  // that is silently dropped by an inconsistent right-edge flag.
+  const selectedPaths = hasRightBoundary || normalizedOptions.hasBottomBoundary
     ? createRightBoundaryPaths(
         base,
         normalizedOptions.frameHeight,
         normalizedOptions.frameWidth,
         normalizedOptions.radius,
+        normalizedOptions.hasBottomBoundary ?? false,
       )
     : createOpenBoundaryPaths(
         base,
@@ -383,12 +442,14 @@ export function createFileTabsBoundaryRenderablePaths({
 export function createFileTabsBoundaryPaths({
   frameHeight,
   frameWidth,
+  hasBottomBoundary = false,
   radius,
   shape,
 }: FileTabsBoundaryPathOptions): FileTabsBoundaryPaths | null {
   const normalizedOptions = normalizeFileTabsBoundaryPathOptions({
     frameHeight,
     frameWidth,
+    hasBottomBoundary,
     radius,
     shape,
   })

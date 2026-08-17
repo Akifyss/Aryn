@@ -42,7 +42,9 @@
 }
 
 .app-shell[data-left-collapsed='true'] .file-tabs-shell {
-  padding-left: calc(var(--left-panel-content-inset) + var(--file-tabs-collapsed-left-extra-gap));
+  /* The inset editor frame owns the visible workspace gutter. Start the tab
+     rail at the controls' actual end coordinate so chrome spacing is not stacked. */
+  padding-left: var(--left-chrome-controls-end);
 }
 
 .app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-agent .file-tabs-shell {

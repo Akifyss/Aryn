@@ -1,4 +1,7 @@
 .editor-frame {
+  --editor-frame-bottom-left-radius: 0px;
+  --editor-frame-bottom-right-radius: 0px;
+
   position: relative;
   display: flex;
   flex-direction: column;
@@ -6,6 +9,7 @@
   min-width: 0;
   min-height: 0;
   background: var(--background-primary);
+  border-radius: 0 0 var(--editor-frame-bottom-right-radius) var(--editor-frame-bottom-left-radius);
   overflow: hidden;
 }
 
@@ -31,7 +35,7 @@
 /* Reserve the frame outline's one-pixel footprint without changing the
    existing content alignment. The tab rail owns that outline in every state. */
 .app-shell[data-app-layout='agent'] .panel-agent > .editor-frame > .editor-content-shell,
-.app-shell[data-app-layout='editor'][data-left-collapsed='false'] .panel-editor > .editor-frame > .editor-content-shell {
+.app-shell[data-app-layout='editor'] .panel-editor > .editor-frame > .editor-content-shell {
   padding-left: 1px;
 }
 

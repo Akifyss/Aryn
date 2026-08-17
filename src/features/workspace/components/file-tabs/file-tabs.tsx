@@ -64,6 +64,7 @@ type FileTabsBoundaryGeometryBase = {
   frameLeft: number
   frameTop: number
   frameWidth: number
+  hasBottomBoundary: boolean
   hasLeftBoundary: boolean
   hasRightBoundary: boolean
   isTabActivating: boolean
@@ -104,6 +105,7 @@ type FileTabsBoundaryChromeRenderData = {
 const FILE_TAB_LABEL_TOOLTIP_DELAY = 500
 const FILE_TAB_TEXT_OVERFLOW_EPSILON = 1
 const FILE_TAB_BOUNDARY_GEOMETRY_EPSILON = 0.01
+const FILE_TAB_BOUNDARY_EDGE_GAP_EPSILON = 0.5
 const FILE_TAB_SHADOW_HANDOFF_FALLBACK_BUFFER_MS = 100
 
 function getTabLabel(tab: WorkspaceDisplayTab) {
@@ -223,6 +225,7 @@ function createFileTabsBoundaryChromeRenderData(
   const paths = createFileTabsBoundaryPaths({
     frameHeight: geometry.frameHeight,
     frameWidth: geometry.frameWidth,
+    hasBottomBoundary: geometry.hasBottomBoundary,
     radius: geometry.radius,
     shape: geometry.kind === 'active'
       ? {
@@ -245,14 +248,15 @@ function createFileTabsBoundaryChromeRenderData(
   const variant = geometry.hasLeftBoundary
     ? paths.withLeftBoundary
     : paths.withoutLeftBoundary
+  const hasClosedRightBoundary = geometry.hasRightBoundary || geometry.hasBottomBoundary
 
   return {
     activeFillPath: variant.activeFillPath,
-    outlinePath: geometry.hasRightBoundary
+    outlinePath: hasClosedRightBoundary
       ? variant.outlinePathWithRightBoundary
       : variant.outlinePath,
     paths,
-    surfacePath: geometry.hasRightBoundary
+    surfacePath: hasClosedRightBoundary
       ? variant.surfacePathWithRightBoundary
       : variant.surfacePath,
   }
@@ -337,6 +341,7 @@ const FileTabsBoundaryChrome = forwardRef<FileTabsBoundaryChromeHandle, {
       const nextRenderablePaths = createFileTabsBoundaryRenderablePaths({
         frameHeight: nextGeometry.frameHeight,
         frameWidth: nextGeometry.frameWidth,
+        hasBottomBoundary: nextGeometry.hasBottomBoundary,
         hasLeftBoundary: nextGeometry.hasLeftBoundary,
         hasRightBoundary: nextGeometry.hasRightBoundary,
         radius: nextGeometry.radius,
@@ -572,6 +577,7 @@ function areBoundaryGeometriesEqual(
     && Math.abs(currentGeometry.frameLeft - nextGeometry.frameLeft) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
     && Math.abs(currentGeometry.frameTop - nextGeometry.frameTop) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
     && Math.abs(currentGeometry.frameWidth - nextGeometry.frameWidth) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+    && currentGeometry.hasBottomBoundary === nextGeometry.hasBottomBoundary
     && currentGeometry.hasLeftBoundary === nextGeometry.hasLeftBoundary
     && currentGeometry.hasRightBoundary === nextGeometry.hasRightBoundary
     && currentGeometry.isTabActivating === nextGeometry.isTabActivating
@@ -612,6 +618,7 @@ function canAnimateActiveBoundaryTransition(
     && Math.abs(currentGeometry.frameLeft - nextGeometry.frameLeft) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
     && Math.abs(currentGeometry.frameTop - nextGeometry.frameTop) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
     && Math.abs(currentGeometry.frameWidth - nextGeometry.frameWidth) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+    && currentGeometry.hasBottomBoundary === nextGeometry.hasBottomBoundary
     && currentGeometry.hasLeftBoundary === nextGeometry.hasLeftBoundary
     && currentGeometry.hasRightBoundary === nextGeometry.hasRightBoundary
     && Math.abs(currentGeometry.radius - nextGeometry.radius) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
@@ -792,21 +799,29 @@ function FileTabsBoundaryChromeController({
       const computedStyle = window.getComputedStyle(shellElement)
       const radius = Number.parseFloat(computedStyle.getPropertyValue('--file-tab-radius')) || 0
       const panelElement = frameElement.parentElement
+      const panelRect = panelElement?.getBoundingClientRect() ?? null
       const appLayout = appShellElement?.dataset.appLayout
       const isEditorPanel = panelElement?.classList.contains('panel-editor') ?? false
       const isAgentPanel = panelElement?.classList.contains('panel-agent') ?? false
       const hasLeftBoundary = (
         (appLayout === 'agent' && isAgentPanel)
-        || (
-          appLayout === 'editor'
-          && isEditorPanel
-          && appShellElement?.dataset.leftCollapsed === 'false'
-        )
+        || (appLayout === 'editor' && isEditorPanel)
+      )
+      const hasBottomBoundary = Boolean(
+        panelRect
+        && panelRect.bottom - frameRect.bottom > FILE_TAB_BOUNDARY_EDGE_GAP_EPSILON,
       )
       const hasRightBoundary = (
-        appLayout === 'editor'
-        && isEditorPanel
-        && appShellElement?.dataset.rightCollapsed === 'false'
+        (
+          appLayout === 'editor'
+          && isEditorPanel
+          && appShellElement?.dataset.rightCollapsed === 'false'
+        )
+        || Boolean(
+          panelRect
+          && panelRect.right - frameRect.right > FILE_TAB_BOUNDARY_EDGE_GAP_EPSILON,
+        )
+        || hasBottomBoundary
       )
       const frameIsChanging = isLayoutChanging()
       let nextGeometry: FileTabsBoundaryGeometry
@@ -818,6 +833,7 @@ function FileTabsBoundaryChromeController({
           frameLeft: frameRect.left,
           frameTop: frameRect.top,
           frameWidth: frameRect.width,
+          hasBottomBoundary,
           hasLeftBoundary,
           hasRightBoundary,
           isTabActivating: false,
@@ -847,6 +863,7 @@ function FileTabsBoundaryChromeController({
           frameLeft: frameRect.left,
           frameTop: frameRect.top,
           frameWidth: frameRect.width,
+          hasBottomBoundary,
           hasLeftBoundary,
           hasRightBoundary,
           isTabActivating: false,

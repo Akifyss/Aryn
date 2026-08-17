@@ -1,7 +1,7 @@
 .agent-shell {
   --agent-content-max-width: 800px;
   --agent-messages-block-padding: 8px;
-  --agent-messages-inline-padding: 8px;
+  --agent-messages-inline-padding: var(--workspace-surface-edge-gap);
   --agent-messages-bottom-padding: 104px;
   position: relative;
   display: flex;

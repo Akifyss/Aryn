@@ -81,6 +81,7 @@ describe('bb unified session surface build contract', () => {
     const [
       source,
       styles,
+      agentChatStyles,
       composerStyles,
       messageSource,
       appScrollAreaSource,
@@ -92,6 +93,10 @@ describe('bb unified session surface build contract', () => {
       ),
       readFile(
         new URL('../packages/bb-session-surface/src/index.css', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL('../src/features/agent/components/agent-chat-surface/styles.css', import.meta.url),
         'utf8',
       ),
       readFile(
@@ -137,7 +142,12 @@ describe('bb unified session surface build contract', () => {
     )
     expect(appScrollAreaStyles).toContain('.app-scroll-area-external-overlay')
     expect(composerStyles).toContain('max-width: var(--agent-content-max-width)')
-    expect(composerStyles).toContain('--agent-composer-padding-inline: 8px')
+    expect(agentChatStyles).toContain(
+      '--agent-messages-inline-padding: var(--workspace-surface-edge-gap);',
+    )
+    expect(composerStyles).toContain(
+      '--agent-composer-padding-inline: var(--workspace-surface-edge-gap);',
+    )
   })
 
   it('adds accessibility and long-timeline safeguards outside the exact upstream mirror', async () => {

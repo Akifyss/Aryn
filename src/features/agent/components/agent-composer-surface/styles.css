@@ -10,10 +10,12 @@
 .agent-composer-shell {
   --agent-composer-control-gap: 11px;
   --agent-composer-menu-gap: 10px;
-  --agent-composer-padding-block-end: 8px;
+  --agent-composer-padding-block-end: var(--workspace-surface-edge-gap);
   --agent-composer-padding-block-start: 8px;
-  --agent-composer-padding-inline: 8px;
-  --agent-composer-radius: 14px;
+  --agent-composer-padding-inline: var(--workspace-surface-edge-gap);
+  --agent-composer-padding-inline-end: var(--agent-composer-padding-inline);
+  --agent-composer-padding-inline-start: var(--agent-composer-padding-inline);
+  --agent-composer-radius: var(--workspace-surface-radius);
   --agent-project-bar-height: 42px;
   --agent-project-bar-overlap: 14px;
   --agent-composer-text-min-height: 120px;
@@ -24,7 +26,8 @@
   width: 100%;
   max-width: var(--agent-content-max-width);
   margin: 0 auto;
-  padding: var(--agent-composer-padding-block-start) var(--agent-composer-padding-inline) var(--agent-composer-padding-block-end);
+  padding-block: var(--agent-composer-padding-block-start) var(--agent-composer-padding-block-end);
+  padding-inline: var(--agent-composer-padding-inline-start) var(--agent-composer-padding-inline-end);
   isolation: isolate;
 }
 

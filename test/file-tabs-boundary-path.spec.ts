@@ -74,6 +74,47 @@ describe('file tabs boundary path', () => {
     expect(paths?.withLeftBoundary.outlinePath).not.toContain('NaN')
   })
 
+  it('closes an inset frame with one continuous bottom edge and matching corners', () => {
+    const paths = createFileTabsBoundaryPaths({
+      ...interiorTabGeometry,
+      hasBottomBoundary: true,
+    })
+
+    expect(paths).not.toBeNull()
+    expect(paths?.withLeftBoundary.outlinePathWithRightBoundary).toMatch(
+      /^M 0\.5 489\.5 L 0\.5 52\.5 C .* L 799\.5 489\.5 C .* L 10\.5 499\.5 C .* 0\.5 489\.5$/,
+    )
+    expect(paths?.withLeftBoundary.surfacePathWithRightBoundary).toBe(
+      `${paths?.withLeftBoundary.outlinePathWithRightBoundary} Z`,
+    )
+    expect(paths?.withoutLeftBoundary.outlinePathWithRightBoundary).toMatch(
+      /^M 0 42\.5 .* L 799\.5 489\.5 C .* L 0 499\.5$/,
+    )
+    expect(paths?.withoutLeftBoundary.surfacePathWithRightBoundary).toBe(
+      `${paths?.withoutLeftBoundary.outlinePathWithRightBoundary} Z`,
+    )
+  })
+
+  it('never drops a requested bottom edge when the right-edge flag is absent', () => {
+    const completePaths = createFileTabsBoundaryPaths({
+      ...interiorTabGeometry,
+      hasBottomBoundary: true,
+    })
+    const renderablePaths = createFileTabsBoundaryRenderablePaths({
+      ...interiorTabGeometry,
+      hasBottomBoundary: true,
+      hasLeftBoundary: true,
+      hasRightBoundary: false,
+    })
+
+    expect(renderablePaths?.outlinePath).toBe(
+      completePaths?.withLeftBoundary.outlinePathWithRightBoundary,
+    )
+    expect(renderablePaths?.surfacePath).toBe(
+      completePaths?.withLeftBoundary.surfacePathWithRightBoundary,
+    )
+  })
+
   it('uses the same continuous active profile without manufacturing a left divider', () => {
     const paths = createFileTabsBoundaryPaths(interiorTabGeometry)
 

@@ -22,8 +22,10 @@ import {
 } from '../src/features/layout/shell-layout'
 
 describe('shell layout helpers', () => {
+  const leftChromeControlsEnd =
+    'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size))'
   const leftPanelContentInset =
-    'calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-content-gap))'
+    'calc(var(--left-chrome-controls-end) + var(--left-chrome-content-gap))'
   const rightPanelToggleAnchor =
     'calc(var(--right-window-controls-width) + var(--right-chrome-edge-gap))'
   const rightPanelControlInset =
@@ -60,6 +62,19 @@ describe('shell layout helpers', () => {
       + px(vars, '--panel-toggle-gap')
   }
 
+  function leftChromeControlsEndPx(vars: Record<string, string>) {
+    return px(vars, '--left-panel-toggle-anchor')
+      + px(vars, '--layout-mode-switch-width')
+      + px(vars, '--left-chrome-action-gap')
+      + px(vars, '--panel-toggle-size')
+      + px(vars, '--left-chrome-action-gap')
+      + px(vars, '--panel-toggle-size')
+  }
+
+  function leftPanelContentInsetPx(vars: Record<string, string>) {
+    return leftChromeControlsEndPx(vars) + px(vars, '--left-chrome-content-gap')
+  }
+
   async function readGlobalCss() {
     const globalCss = await readFile(new URL('../src/index.css', import.meta.url), 'utf8')
     return globalCss.replace(/\r\n/g, '\n')
@@ -92,6 +107,22 @@ describe('shell layout helpers', () => {
       'utf8',
     )
     return agentChatSurfaceCss.replace(/\r\n/g, '\n')
+  }
+
+  async function readAgentComposerSurfaceCss() {
+    const agentComposerSurfaceCss = await readFile(
+      new URL('../src/features/agent/components/agent-composer-surface/styles.css', import.meta.url),
+      'utf8',
+    )
+    return agentComposerSurfaceCss.replace(/\r\n/g, '\n')
+  }
+
+  async function readAgentComposerMentionInputCss() {
+    const agentComposerMentionInputCss = await readFile(
+      new URL('../src/features/agent/components/agent-composer-mention-input/styles.css', import.meta.url),
+      'utf8',
+    )
+    return agentComposerMentionInputCss.replace(/\r\n/g, '\n')
   }
 
   async function readShellLayoutControllerSource() {
@@ -267,6 +298,7 @@ describe('shell layout helpers', () => {
       '--left-panel-toggle-anchor': '84px',
       '--right-panel-toggle-anchor': rightPanelToggleAnchor,
       '--right-panel-control-inset': rightPanelControlInset,
+      '--left-chrome-controls-end': leftChromeControlsEnd,
       '--left-panel-content-inset': leftPanelContentInset,
       '--right-panel-content-inset': rightPanelContentInset,
     })
@@ -286,6 +318,7 @@ describe('shell layout helpers', () => {
       '--left-panel-toggle-anchor': '6px',
       '--right-panel-toggle-anchor': rightPanelToggleAnchor,
       '--right-panel-control-inset': rightPanelControlInset,
+      '--left-chrome-controls-end': leftChromeControlsEnd,
       '--left-panel-content-inset': leftPanelContentInset,
       '--right-panel-content-inset': rightPanelContentInset,
     })
@@ -301,6 +334,16 @@ describe('shell layout helpers', () => {
     expect(rightPanelToggleAnchorPx(windowsVars)).toBe(150)
     expect(rightPanelControlInsetPx(windowsVars)).toBe(184)
     expect(rightPanelContentInsetPx(windowsVars)).toBe(188)
+  })
+
+  it('keeps left chrome content spacing separate from the controls boundary', () => {
+    const macosVars = getShellChromeVars('macos')
+    const windowsVars = getShellChromeVars('windows')
+
+    expect(leftChromeControlsEndPx(macosVars)).toBe(214)
+    expect(leftPanelContentInsetPx(macosVars)).toBe(216)
+    expect(leftChromeControlsEndPx(windowsVars)).toBe(136)
+    expect(leftPanelContentInsetPx(windowsVars)).toBe(138)
   })
 
   it('keeps file tab chrome edges from doubling against adjacent panels', async () => {
@@ -452,15 +495,45 @@ describe('shell layout helpers', () => {
   })
 
   it('keeps the panel boundary and resize guide continuous with the active tab chrome', async () => {
-    const [appShellCss, editorSurfaceCss, fileTabsCss, globalCss] = await Promise.all([
+    const [
+      agentComposerMentionInputCss,
+      agentComposerSurfaceCss,
+      appShellCss,
+      editorSurfaceCss,
+      fileTabsCss,
+      globalCss,
+    ] = await Promise.all([
+      readAgentComposerMentionInputCss(),
+      readAgentComposerSurfaceCss(),
       readAppShellCss(),
       readWorkspaceEditorSurfaceCss(),
       readFileTabsCss(),
       readGlobalCss(),
     ])
 
+    expect(globalCss).toContain('--workspace-surface-edge-gap: 6px;')
+    expect(globalCss).toContain('--workspace-surface-radius: 8px;')
     expect(globalCss).toContain('--file-tabs-top-gap: 6px;')
-    expect(globalCss).toContain('--file-tab-radius: 8px;')
+    expect(globalCss).toContain('--file-tabs-frame-gap: var(--workspace-surface-edge-gap);')
+    expect(globalCss).toContain('--file-tab-radius: var(--workspace-surface-radius);')
+    expect(agentComposerSurfaceCss).toContain(
+      '--agent-composer-padding-block-end: var(--workspace-surface-edge-gap);',
+    )
+    expect(agentComposerSurfaceCss).toContain(
+      '--agent-composer-padding-inline: var(--workspace-surface-edge-gap);',
+    )
+    expect(agentComposerSurfaceCss).toContain(
+      '--agent-composer-padding-inline-start: var(--agent-composer-padding-inline);',
+    )
+    expect(agentComposerSurfaceCss).toContain(
+      'padding-inline: var(--agent-composer-padding-inline-start) var(--agent-composer-padding-inline-end);',
+    )
+    expect(agentComposerSurfaceCss).toContain(
+      '--agent-composer-radius: var(--workspace-surface-radius);',
+    )
+    expect(agentComposerMentionInputCss).toContain(
+      'border-radius: var(--agent-composer-radius);',
+    )
     expect(globalCss).toContain('--file-tab-shadow-handoff-duration: 100ms;')
     expect(globalCss).toContain('--file-tab-shadow-handoff-easing: cubic-bezier(0.16, 1, 0.3, 1);')
     expect(appShellCss).toContain('--tabs-chrome-height: var(--chrome-height);')
@@ -493,10 +566,42 @@ describe('shell layout helpers', () => {
     expect(appShellCss).toContain(`.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .panel-agent {
   border-left: 0;
 }`)
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='editor'] .panel-agent:not(.panel-agent-drawer) .agent-composer-shell {
+  --agent-composer-padding-inline-start: 0px;
+}`)
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='editor'] .panel-editor:has(> .editor-frame),
+.app-shell[data-app-layout='agent'] .panel-agent:not(.panel-agent-drawer):has(> .editor-frame) {
+  box-sizing: border-box;
+  padding-right: var(--file-tabs-frame-gap);
+  padding-bottom: var(--file-tabs-frame-gap);
+  background: var(--sidebar);
+}`)
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='editor'][data-left-collapsed='true'] .panel-editor:has(> .editor-frame) {
+  padding-left: var(--file-tabs-frame-gap);
+}`)
+    expect(fileTabsCss).toContain(`.app-shell[data-left-collapsed='true'] .file-tabs-shell {
+  /* The inset editor frame owns the visible workspace gutter. Start the tab
+     rail at the controls' actual end coordinate so chrome spacing is not stacked. */
+  padding-left: var(--left-chrome-controls-end);
+}`)
+    expect(appShellCss).not.toContain('--file-tabs-collapsed-left-extra-gap')
+    expect(appShellCss).toContain(
+      '--left-chrome-controls-end: calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--left-chrome-action-gap) + var(--panel-toggle-size));',
+    )
+    expect(appShellCss).toContain(
+      '--left-panel-content-inset: calc(var(--left-chrome-controls-end) + var(--left-chrome-content-gap));',
+    )
+    expect(appShellCss).not.toMatch(/\.panel-editor:has\(> \.editor-frame\)[^{]*\{[^}]*transition:\s*padding-left/s)
+    expect(appShellCss).toContain(`.app-shell[data-app-layout='editor'] .panel-editor > .editor-frame,
+.app-shell[data-app-layout='agent'] .panel-agent:not(.panel-agent-drawer) > .editor-frame {
+  --editor-frame-bottom-left-radius: var(--workspace-surface-radius);
+  --editor-frame-bottom-right-radius: var(--workspace-surface-radius);
+}`)
     expect(appShellCss).toContain(`.app-shell[data-app-layout='agent'] .panel-resize-slot-right .panel-resize-handle::before,
 .app-shell[data-app-layout='editor'] .panel-resize-slot-left .panel-resize-handle::before,
 .app-shell[data-app-layout='editor'] .panel-resize-slot-right .panel-resize-handle::before {
   top: calc(var(--tabs-chrome-height) + var(--file-tab-radius) - 1px);
+  bottom: calc(var(--file-tabs-frame-gap) + var(--file-tab-radius));
   left: 50%;
   border-radius: 0;
 }`)
@@ -505,6 +610,7 @@ describe('shell layout helpers', () => {
   transform: none;
 }`)
     expect(appShellCss).toContain(`.app-shell[data-app-layout='editor'] .panel-resize-slot-right .panel-resize-handle::before {
+  left: calc(50% - var(--file-tabs-frame-gap));
   transform: translateX(-100%);
 }`)
     expect(appShellCss).toContain(`.app-shell[data-app-layout='agent']:has(.panel-agent > .editor-frame > .file-tabs-shell[data-first-tab-active='true'])
@@ -525,7 +631,12 @@ describe('shell layout helpers', () => {
     const editorFrameRule = editorSurfaceCss.match(/\.editor-frame\s*\{[^}]*\}/)?.[0]
     const editorContentShellRule = editorSurfaceCss.match(/\.editor-content-shell\s*\{[^}]*\}/)?.[0]
     expect(editorFrameRule).toBeDefined()
-    expect(editorFrameRule).not.toContain('border')
+    expect(editorFrameRule).not.toMatch(/\n\s*border:/)
+    expect(editorFrameRule).toContain('--editor-frame-bottom-left-radius: 0px;')
+    expect(editorFrameRule).toContain('--editor-frame-bottom-right-radius: 0px;')
+    expect(editorFrameRule).toContain(
+      'border-radius: 0 0 var(--editor-frame-bottom-right-radius) var(--editor-frame-bottom-left-radius);',
+    )
     expect(editorContentShellRule).toBeDefined()
     expect(editorContentShellRule).not.toContain('border')
     expect(fileTabsCss).toMatch(/\.file-tabs-shell\s*\{[^}]*z-index: 3;/s)
@@ -588,6 +699,10 @@ describe('shell layout helpers', () => {
     expect(fileTabsSource).toContain("className='file-tabs-boundary-shadow-layer is-layout-snapshot'")
     expect(fileTabsSource).toContain("className='file-tabs-boundary-shadow-layer is-shadow-handoff-outgoing'")
     expect(fileTabsSource).toContain("className='file-tabs-boundary-shadow-layer is-shadow-handoff-incoming'")
+    expect(fileTabsSource).toContain('panelRect.bottom - frameRect.bottom')
+    expect(fileTabsSource).toContain('panelRect.right - frameRect.right')
+    expect(fileTabsSource).toContain('|| hasBottomBoundary')
+    expect(fileTabsSource).toContain("(appLayout === 'editor' && isEditorPanel)")
     expect(fileTabsBoundaryShadowSource).toContain('const FileTabsBoundaryShadowSurface = memo(')
     expect(fileTabsSource).toContain("event.animationName === 'file-tabs-shadow-handoff-in'")
     expect(fileTabsSource).toContain("appShellElement?.hasAttribute('data-sidebar-transition')")
@@ -934,6 +1049,7 @@ describe('shell layout helpers', () => {
       '--left-panel-toggle-anchor': '6px',
       '--right-panel-toggle-anchor': rightPanelToggleAnchor,
       '--right-panel-control-inset': rightPanelControlInset,
+      '--left-chrome-controls-end': leftChromeControlsEnd,
       '--left-panel-content-inset': leftPanelContentInset,
       '--right-panel-content-inset': rightPanelContentInset,
     })

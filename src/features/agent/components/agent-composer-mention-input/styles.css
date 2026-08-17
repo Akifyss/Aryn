@@ -56,7 +56,7 @@
   box-sizing: border-box;
   overflow: hidden;
   border: 1px solid var(--border-primary);
-  border-radius: 14px;
+  border-radius: var(--agent-composer-radius);
   background: var(--field-background);
   box-shadow: var(--shadow-xs);
 }
