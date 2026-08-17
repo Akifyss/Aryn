@@ -58,6 +58,15 @@ describe('bb unified session surface build contract', () => {
     await expect(access(new URL('../packages/pi-web-session-surface', import.meta.url))).rejects.toThrow()
   })
 
+  it('lets the Aryn conversation surface own the background', async () => {
+    const styles = await readFile(
+      new URL('../packages/bb-session-surface/src/index.css', import.meta.url),
+      'utf8',
+    )
+
+    expect(styles).toMatch(/\.aryn-bb-session-surface\s*\{[^}]*background-color:\s*transparent;/s)
+  })
+
   it('mounts bb timeline rows inside the exact upstream bottom-anchor owner', async () => {
     const source = await readFile(
       new URL('../packages/bb-session-surface/src/index.tsx', import.meta.url),

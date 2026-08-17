@@ -66,6 +66,36 @@ if (!css.includes('.aryn-bb-session-surface')) {
   throw new Error('Built bb stylesheet does not contain the surface scope')
 }
 
+const surfaceRootBackgroundDeclarations = []
+const surfaceRootSelectors = new Set([
+  '.aryn-bb-session-surface',
+  ':is(.aryn-bb-session-surface,[data-bb-plugin-root])',
+])
+stylesheet.walkDecls(/^(?:background|background-color)$/, (declaration) => {
+  const parent = declaration.parent
+  if (
+    parent?.type === 'rule'
+    && parent.selectors.some((selector) => surfaceRootSelectors.has(selector.trim()))
+  ) {
+    surfaceRootBackgroundDeclarations.push(declaration)
+  }
+})
+const finalSurfaceRootBackground = surfaceRootBackgroundDeclarations.at(-1)
+const normalizeCssValue = (value) => value.replaceAll(' ', '').toLowerCase()
+const transparentBackgroundValues = new Set([
+  'transparent',
+  '#0000',
+  '#00000000',
+  'rgba(0,0,0,0)',
+  'rgb(0 0 0/0)',
+].map(normalizeCssValue))
+if (
+  finalSurfaceRootBackground?.prop !== 'background-color'
+  || !transparentBackgroundValues.has(normalizeCssValue(finalSurfaceRootBackground.value))
+) {
+  throw new Error('Built bb surface root must end its background cascade with a transparent background color')
+}
+
 const bundledFiraCodeWeights = new Set()
 stylesheet.walkAtRules('font-face', (fontFace) => {
   let family = ''

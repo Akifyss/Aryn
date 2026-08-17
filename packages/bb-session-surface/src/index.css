@@ -12,6 +12,8 @@
 }
 
 .aryn-bb-session-surface {
+  /* Aryn owns the surrounding conversation surface and its theme background. */
+  background-color: transparent;
   box-sizing: border-box;
   color: var(--foreground);
   display: flex;
