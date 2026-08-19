@@ -24,7 +24,7 @@ type CommandPaletteProps = {
   sessions: AgentSessionListItem[]
   iconTheme: WorkspaceIconTheme | null
   onOpenFile: (path: string) => void
-  onOpenSession: (path: string) => void
+  onOpenSession: (path: string, label: string) => void
   theme: 'light' | 'dark' | 'auto'
 }
 
@@ -66,7 +66,7 @@ export function CommandPalette({
     if (item.category === 'file') {
       onOpenFile(item.path)
     } else {
-      onOpenSession(item.path)
+      onOpenSession(item.path, item.label)
     }
 
     onClose()

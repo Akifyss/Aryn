@@ -121,7 +121,11 @@ export function useWorkspaceProjectController({
     ))
   }, [])
 
-  const queueCurrentProjectSession = useCallback((sessionPath: string, agentId: AgentId) => {
+  const queueCurrentProjectSession = useCallback((
+    sessionPath: string,
+    agentId: AgentId,
+    sessionLabel: string,
+  ) => {
     const currentProject = getProjectByWorkspacePath(projectState, currentPath)
 
     if (!currentProject) {
@@ -134,6 +138,7 @@ export function useWorkspaceProjectController({
       kind: 'session',
       projectId: currentProject.id,
       requestId: agentProjectSessionRequestIdRef.current,
+      sessionLabel,
       sessionPath,
     })
     return true
@@ -349,7 +354,12 @@ export function useWorkspaceProjectController({
 
   async function requestAgentProjectSession(
     project: ProjectRecord,
-    request: { kind: 'new' } | { agentId: AgentId, kind: 'session', sessionPath: string },
+    request: { kind: 'new' } | {
+      agentId: AgentId
+      kind: 'session'
+      sessionLabel: string
+      sessionPath: string
+    },
   ) {
     agentProjectSessionRequestIdRef.current += 1
     const requestId = agentProjectSessionRequestIdRef.current
@@ -359,6 +369,7 @@ export function useWorkspaceProjectController({
           agentId: request.agentId,
           projectId: project.id,
           requestId,
+          sessionLabel: request.sessionLabel,
           sessionPath: request.sessionPath,
         }
       : {
@@ -486,8 +497,18 @@ export function useWorkspaceProjectController({
     }
   }
 
-  async function openProjectSession(project: ProjectRecord, agentId: AgentId, sessionPath: string) {
-    await requestAgentProjectSession(project, { agentId, kind: 'session', sessionPath })
+  async function openProjectSession(
+    project: ProjectRecord,
+    agentId: AgentId,
+    sessionPath: string,
+    sessionLabel: string,
+  ) {
+    await requestAgentProjectSession(project, {
+      agentId,
+      kind: 'session',
+      sessionLabel,
+      sessionPath,
+    })
   }
 
   async function startProjectSession(project: ProjectRecord) {

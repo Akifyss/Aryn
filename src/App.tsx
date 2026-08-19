@@ -497,10 +497,11 @@ function App() {
     }
   }, [isLeftDrawerOpen, isRightDrawerOpen, projectMenuMode, projectMenuSurface])
 
-  const handleOpenSession = useCallback((sessionPath: string) => {
+  const handleOpenSession = useCallback((sessionPath: string, sessionLabel: string) => {
     if (queueCurrentProjectSession(
       sessionPath,
       agentWorkspaceState?.runtime.agentId ?? DEFAULT_AGENT_ID,
+      sessionLabel,
     )) {
       revealEditorAssistantSurface()
     }

@@ -22,7 +22,10 @@ import type {
   AgentProjectSwitchMenuOptions,
 } from '@/features/agent/components/agent-session-tree/agent-session-tree'
 import type { AgentSessionStatus } from '@/features/agent/components/agent-session-status/agent-session-status'
-import type { AgentSessionSelection } from '@/features/agent/lib/project-session-request'
+import type {
+  AgentSessionControlTarget,
+  AgentSessionSelection,
+} from '@/features/agent/lib/project-session-request'
 import type { AgentProjectSessionBucket } from '@/features/agent/lib/session-tree'
 import type { AgentLiveToolState } from '@/features/agent/runtime/use-agent-runtime-events'
 import type {
@@ -144,6 +147,7 @@ export type AgentContextValue = {
     project: ProjectRecord,
     agentId: AgentId,
     sessionPath: string,
+    sessionLabel: string,
   ) => Promise<void> | void
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
   onStartStandaloneConversation?: () => Promise<void> | void
@@ -176,6 +180,7 @@ export type AgentContextValue = {
     answers?: Record<string, string[]>,
   ) => Promise<void>
   sessionStatus: AgentSessionStatus | null
+  sessionControlTarget: AgentSessionControlTarget
   setActiveComposerMenu: Dispatch<SetStateAction<AgentComposerMenu>>
   setActiveOverlayPanel: Dispatch<SetStateAction<'sessions' | null>>
   setComposerState: Dispatch<SetStateAction<AgentComposerState>>

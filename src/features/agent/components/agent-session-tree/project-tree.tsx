@@ -499,7 +499,12 @@ export function AgentProjectTree({
             setRenamingConversationId(null)
             const openSession = isCurrentActiveProject
               ? handleOpenSession(session.agentId, session.path)
-              : onOpenProjectSession?.(project, session.agentId, session.path)
+              : onOpenProjectSession?.(
+                  project,
+                  session.agentId,
+                  session.path,
+                  formatAgentSessionLabel(session),
+                )
             void Promise.resolve(openSession).then(() => {
               onRequestClose?.()
             })

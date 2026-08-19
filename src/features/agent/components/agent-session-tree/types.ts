@@ -47,7 +47,12 @@ export type AgentSessionTreeController = {
   onRenameConversation?: (conversation: ConversationRecord, title: string) => Promise<void> | void
   onRemoveConversation?: (conversation: ConversationRecord) => Promise<void> | void
   onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
-  onOpenProjectSession?: (project: ProjectRecord, agentId: AgentId, sessionPath: string) => Promise<void> | void
+  onOpenProjectSession?: (
+    project: ProjectRecord,
+    agentId: AgentId,
+    sessionPath: string,
+    sessionLabel: string,
+  ) => Promise<void> | void
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
   onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void

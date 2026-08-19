@@ -565,16 +565,18 @@ export function useAgentSessionNavigation({
     }
 
     handledExternalSessionRequestRef.current = externalSessionRequest.requestId
-    onExternalSessionRequestHandled?.(externalSessionRequest.requestId)
 
     if (externalSessionRequest.kind === 'new') {
+      onExternalSessionRequestHandled?.(externalSessionRequest.requestId)
       if (presentedExternalNewSessionRequestRef.current !== externalSessionRequest.requestId) {
         handleStartNewSession(requestedProject?.path ?? workspacePath)
       }
       return
     }
 
-    void handleOpenSession(externalSessionRequest.agentId, externalSessionRequest.sessionPath)
+    void handleOpenSession(externalSessionRequest.agentId, externalSessionRequest.sessionPath).finally(() => {
+      onExternalSessionRequestHandled?.(externalSessionRequest.requestId)
+    })
   }, [
     externalSessionRequest,
     hasLoadedWorkspaceState,

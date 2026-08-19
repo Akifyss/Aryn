@@ -4,7 +4,6 @@ import {
   useMemo,
   useState,
 } from 'react'
-import { EditLine } from '@mingcute/react'
 import type { AgentId } from '@/features/agent/agent-definition'
 import {
   formatAgentSessionLabel,
@@ -77,7 +76,6 @@ export function FlatAgentSessionTree({
     handleOpenSession,
     handlePrefetchSession,
     handleRenameSession,
-    handleStartNewSession,
     loadProjectSessions,
     onOpenProjectSession,
     projectSessions,
@@ -224,7 +222,12 @@ export function FlatAgentSessionTree({
           }
 
           if (!currentProject || !onOpenProjectSession) return
-          void Promise.resolve(onOpenProjectSession(currentProject, session.agentId, session.path)).then(() => {
+          void Promise.resolve(onOpenProjectSession(
+            currentProject,
+            session.agentId,
+            session.path,
+            formatAgentSessionLabel(session),
+          )).then(() => {
             onRequestClose?.()
           })
         }}
@@ -241,22 +244,6 @@ export function FlatAgentSessionTree({
 
   return (
     <div className={`agent-session-tree-shell${className ? ` ${className}` : ''}`}>
-      {!isFloating ? (
-        <button
-          type='button'
-          disabled={!workspacePath}
-          className='agent-session-new-button'
-          aria-label='Start new conversation'
-          onClick={() => {
-            handleStartNewSession()
-            onRequestClose?.()
-          }}
-        >
-          <EditLine />
-          <span>新对话</span>
-        </button>
-      ) : null}
-
       <VirtualizedAgentTreeList
         activeRowKey={activeRowKey}
         ariaBusy={isSessionListPending}

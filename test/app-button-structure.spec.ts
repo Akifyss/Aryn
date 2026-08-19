@@ -211,9 +211,6 @@ describe('shared text button', () => {
     expect(viewerControlsSource).toBeDefined()
     expect(viewerControlsSource ?? '').not.toContain('ViewerControlButton')
     expect(agentSessionTreeSource).toMatch(
-      /<button[\s\S]{0,240}className='agent-session-new-button'/,
-    )
-    expect(agentSessionTreeSource).toMatch(
       /<AppTooltipButton[\s\S]{0,240}className='agent-session-new-button'/,
     )
     expect(agentSessionTreeSource).not.toMatch(

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   isAgentWorkspaceTargetPreparing,
   isAgentNewConversationPresentation,
+  resolveAgentSessionControlTarget,
   resolvePendingAgentNewSessionProject,
   resolveAgentWorkspaceSessionRestore,
   shouldApplyAgentSessionOperationResult,
@@ -50,8 +51,60 @@ describe('resolvePendingAgentNewSessionProject', () => {
       kind: 'session',
       projectId: 'project-1',
       requestId: 1,
+      sessionLabel: 'Target session',
       sessionPath: 'thread-1',
     }, { kind: 'project', projectId: 'project-1' }, projects)).toBeNull()
+  })
+})
+
+describe('resolveAgentSessionControlTarget', () => {
+  const currentSelection = {
+    agentId: 'pi' as const,
+    kind: 'session' as const,
+    sessionPath: 'previous-session',
+  }
+
+  it('commits an accepted project session target before its snapshot is ready', () => {
+    expect(resolveAgentSessionControlTarget({
+      agentId: 'codex',
+      kind: 'session',
+      projectId: 'project-1',
+      requestId: 4,
+      sessionLabel: 'Target session',
+      sessionPath: 'target-session',
+    }, { kind: 'project', projectId: 'project-1' }, currentSelection)).toEqual({
+      label: 'Target session',
+      selection: {
+        agentId: 'codex',
+        kind: 'session',
+        sessionPath: 'target-session',
+      },
+    })
+  })
+
+  it('commits a matching new-session intent without inheriting the source title', () => {
+    expect(resolveAgentSessionControlTarget({
+      kind: 'new',
+      projectId: 'project-1',
+      requestId: 5,
+    }, { kind: 'project', projectId: 'project-1' }, currentSelection)).toEqual({
+      label: null,
+      selection: { kind: 'new' },
+    })
+  })
+
+  it('ignores stale requests owned by another context', () => {
+    expect(resolveAgentSessionControlTarget({
+      agentId: 'codex',
+      kind: 'session',
+      projectId: 'project-1',
+      requestId: 6,
+      sessionLabel: 'Stale session',
+      sessionPath: 'stale-session',
+    }, { kind: 'project', projectId: 'project-2' }, currentSelection)).toEqual({
+      label: null,
+      selection: currentSelection,
+    })
   })
 })
 
@@ -162,6 +215,7 @@ describe('resolveAgentWorkspaceSessionRestore', () => {
       kind: 'session',
       projectId: 'project-1',
       requestId: 1,
+      sessionLabel: 'Third session',
       sessionPath: 'C:/sessions/third.jsonl',
     }
 
@@ -205,6 +259,7 @@ describe('resolveAgentWorkspaceSessionRestore', () => {
       kind: 'session',
       projectId: 'project-1',
       requestId: 1,
+      sessionLabel: 'Third session',
       sessionPath: 'C:/sessions/third.jsonl',
     }
 

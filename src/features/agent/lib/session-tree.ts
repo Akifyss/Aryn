@@ -50,10 +50,8 @@ export function sanitizeFlatAgentSessionPath(value: string) {
     .trim()
 }
 
-export function formatAgentSessionLabel(session: AgentSessionListItem | null) {
-  return session
-    ? sanitizeFlatAgentSessionPath(session.name ?? session.preview) || 'Untitled session'
-    : 'Session'
+export function formatAgentSessionLabel(session: AgentSessionListItem) {
+  return sanitizeFlatAgentSessionPath(session.name ?? session.preview) || 'Untitled session'
 }
 
 export function formatAgentSessionRelativeTime(timestamp: string) {
@@ -123,6 +121,14 @@ export function findAgentProjectSessionProjectId(
   }
 
   return null
+}
+
+export function findAgentProjectSession(
+  bucket: AgentProjectSessionBucket | undefined,
+  agentId: AgentId,
+  sessionPath: string,
+) {
+  return bucket?.sources[agentId]?.sessions.find((session) => session.path === sessionPath) ?? null
 }
 
 export function flattenAgentProjectSessions(bucket: AgentProjectSessionBucket | undefined) {

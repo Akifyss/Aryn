@@ -48,6 +48,7 @@ import {
 } from '@/features/agent/lib/project-session-request'
 import type { OptimisticAgentUserMessage } from '@/features/agent/lib/optimistic-user-messages'
 import { findVisiblePendingInteraction } from '@/features/agent/lib/interaction-visibility'
+import { resolveAgentSessionControlPresentation } from '@/features/agent/lib/agent-surface-state'
 import { SESSION_TREE_AGENT_IDS } from '@/features/agent/lib/session-tree'
 import type {
   ActiveWorkspaceContext,
@@ -102,7 +103,12 @@ type AgentSidebarProps = {
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
-  onOpenProjectSession?: (project: ProjectRecord, agentId: AgentId, sessionPath: string) => Promise<void> | void
+  onOpenProjectSession?: (
+    project: ProjectRecord,
+    agentId: AgentId,
+    sessionPath: string,
+    sessionLabel: string,
+  ) => Promise<void> | void
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
   onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
@@ -134,7 +140,12 @@ type AgentSurfaceProps = {
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   onOpenProjectSwitchMenu?: (anchorRect?: AgentMenuAnchorRect, options?: AgentProjectSwitchMenuOptions) => void
   onOpenProjectFolder?: (project: ProjectRecord) => Promise<void> | void
-  onOpenProjectSession?: (project: ProjectRecord, agentId: AgentId, sessionPath: string) => Promise<void> | void
+  onOpenProjectSession?: (
+    project: ProjectRecord,
+    agentId: AgentId,
+    sessionPath: string,
+    sessionLabel: string,
+  ) => Promise<void> | void
   onRemoveProject?: (project: ProjectRecord) => Promise<void> | void
   onStartStandaloneConversation?: () => Promise<void> | void
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
@@ -325,6 +336,26 @@ function AgentProvider({
     selectedAgentId,
     targetWorkspacePath,
   })
+  const sessionControlTarget = useMemo(() => {
+    return resolveAgentSessionControlPresentation({
+      activeProject,
+      activeSelection: activeSessionSelection,
+      activeWorkspaceContext,
+      projectSessions,
+      request: externalSessionRequest,
+      runtime: agentState.runtime,
+      sessions: agentState.sessions,
+    })
+  }, [
+    activeProject,
+    activeSessionSelection,
+    activeWorkspaceContext,
+    agentState.runtime.agentId,
+    agentState.runtime.workspacePath,
+    agentState.sessions,
+    externalSessionRequest,
+    projectSessions,
+  ])
   const selectedAgentIdRef = useRef(selectedAgentId)
   const effectiveRunningPromptEnterBehavior = resolveSupportedRunningPromptBehavior(
     agentState.runtime.supportedRunningPromptBehaviors,
@@ -999,6 +1030,7 @@ function AgentProvider({
     removeComposerAttachment,
     respondToInteraction,
     sessionStatus,
+    sessionControlTarget,
     setActiveComposerMenu,
     setActiveOverlayPanel,
     setComposerState,
@@ -1112,6 +1144,7 @@ function AgentProvider({
     piWebOptimisticUserMessages,
     selectedAgentId,
     sessionPresentation,
+    sessionControlTarget,
     setSelectedAgentId,
     statusMessage,
     stoppingPrompt,

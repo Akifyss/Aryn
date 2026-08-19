@@ -11,6 +11,7 @@ export type AgentProjectSessionRequest = {
   kind: 'session'
   projectId: string
   requestId: number
+  sessionLabel: string
   sessionPath: string
 }
 
@@ -33,6 +34,11 @@ export type AgentSessionSelection = { kind: 'new' } | {
   agentId: AgentId
   kind: 'session'
   sessionPath: string
+}
+
+export type AgentSessionControlTarget = {
+  label: string | null
+  selection: AgentSessionSelection
 }
 
 export type AgentSessionOperationIdentity = {
@@ -63,6 +69,40 @@ export function resolvePendingAgentNewSessionProject(
   }
 
   return projects.find((project) => project.id === request.projectId) ?? null
+}
+
+/**
+ * The session control follows the accepted navigation intent immediately,
+ * while the conversation body may keep its last committed snapshot until the
+ * target snapshot is paintable. Keeping these identities separate prevents
+ * transient source titles and generic fallbacks from leaking into the target
+ * project's chrome.
+ */
+export function resolveAgentSessionControlTarget(
+  request: AgentProjectSessionRequest | null | undefined,
+  activeWorkspaceContext: ActiveWorkspaceContext,
+  activeSelection: AgentSessionSelection,
+): AgentSessionControlTarget {
+  if (
+    !request
+    || activeWorkspaceContext.kind !== 'project'
+    || request.projectId !== activeWorkspaceContext.projectId
+  ) {
+    return { label: null, selection: activeSelection }
+  }
+
+  if (request.kind === 'new') {
+    return { label: null, selection: { kind: 'new' } }
+  }
+
+  return {
+    label: request.sessionLabel.trim() || null,
+    selection: {
+      agentId: request.agentId,
+      kind: 'session',
+      sessionPath: request.sessionPath,
+    },
+  }
 }
 
 export function isAgentNewConversationPresentation(

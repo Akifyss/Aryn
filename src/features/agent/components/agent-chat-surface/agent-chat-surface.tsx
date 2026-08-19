@@ -63,6 +63,7 @@ export function AgentChatSurface() {
     iconTheme,
     isAgentLayout,
     isSessionLoading,
+    isWorkspaceContextPreparing,
     showSessionLoadingIndicator,
     isViewingActiveRuntime,
     interactionTimelineRecords,
@@ -81,6 +82,7 @@ export function AgentChatSurface() {
     projectState,
     renderedMessages,
     roundFileChangesByMessageId,
+    sessionControlTarget,
     sessionStatus,
     setActiveOverlayPanel,
     statusMessage,
@@ -96,9 +98,16 @@ export function AgentChatSurface() {
     activeWorkspaceContext,
     visibleSessionSelection,
   )
+  const sessionControlSelection = activeWorkspaceContext.kind === 'project'
+    ? sessionControlTarget.selection
+    : visibleSessionSelection
+  const isSessionControlNewConversation = shouldShowAgentNewConversationPrompt(
+    activeWorkspaceContext,
+    sessionControlSelection,
+  )
   const showThreadbarSessionControl = shouldShowAgentThreadbarSessionControl(
     activeWorkspaceContext,
-    visibleSessionSelection,
+    sessionControlSelection,
   )
   const activeProject = activeWorkspaceContext.kind === 'project'
     ? projectState.projects.find((project) => (
@@ -112,9 +121,14 @@ export function AgentChatSurface() {
       )) ?? null
     : null
   const activeConversationTitle = activeConversation?.title.trim() ?? ''
-  const activeSessionSelectLabel = isNewConversation
-    ? '新对话'
-    : activeConversationTitle || formatAgentSessionLabel(activeSession)
+  const activeSessionSelectLabel = activeWorkspaceContext.kind === 'project'
+    ? sessionControlTarget.selection.kind === 'new'
+      ? '新对话'
+      : sessionControlTarget.label ?? '未命名会话'
+    : isNewConversation
+      ? '新对话'
+      : activeConversationTitle
+        || (activeSession ? formatAgentSessionLabel(activeSession) : '未命名会话')
   const handleOpenWorkspaceFileFromMessage = useCallback((filePath: string) => {
     void onOpenMessageFile?.(filePath, 'updated')
   }, [onOpenMessageFile])
@@ -203,10 +217,10 @@ export function AgentChatSurface() {
     }
   }, [activeOverlayPanel, showProjectSessionMenu, setActiveOverlayPanel])
 
-  const threadbarNewButton = !isNewConversation ? (
+  const threadbarNewButton = !isSessionControlNewConversation ? (
     <AppIconButton
       type='button'
-      disabled={!workspacePath}
+      disabled={!workspacePath || isWorkspaceContextPreparing}
       className='agent-threadbar-new-button'
       aria-label='Start new conversation'
       tooltip='新对话'
@@ -319,7 +333,7 @@ export function AgentChatSurface() {
       {showSessionLoadingIndicator ? (
         <AppLoadingState
           className='agent-session-loading-state'
-          label='正在加载会话'
+          label='正在加载会话…'
         />
       ) : isNewConversation ? (
         <div className='agent-new-conversation-stage'>
