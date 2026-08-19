@@ -11,6 +11,7 @@ import {
   getAgentSessionActivityKey,
   getAgentSessionTreeKey,
   normalizeAgentProjectPath,
+  resolveAgentSessionTreeProject,
   selectVisibleAgentProjectSessions,
   summarizeAgentProjectSessionBucket,
   type AgentSessionTreeItem,
@@ -67,6 +68,7 @@ export function FlatAgentSessionTree({
   menuPortalTarget,
 }: AgentSessionTreeViewProps) {
   const {
+    activeWorkspaceContext,
     activeSessionPath,
     activeSessionSelection,
     agentState,
@@ -77,6 +79,7 @@ export function FlatAgentSessionTree({
     handleRenameSession,
     handleStartNewSession,
     loadProjectSessions,
+    onOpenProjectSession,
     projectSessions,
     projectState,
     selectedAgentId,
@@ -86,21 +89,38 @@ export function FlatAgentSessionTree({
   } = controller
   const [renamingSessionPath, setRenamingSessionPath] = useState<string | null>(null)
   const [menuPinnedRowKeys, setMenuPinnedRowKeys] = useState<Set<string>>(() => new Set())
-  const currentProject = useMemo(() => workspacePath
-    ? projectState.projects.find((project) => (
-        normalizeAgentProjectPath(project.path) === normalizeAgentProjectPath(workspacePath)
-      )) ?? null
-    : null, [projectState.projects, workspacePath])
+  const isProjectContext = activeWorkspaceContext.kind === 'project'
+  const currentProject = useMemo(() => resolveAgentSessionTreeProject(
+    projectState.projects,
+    activeWorkspaceContext,
+    workspacePath,
+  ), [activeWorkspaceContext, projectState.projects, workspacePath])
+  const operationWorkspacePath = currentProject?.path ?? (isProjectContext ? null : workspacePath)
+  const usesProjectSessionBucket = isProjectContext || Boolean(currentProject)
+  const isCurrentProjectWorkspace = Boolean(
+    currentProject
+    && workspacePath
+    && normalizeAgentProjectPath(currentProject.path) === normalizeAgentProjectPath(workspacePath),
+  )
   const currentProjectBucket = currentProject ? projectSessions[currentProject.id] : undefined
   const loadSummary = summarizeAgentProjectSessionBucket(currentProjectBucket, sessionTreeAgentIds)
-  const hasCompleteSessionSnapshot = currentProject ? loadSummary.hasCompleteSnapshot : true
-  const sessions = useMemo(() => currentProject
-    ? selectVisibleAgentProjectSessions(currentProjectBucket)
-    : agentState.sessions.map((session): AgentSessionTreeItem => ({
-        ...session,
-        agentId: selectedAgentId,
-      })), [agentState.sessions, currentProject, currentProjectBucket, selectedAgentId])
-  const isSessionListPending = Boolean(currentProject && (!loadSummary.hasLoaded || loadSummary.isLoading))
+  const hasCompleteSessionSnapshot = usesProjectSessionBucket
+    ? Boolean(currentProject && loadSummary.hasCompleteSnapshot)
+    : true
+  const sessions = useMemo(() => {
+    if (usesProjectSessionBucket) {
+      return currentProject ? selectVisibleAgentProjectSessions(currentProjectBucket) : []
+    }
+
+    return agentState.sessions.map((session): AgentSessionTreeItem => ({
+      ...session,
+      agentId: selectedAgentId,
+    }))
+  }, [agentState.sessions, currentProject, currentProjectBucket, selectedAgentId, usesProjectSessionBucket])
+  const isSessionListPending = Boolean(
+    usesProjectSessionBucket
+    && (!currentProject || !loadSummary.hasLoaded || loadSummary.isLoading),
+  )
   const sessionTreeStatus = resolveAgentSessionTreeStatus({
     errorCount: loadSummary.errors.length,
     hasCompleteSnapshot: hasCompleteSessionSnapshot,
@@ -188,20 +208,31 @@ export function FlatAgentSessionTree({
         menuPortalTarget={menuPortalTarget}
         onCancelRename={() => setRenamingSessionPath(null)}
         onDelete={() => {
-          if (workspacePath) void handleDeleteSession(workspacePath, session.agentId, session.path)
+          if (operationWorkspacePath) {
+            void handleDeleteSession(operationWorkspacePath, session.agentId, session.path)
+          }
         }}
         onMenuOpenChange={(open) => handleRowMenuOpenChange(row.key, open)}
         onOpen={() => {
           setRenamingSessionPath(null)
-          void handleOpenSession(session.agentId, session.path).then(() => {
+
+          if (isCurrentProjectWorkspace) {
+            void handleOpenSession(session.agentId, session.path).then(() => {
+              onRequestClose?.()
+            })
+            return
+          }
+
+          if (!currentProject || !onOpenProjectSession) return
+          void Promise.resolve(onOpenProjectSession(currentProject, session.agentId, session.path)).then(() => {
             onRequestClose?.()
           })
         }}
-        onPrefetch={workspacePath ? () => {
-          handlePrefetchSession(workspacePath, session.agentId, session.path)
+        onPrefetch={operationWorkspacePath ? () => {
+          handlePrefetchSession(operationWorkspacePath, session.agentId, session.path)
         } : undefined}
-        onRename={(name) => workspacePath
-          ? handleRenameSession(workspacePath, session.agentId, session.path, name)
+        onRename={(name) => operationWorkspacePath
+          ? handleRenameSession(operationWorkspacePath, session.agentId, session.path, name)
           : Promise.resolve()}
         onRequestRename={() => setRenamingSessionPath(sessionKey)}
       />

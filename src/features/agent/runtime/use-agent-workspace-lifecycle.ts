@@ -65,7 +65,6 @@ type UseAgentWorkspaceLifecycleOptions = {
   }
   state: {
     agentState: AgentWorkspaceState
-    closeSessionOverlay: () => void
     hasLoadedWorkspaceState: boolean
     initialAgentState: AgentWorkspaceState
     isLoading: boolean
@@ -113,7 +112,6 @@ export function useAgentWorkspaceLifecycle({
   },
   state: {
     agentState,
-    closeSessionOverlay,
     hasLoadedWorkspaceState,
     initialAgentState,
     isLoading,
@@ -459,12 +457,6 @@ export function useAgentWorkspaceLifecycle({
     selectedAgentId,
     workspacePath,
   ])
-
-  useEffect(() => {
-    if (!workspacePath || activeWorkspaceContext.kind !== 'project') {
-      closeSessionOverlay()
-    }
-  }, [activeWorkspaceContext.kind, workspacePath])
 
   useEffect(() => {
     const pendingExternalState = pendingExternalWorkspaceStateRef.current

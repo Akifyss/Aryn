@@ -41,6 +41,7 @@ import {
   type ConversationTitleSuggestion,
 } from '@/features/agent/components/agent-sidebar/agent-sidebar-context'
 import {
+  isAgentWorkspaceTargetPreparing,
   resolvePendingAgentNewSessionProject,
   type AgentProjectSessionRequest,
   type AgentSessionSelection,
@@ -301,6 +302,9 @@ function AgentProvider({
   const activeConversation = activeWorkspaceContext.kind === 'conversation'
     ? conversationState.conversations.find((conversation) => conversation.id === activeWorkspaceContext.conversationId) ?? null
     : null
+  const activeProject = activeWorkspaceContext.kind === 'project'
+    ? projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
+    : null
   const requestedProjectAgentId = externalSessionRequest?.kind === 'session'
     && activeWorkspaceContext.kind === 'project'
     && externalSessionRequest.projectId === activeWorkspaceContext.projectId
@@ -309,6 +313,18 @@ function AgentProvider({
   const selectedAgentId = activeConversation?.agentId
     ?? requestedProjectAgentId
     ?? (activeSessionSelection.kind === 'session' ? activeSessionSelection.agentId : selectedAgentIdValue)
+  const targetWorkspacePath = activeWorkspaceContext.kind === 'project'
+    ? activeProject?.path
+    : activeWorkspaceContext.kind === 'conversation'
+      ? activeConversation?.workspacePath
+      : null
+  const isWorkspaceContextPreparing = isAgentWorkspaceTargetPreparing({
+    currentWorkspacePath: workspacePath,
+    hasLoadedWorkspaceState,
+    runtime: agentState.runtime,
+    selectedAgentId,
+    targetWorkspacePath,
+  })
   const selectedAgentIdRef = useRef(selectedAgentId)
   const effectiveRunningPromptEnterBehavior = resolveSupportedRunningPromptBehavior(
     agentState.runtime.supportedRunningPromptBehaviors,
@@ -417,7 +433,6 @@ function AgentProvider({
     },
     state: {
       agentState,
-      closeSessionOverlay: () => setActiveOverlayPanel(null),
       hasLoadedWorkspaceState,
       initialAgentState: emptyAgentState,
       isLoading,
@@ -663,20 +678,6 @@ function AgentProvider({
     activeWorkspaceContext,
     projectState.projects,
   )
-  const isStandaloneDraftRuntimeReady = Boolean(
-    activeWorkspaceContext.kind === 'conversationDraft'
-    && !workspacePath
-    && hasLoadedWorkspaceState
-    && agentState.runtime.agentId === selectedAgentId
-    && agentState.runtime.workspacePath === null,
-  )
-  const isNewConversationPreparing = Boolean(
-    pendingNewSessionProject
-    || (
-      activeWorkspaceContext.kind === 'conversationDraft'
-      && !isStandaloneDraftRuntimeReady
-    ),
-  )
   const isImmediateNewConversationSurface = Boolean(
     isExplicitNewConversationPresentation
     || pendingNewSessionProject
@@ -766,7 +767,7 @@ function AgentProvider({
     && !isOpenCodeChildSession
     && !isSubmittingComposerPrompt
     && !isSessionLoading
-    && !isNewConversationPreparing
+    && !isWorkspaceContextPreparing
     && (
       (workspacePath && agentState.runtime.hasConfiguredModels)
       || (canUseComposerWithoutWorkspace && agentState.runtime.hasConfiguredModels)
@@ -858,21 +859,19 @@ function AgentProvider({
     },
   })
   const hasImageComposerAttachments = composerAttachments.some((attachment) => attachment.kind === 'image')
-  const attachmentCapabilityMessage = hasImageComposerAttachments && !selectedModelSupportsImages
+  const attachmentCapabilityMessage = !isWorkspaceContextPreparing
+    && hasImageComposerAttachments
+    && !selectedModelSupportsImages
     ? '当前模型不支持图片输入，图片不会作为视觉内容发送。'
     : null
-  const statusMessage = isOpenCodeChildSession
+  const statusMessage = isWorkspaceContextPreparing
+    ? null
+    : isOpenCodeChildSession
     ? 'OpenCode 子会话由父会话中的子 Agent 管理，请返回父会话继续输入。'
     : hasLoadedWorkspaceState && !agentState.runtime.hasConfiguredModels
     ? (agentState.runtime.setupHint ?? '请先配置可用模型。')
-    : !workspacePath
-    ? (
-        isConversationDraftContext
-          ? null
-          : activeWorkspaceContext.kind === 'conversation'
-            ? '该对话的工作目录不可用。'
-            : '打开工作区以开始。'
-      )
+    : !workspacePath && activeWorkspaceContext.kind === 'conversation'
+    ? '该对话的工作目录不可用。'
     : null
   const {
     messagesScrollElement,
@@ -949,7 +948,7 @@ function AgentProvider({
     isViewingActiveRuntime,
     isProjectAddMenuOpen,
     isLoading,
-    isNewConversationPreparing,
+    isWorkspaceContextPreparing,
     isNewConversationSurfaceImmediate: isImmediateNewConversationSurface,
     isSessionLoading,
     showSessionLoadingIndicator,
@@ -1061,7 +1060,7 @@ function AgentProvider({
     isViewingActiveRuntime,
     isProjectAddMenuOpen,
     isLoading,
-    isNewConversationPreparing,
+    isWorkspaceContextPreparing,
     isImmediateNewConversationSurface,
     isSessionLoading,
     showSessionLoadingIndicator,

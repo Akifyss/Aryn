@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   shouldShowAgentNewConversationPrompt,
+  shouldShowAgentProjectSessionMenu,
   shouldShowAgentThreadbarSessionControl,
 } from '../src/features/agent/lib/agent-surface-state'
 
@@ -35,5 +36,14 @@ describe('shouldShowAgentNewConversationPrompt', () => {
       { kind: 'conversation', conversationId: 'conversation-1' },
       { kind: 'new' },
     )).toBe(true)
+  })
+
+  it('keeps the project session menu identity independent of runtime readiness', () => {
+    expect(shouldShowAgentProjectSessionMenu({ kind: 'project', projectId: 'project-1' })).toBe(true)
+    expect(shouldShowAgentProjectSessionMenu({ kind: 'conversationDraft' })).toBe(false)
+    expect(shouldShowAgentProjectSessionMenu({
+      kind: 'conversation',
+      conversationId: 'conversation-1',
+    })).toBe(false)
   })
 })

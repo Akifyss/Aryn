@@ -25,6 +25,7 @@ import {
   getAgentSessionActivityKey,
   getAgentSessionTreeKey,
   normalizeAgentProjectPath,
+  resolveAgentSessionTreeProject,
 } from '@/features/agent/lib/session-tree'
 import type { ConversationRecord } from '@/features/conversations/types'
 import {
@@ -182,17 +183,11 @@ export function AgentProjectTree({
       activeSessionPath,
     )
   }, [activeSessionPath, activeSessionSelection, projectSessions])
-  const activeProject = useMemo(() => {
-    if (activeWorkspaceContext.kind === 'project') {
-      return projectById.get(activeWorkspaceContext.projectId) ?? null
-    }
-
-    return workspacePath
-      ? projectState.projects.find((project) => (
-          normalizeAgentProjectPath(project.path) === normalizeAgentProjectPath(workspacePath)
-        )) ?? null
-      : null
-  }, [activeWorkspaceContext, projectById, projectState.projects, workspacePath])
+  const activeProject = useMemo(() => resolveAgentSessionTreeProject(
+    projectState.projects,
+    activeWorkspaceContext,
+    workspacePath,
+  ), [activeWorkspaceContext, projectState.projects, workspacePath])
   const treeRows = useMemo(() => createAgentProjectTreeRows({
     conversations: conversationState.conversations,
     expandedProjectIds,

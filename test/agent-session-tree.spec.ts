@@ -9,6 +9,7 @@ import {
   getAgentSessionTreeKey,
   invalidateAgentProjectSessionBuckets,
   normalizeAgentProjectPath,
+  resolveAgentSessionTreeProject,
   SESSION_TREE_AGENT_IDS,
   summarizeAgentProjectSessionBucket,
   type AgentProjectSessionBucket,
@@ -171,6 +172,40 @@ describe('Agent session tree aggregation', () => {
 })
 
 describe('Agent session tree presentation helpers', () => {
+  it('resolves the semantic target project before falling back to the connected workspace', () => {
+    const projects = [{
+      addedAt: '2026-07-21T12:00:00.000Z',
+      id: 'target',
+      lastFilePath: null,
+      lastOpenedAt: '2026-07-21T12:00:00.000Z',
+      name: 'Target',
+      path: 'C:/work/target',
+    }, {
+      addedAt: '2026-07-21T11:00:00.000Z',
+      id: 'previous',
+      lastFilePath: null,
+      lastOpenedAt: '2026-07-21T11:00:00.000Z',
+      name: 'Previous',
+      path: 'C:/work/previous',
+    }]
+
+    expect(resolveAgentSessionTreeProject(
+      projects,
+      { kind: 'project', projectId: 'target' },
+      'C:/work/previous',
+    )).toBe(projects[0])
+    expect(resolveAgentSessionTreeProject(
+      projects,
+      { kind: 'conversationDraft' },
+      'c:\\work\\previous\\',
+    )).toBe(projects[1])
+    expect(resolveAgentSessionTreeProject(
+      projects,
+      { kind: 'project', projectId: 'missing' },
+      'C:/work/previous',
+    )).toBeNull()
+  })
+
   it('formats relative timestamps across supported display ranges', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-07-21T12:00:00.000Z'))

@@ -41,6 +41,14 @@ export type AgentSessionOperationIdentity = {
   workspacePath: string
 }
 
+type AgentWorkspaceTargetPreparation = {
+  currentWorkspacePath: string | null
+  hasLoadedWorkspaceState: boolean
+  runtime: AgentWorkspaceRuntimeIdentity
+  selectedAgentId: AgentId
+  targetWorkspacePath: string | null | undefined
+}
+
 export function resolvePendingAgentNewSessionProject(
   request: AgentProjectSessionRequest | null | undefined,
   activeWorkspaceContext: ActiveWorkspaceContext,
@@ -89,6 +97,33 @@ function normalizeAgentWorkspacePath(value: string) {
   return value.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
 }
 
+function agentWorkspacePathsMatch(
+  left: string | null,
+  right: string | null,
+) {
+  if (left === null || right === null) return left === right
+  return normalizeAgentWorkspacePath(left) === normalizeAgentWorkspacePath(right)
+}
+
+/**
+ * Context selection is committed before the filesystem and Agent runtime finish
+ * switching. Runtime-dependent controls must stay gated until both layers belong
+ * to the resolved target, while the target surface itself may render immediately.
+ */
+export function isAgentWorkspaceTargetPreparing({
+  currentWorkspacePath,
+  hasLoadedWorkspaceState,
+  runtime,
+  selectedAgentId,
+  targetWorkspacePath,
+}: AgentWorkspaceTargetPreparation) {
+  if (targetWorkspacePath === undefined || !hasLoadedWorkspaceState) return true
+
+  return runtime.agentId !== selectedAgentId
+    || !agentWorkspacePathsMatch(currentWorkspacePath, targetWorkspacePath)
+    || !agentWorkspacePathsMatch(runtime.workspacePath, targetWorkspacePath)
+}
+
 export function shouldApplyAgentWorkspaceState(
   selection: AgentSessionSelection,
   eventAgentId: AgentId,
@@ -106,7 +141,7 @@ export function shouldPersistAgentWorkspaceSelection(
 ) {
   if (!runtime.workspacePath) return false
   return runtime.agentId === selectedAgentId
-    && normalizeAgentWorkspacePath(runtime.workspacePath) === normalizeAgentWorkspacePath(workspacePath)
+    && agentWorkspacePathsMatch(runtime.workspacePath, workspacePath)
 }
 
 /**

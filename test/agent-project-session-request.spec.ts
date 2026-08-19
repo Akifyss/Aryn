@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isAgentWorkspaceTargetPreparing,
   isAgentNewConversationPresentation,
   resolvePendingAgentNewSessionProject,
   resolveAgentWorkspaceSessionRestore,
@@ -86,6 +87,71 @@ describe('isAgentNewConversationPresentation', () => {
       { kind: 'project', projectId: 'project-1' },
       projects,
     )).toBe(false)
+  })
+})
+
+describe('isAgentWorkspaceTargetPreparing', () => {
+  const readyRuntime = {
+    agentId: 'codex' as const,
+    workspacePath: 'C:/work/career',
+  }
+
+  it('stays pending until the workspace surface and runtime both own the target', () => {
+    expect(isAgentWorkspaceTargetPreparing({
+      currentWorkspacePath: 'C:/work/previous',
+      hasLoadedWorkspaceState: true,
+      runtime: readyRuntime,
+      selectedAgentId: 'codex',
+      targetWorkspacePath: 'C:/work/career',
+    })).toBe(true)
+    expect(isAgentWorkspaceTargetPreparing({
+      currentWorkspacePath: 'C:/work/career',
+      hasLoadedWorkspaceState: true,
+      runtime: { ...readyRuntime, workspacePath: 'C:/work/previous' },
+      selectedAgentId: 'codex',
+      targetWorkspacePath: 'C:/work/career',
+    })).toBe(true)
+    expect(isAgentWorkspaceTargetPreparing({
+      currentWorkspacePath: 'C:/work/career',
+      hasLoadedWorkspaceState: false,
+      runtime: readyRuntime,
+      selectedAgentId: 'codex',
+      targetWorkspacePath: 'C:/work/career',
+    })).toBe(true)
+  })
+
+  it('accepts normalized matching targets only for the selected Agent', () => {
+    expect(isAgentWorkspaceTargetPreparing({
+      currentWorkspacePath: 'c:\\work\\career\\',
+      hasLoadedWorkspaceState: true,
+      runtime: readyRuntime,
+      selectedAgentId: 'codex',
+      targetWorkspacePath: 'C:/work/career',
+    })).toBe(false)
+    expect(isAgentWorkspaceTargetPreparing({
+      currentWorkspacePath: 'C:/work/career',
+      hasLoadedWorkspaceState: true,
+      runtime: readyRuntime,
+      selectedAgentId: 'pi',
+      targetWorkspacePath: 'C:/work/career',
+    })).toBe(true)
+  })
+
+  it('supports a ready projectless draft and treats an unresolved target as pending', () => {
+    expect(isAgentWorkspaceTargetPreparing({
+      currentWorkspacePath: null,
+      hasLoadedWorkspaceState: true,
+      runtime: { agentId: 'codex', workspacePath: null },
+      selectedAgentId: 'codex',
+      targetWorkspacePath: null,
+    })).toBe(false)
+    expect(isAgentWorkspaceTargetPreparing({
+      currentWorkspacePath: null,
+      hasLoadedWorkspaceState: true,
+      runtime: { agentId: 'codex', workspacePath: null },
+      selectedAgentId: 'codex',
+      targetWorkspacePath: undefined,
+    })).toBe(true)
   })
 })
 

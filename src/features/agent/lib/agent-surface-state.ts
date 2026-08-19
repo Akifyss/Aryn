@@ -15,3 +15,9 @@ export function shouldShowAgentThreadbarSessionControl(
   return activeWorkspaceContext.kind !== 'conversationDraft'
     || !shouldShowAgentNewConversationPrompt(activeWorkspaceContext, selection)
 }
+
+export function shouldShowAgentProjectSessionMenu(
+  activeWorkspaceContext: ActiveWorkspaceContext,
+) {
+  return activeWorkspaceContext.kind === 'project'
+}

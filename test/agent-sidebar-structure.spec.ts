@@ -7,10 +7,11 @@ async function readSource(relativePath: string) {
 
 describe('agent sidebar structure', () => {
   it('keeps runtime events and workspace lifecycle in the Agent runtime domain', async () => {
-    const [sidebarSource, runtimeEventsSource, workspaceLifecycleSource] = await Promise.all([
+    const [sidebarSource, runtimeEventsSource, workspaceLifecycleSource, chatSurfaceSource] = await Promise.all([
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
       readSource('../src/features/agent/runtime/use-agent-runtime-events.ts'),
       readSource('../src/features/agent/runtime/use-agent-workspace-lifecycle.ts'),
+      readSource('../src/features/agent/components/agent-chat-surface/agent-chat-surface.tsx'),
     ])
 
     expect(sidebarSource).toContain("from '@/features/agent/runtime/use-agent-runtime-events'")
@@ -24,7 +25,8 @@ describe('agent sidebar structure', () => {
     expect(workspaceLifecycleSource).toContain('export function useAgentWorkspaceLifecycle(')
     expect(workspaceLifecycleSource).toContain('window.appApi.loadAgentDraftState(')
     expect(workspaceLifecycleSource).toContain('window.appApi.getWorkspaceState(')
-    expect(workspaceLifecycleSource).toContain('closeSessionOverlay()')
+    expect(workspaceLifecycleSource).not.toContain('closeSessionOverlay')
+    expect(chatSurfaceSource).toMatch(/if \(!showProjectSessionMenu && activeOverlayPanel === 'sessions'\)/)
     expect(runtimeEventsSource).not.toContain('agent-sidebar')
     expect(workspaceLifecycleSource).not.toContain('agent-sidebar')
   })

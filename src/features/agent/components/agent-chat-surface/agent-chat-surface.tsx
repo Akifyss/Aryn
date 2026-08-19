@@ -23,6 +23,7 @@ import {
 import { useAgentContext } from '@/features/agent/components/agent-sidebar/agent-sidebar-context'
 import {
   shouldShowAgentNewConversationPrompt,
+  shouldShowAgentProjectSessionMenu,
   shouldShowAgentThreadbarSessionControl,
 } from '@/features/agent/lib/agent-surface-state'
 import { buildBbSessionRuntimeState } from '@/features/agent/lib/bb-session-runtime-state'
@@ -99,14 +100,12 @@ export function AgentChatSurface() {
     activeWorkspaceContext,
     visibleSessionSelection,
   )
-  const canOpenSessionMenu = Boolean(
-    workspacePath && activeWorkspaceContext.kind === 'project',
-  )
   const activeProject = activeWorkspaceContext.kind === 'project'
     ? projectState.projects.find((project) => (
         project.id === activeWorkspaceContext.projectId
       )) ?? null
     : null
+  const showProjectSessionMenu = shouldShowAgentProjectSessionMenu(activeWorkspaceContext)
   const activeConversation = activeWorkspaceContext.kind === 'conversation'
     ? conversationState.conversations.find((conversation) => (
         conversation.id === activeWorkspaceContext.conversationId
@@ -199,10 +198,10 @@ export function AgentChatSurface() {
   }, [shouldPreloadUnifiedSurface])
 
   useEffect(() => {
-    if (!canOpenSessionMenu && activeOverlayPanel === 'sessions') {
+    if (!showProjectSessionMenu && activeOverlayPanel === 'sessions') {
       setActiveOverlayPanel(null)
     }
-  }, [activeOverlayPanel, canOpenSessionMenu, setActiveOverlayPanel])
+  }, [activeOverlayPanel, showProjectSessionMenu, setActiveOverlayPanel])
 
   const threadbarNewButton = !isNewConversation ? (
     <AppIconButton
@@ -232,7 +231,7 @@ export function AgentChatSurface() {
 
           {showThreadbarSessionControl ? (
             <div className='agent-session-select'>
-              {canOpenSessionMenu ? (
+              {showProjectSessionMenu ? (
                 <Menu.Root
                   modal={false}
                   open={activeOverlayPanel === 'sessions'}

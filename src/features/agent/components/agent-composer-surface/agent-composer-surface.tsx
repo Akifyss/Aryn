@@ -93,7 +93,7 @@ export function AgentComposerSurface({
     hasComposerPayload,
     iconTheme,
     isLoading,
-    isNewConversationPreparing,
+    isWorkspaceContextPreparing,
     isNewConversationSurfaceImmediate,
     isSessionLoading,
     isViewingActiveRuntime,
@@ -227,7 +227,7 @@ export function AgentComposerSurface({
       />
     </div>
   ) : null
-  const mentionWorkspacePath = isNewConversationPreparing ? null : workspacePath
+  const mentionWorkspacePath = isWorkspaceContextPreparing ? null : workspacePath
 
   const composerFooter = (
     <div ref={modelFieldRef} className='agent-composer-meta'>
@@ -246,7 +246,7 @@ export function AgentComposerSurface({
             || (!workspacePath && !canUseDraftRuntimeWithoutWorkspace)
             || !agentState.runtime.hasConfiguredModels
             || isSessionLoading
-            || isNewConversationPreparing
+            || isWorkspaceContextPreparing
             || isSwitchingModel
             || isSwitchingThinkingLevel
           }
@@ -271,7 +271,7 @@ export function AgentComposerSurface({
               || (!workspacePath && !canUseComposerWithoutWorkspace)
               || isLoading
               || isSessionLoading
-              || isNewConversationPreparing
+              || isWorkspaceContextPreparing
             }
             tooltip='附加文件'
             onClick={() => {
@@ -317,7 +317,8 @@ export function AgentComposerSurface({
             || (
               !isNewConversationSurfaceImmediate
               && (
-                (!workspacePath && !canUseComposerWithoutWorkspace)
+                isWorkspaceContextPreparing
+                || (!workspacePath && !canUseComposerWithoutWorkspace)
                 || isLoading
                 || isSessionLoading
               )
@@ -326,7 +327,7 @@ export function AgentComposerSurface({
           iconTheme={iconTheme}
           mentions={composerState.mentions}
           onChange={setComposerState}
-          onFilesPastedOrDropped={isNewConversationPreparing
+          onFilesPastedOrDropped={isWorkspaceContextPreparing
             ? undefined
             : (files) => {
                 void addComposerFiles(files)

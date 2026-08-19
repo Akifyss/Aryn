@@ -1,5 +1,7 @@
 import { AGENT_DEFINITIONS, type AgentId } from '@/features/agent/agent-definition'
 import type { AgentSessionListItem } from '@/features/agent/types'
+import type { ActiveWorkspaceContext } from '@/features/conversations/types'
+import type { ProjectRecord } from '@/features/workspace/types'
 
 export type AgentSessionSourceState = {
   error: string | null
@@ -83,6 +85,22 @@ export function formatAgentSessionRelativeTime(timestamp: string) {
 
 export function normalizeAgentProjectPath(filePath: string) {
   return filePath.replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+}
+
+export function resolveAgentSessionTreeProject(
+  projects: readonly ProjectRecord[],
+  activeWorkspaceContext: ActiveWorkspaceContext,
+  workspacePath: string | null,
+) {
+  if (activeWorkspaceContext.kind === 'project') {
+    return projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
+  }
+
+  if (!workspacePath) return null
+  const normalizedWorkspacePath = normalizeAgentProjectPath(workspacePath)
+  return projects.find((project) => (
+    normalizeAgentProjectPath(project.path) === normalizedWorkspacePath
+  )) ?? null
 }
 
 export function getAgentSessionActivityKey(agentId: AgentId, sessionKey: string) {

@@ -236,6 +236,95 @@ describe('AgentSessionTree presentation components', () => {
     expect(emptyMarkup).not.toContain('agent-session-tree-status-item is-loading')
   })
 
+  it('uses the target project snapshot before its runtime workspace is connected', () => {
+    const project = {
+      addedAt: '2026-07-28T09:00:00.000Z',
+      id: 'project-1',
+      lastFilePath: null,
+      lastOpenedAt: '2026-07-28T10:00:00.000Z',
+      name: 'Target project',
+      path: 'C:\\workspace\\Target',
+    }
+    const markup = renderToStaticMarkup(
+      <AgentSessionTreeView
+        controller={createController({
+          activeWorkspaceContext: { kind: 'project', projectId: project.id },
+          agentState: {
+            ...emptyAgentState,
+            sessions: [{
+              createdAt: '2026-07-28T09:00:00.000Z',
+              id: 'stale-session',
+              messageCount: 1,
+              modifiedAt: '2026-07-28T09:05:00.000Z',
+              name: 'Previous workspace session',
+              path: 'stale-session',
+              preview: 'Previous workspace',
+            }],
+          },
+          projectSessions: {
+            [project.id]: {
+              hasCompleteSnapshot: true,
+              sources: {
+                'builtin-pi': {
+                  error: null,
+                  hasLoaded: true,
+                  isLoading: false,
+                  sessions: [{
+                    createdAt: '2026-07-28T10:00:00.000Z',
+                    id: 'target-session',
+                    messageCount: 1,
+                    modifiedAt: '2026-07-28T10:05:00.000Z',
+                    name: 'Target project session',
+                    path: 'target-session',
+                    preview: 'Target project',
+                  }],
+                },
+              },
+            },
+          },
+          projectState: {
+            lastProjectId: project.id,
+            projects: [project],
+          },
+          workspacePath: 'C:\\workspace\\Previous',
+        })}
+        isFloating
+      />,
+    )
+
+    expect(markup).toContain('Target project session')
+    expect(markup).not.toContain('Previous workspace session')
+    expect(markup).not.toContain('agent-session-tree-status-item is-loading')
+  })
+
+  it('does not leak stale runtime sessions while the target project record is resolving', () => {
+    const markup = renderToStaticMarkup(
+      <AgentSessionTreeView
+        controller={createController({
+          activeWorkspaceContext: { kind: 'project', projectId: 'project-pending' },
+          agentState: {
+            ...emptyAgentState,
+            sessions: [{
+              createdAt: '2026-07-28T09:00:00.000Z',
+              id: 'stale-session',
+              messageCount: 1,
+              modifiedAt: '2026-07-28T09:05:00.000Z',
+              name: 'Previous workspace session',
+              path: 'stale-session',
+              preview: 'Previous workspace',
+            }],
+          },
+          workspacePath: 'C:\\workspace\\Previous',
+        })}
+        isFloating
+      />,
+    )
+
+    expect(markup).toContain('agent-session-tree-status-item is-loading')
+    expect(markup).not.toContain('Previous workspace session')
+    expect(markup).not.toContain('agent-session-tree-status-item is-empty')
+  })
+
   it('hides runtime partial sessions until the initial project snapshot is complete', () => {
     const project = {
       addedAt: '2026-07-28T09:00:00.000Z',
