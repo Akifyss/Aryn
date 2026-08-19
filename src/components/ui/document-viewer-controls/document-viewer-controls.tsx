@@ -47,15 +47,52 @@ export function ViewerToolbarButton({
   );
 }
 
-export function ViewerToolbar({
-  as: Component = "div",
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLElement> & {
+type ViewerToolbarAccessibilityProps =
+  | {
+      "aria-hidden": true | "true";
+      "aria-label"?: never;
+      "aria-labelledby"?: never;
+    }
+  | (
+      {
+        "aria-hidden"?: false | "false";
+      } & (
+        | {
+            "aria-label": string;
+            "aria-labelledby"?: never;
+          }
+        | {
+            "aria-label"?: never;
+            "aria-labelledby": string;
+          }
+      )
+    );
+
+export type ViewerToolbarProps = Omit<
+  React.HTMLAttributes<HTMLElement>,
+  "aria-hidden" | "aria-label" | "aria-labelledby" | "aria-orientation" | "role"
+> & ViewerToolbarAccessibilityProps & {
   as?: "div" | "header";
-}) {
-  return <Component {...props} className={cn("viewer-toolbar", className)} />;
-}
+};
+
+export const ViewerToolbar = React.forwardRef<HTMLElement, ViewerToolbarProps>(
+  function ViewerToolbar(
+    {
+      as: Component = "div",
+      className,
+      ...props
+    },
+    ref,
+  ) {
+    return React.createElement(Component, {
+      ...props,
+      "aria-orientation": "horizontal",
+      className: cn("viewer-toolbar", className),
+      ref,
+      role: "toolbar",
+    });
+  },
+);
 
 export function ViewerToolbarGroup({
   align = "start",
@@ -458,7 +495,7 @@ export function ViewerZoomControls({
   const canZoomIn = zoomInValue !== null;
 
   return (
-    <div className={cn("flex flex-none items-center gap-1", className)}>
+    <ViewerToolbarGroup className={className}>
       <ViewerToolbarButton
         type="button"
         label={zoomOutLabel}
@@ -486,7 +523,7 @@ export function ViewerZoomControls({
       >
         <ZoomInLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
       </ViewerToolbarButton>
-    </div>
+    </ViewerToolbarGroup>
   );
 }
 

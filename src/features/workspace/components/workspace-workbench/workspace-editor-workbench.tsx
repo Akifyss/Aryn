@@ -33,6 +33,8 @@ type WorkspaceEditorWorkbenchProps = {
   onToggleDirectorySidebar: () => void
 }
 
+const directoryToggleSpacer = <WorkspaceEditorDirectoryToggleSpacer />
+
 export function WorkspaceEditorWorkbench({
   activeFixedPanelTab,
   editorContent,
@@ -52,7 +54,7 @@ export function WorkspaceEditorWorkbench({
     />
   ) : null
   const leadingToolbarAction = isDirectoryToggleSlotVisible
-    ? <WorkspaceEditorDirectoryToggleSpacer />
+    ? directoryToggleSpacer
     : null
   const hasActiveDocument = Boolean(
     editorContent.activeFileTab || editorContent.activeDiffTab,

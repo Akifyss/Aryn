@@ -14,7 +14,7 @@
 
 .git-diff-header-start {
   flex: 1 1 0;
-  gap: var(--editor-toolbar-gap, 8px);
+  gap: var(--editor-toolbar-gap, 6px);
 }
 
 .git-diff-header[data-has-center-action] .git-diff-header-start {

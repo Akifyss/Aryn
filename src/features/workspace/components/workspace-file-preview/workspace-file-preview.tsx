@@ -148,7 +148,7 @@ function PreviewToolbar({
   trailingActions?: ReactNode
 }) {
   return (
-    <ViewerToolbar>
+    <ViewerToolbar aria-label={`${fileName} 文件预览工具栏`}>
       {leadingActions ? <ViewerToolbarGroup>{leadingActions}</ViewerToolbarGroup> : null}
       <div className='viewer-toolbar-title'>{fileName}</div>
       {trailingActions ? (

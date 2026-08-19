@@ -804,7 +804,7 @@ export function CsvViewer({
       )}
     >
       {showToolbar ? (
-        <ViewerToolbar>
+        <ViewerToolbar aria-label="CSV 工具栏">
           {leadingToolbarActions ? (
             <ViewerToolbarGroup>{leadingToolbarActions}</ViewerToolbarGroup>
           ) : null}

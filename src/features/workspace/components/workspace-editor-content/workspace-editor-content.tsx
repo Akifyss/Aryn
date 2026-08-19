@@ -127,7 +127,7 @@ export function WorkspaceEditorContent({
           filePath={activeFileTab.filePath}
           gitDiffRequest={activeFileTab.gitDiffRequest ?? null}
           gitRepositoryState={gitRepositoryState}
-          hasLeadingToolbarInset={leadingToolbarAction !== null}
+          leadingToolbarAction={leadingToolbarAction}
           meoSettings={meoSettings}
           savedValue={activeFileTab.savedContent}
           theme={theme}

@@ -300,7 +300,7 @@ function PptxToolbar({
   const fitModeLabel = fitMode === "contain" ? "原始尺寸" : "适应宽度";
 
   return (
-    <ViewerToolbar>
+    <ViewerToolbar aria-label="演示文稿工具栏">
       <ViewerToolbarGroup>
         {leadingToolbarActions ? (
           <>

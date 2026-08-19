@@ -491,7 +491,7 @@ function PDFViewerFallbackShell({
       )}
     >
       {showToolbar ? (
-        <ViewerToolbar>
+        <ViewerToolbar aria-label="PDF 工具栏">
           {leadingToolbarActions ? (
             <ViewerToolbarGroup>{leadingToolbarActions}</ViewerToolbarGroup>
           ) : null}
@@ -2107,7 +2107,7 @@ function PDFViewerInner({
       )}
     >
       {showToolbar ? (
-        <ViewerToolbar>
+        <ViewerToolbar aria-label="PDF 工具栏">
           <ViewerToolbarGroup>
             {leadingToolbarActions ? (
               <>

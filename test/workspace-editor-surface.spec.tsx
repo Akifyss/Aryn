@@ -39,7 +39,10 @@ describe('WorkspaceEditorSurface', () => {
     expect(markup).toContain('class="app-icon-button editor-directory-toggle"')
     expect(markup).not.toContain('data-active="true"')
     expect(markup).toContain('aria-pressed="true"')
-    expect(markup).toContain('class="editor-plain-toolbar"')
+    expect(markup).toContain('class="viewer-toolbar"')
+    expect(markup).toContain('role="toolbar"')
+    expect(markup).toContain('aria-orientation="horizontal"')
+    expect(markup).toContain('aria-label="编辑器工具栏"')
     expect(markup).toContain('data-slot="editor"')
   })
 

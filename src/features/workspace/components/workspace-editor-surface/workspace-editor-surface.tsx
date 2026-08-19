@@ -8,6 +8,10 @@ import { AppButton } from '@/components/app-button'
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppLoadingState } from '@/components/app-loading-state'
 import { EMPTY_STATE_ICONS, EmptyState } from '@/components/empty-state'
+import {
+  ViewerToolbar,
+  ViewerToolbarGroup,
+} from '@/components/ui/document-viewer-controls'
 import { recordOpenFileProfile } from '@/lib/open-file-profile'
 import './styles.css'
 
@@ -123,9 +127,9 @@ export function WorkspaceEditorView({
   return (
     <div className='editor-view-shell'>
       {leadingToolbarAction ? (
-        <div className='editor-plain-toolbar'>
-          {leadingToolbarAction}
-        </div>
+        <ViewerToolbar aria-label='编辑器工具栏'>
+          <ViewerToolbarGroup>{leadingToolbarAction}</ViewerToolbarGroup>
+        </ViewerToolbar>
       ) : null}
       {children}
     </div>

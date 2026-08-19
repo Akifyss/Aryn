@@ -480,7 +480,7 @@ function DocxToolbar({
     showDownloadButton || showUploadButton || showNightRenderToggle;
 
   return (
-    <ViewerToolbar>
+    <ViewerToolbar aria-label="DOCX 工具栏">
       <ViewerToolbarGroup>
         {leadingToolbarActions ? (
           <>

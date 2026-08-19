@@ -1287,15 +1287,6 @@
 
 .meo-native-theme .mode-toolbar {
   position: relative;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 14px 8px 82px;
-  background-color: var(--background-primary);
-}
-
-.meo-native-theme .editor-root:has(.cm-editor.meo-line-numbers-hidden) .mode-toolbar {
-  padding-left: 17px;
 }
 
 .meo-native-theme .editor-notice {
@@ -1445,26 +1436,6 @@
 
 .meo-native-theme .find-status.is-error {
   color: var(--errorForeground, #f48771);
-}
-
-.meo-native-theme .format-group,
-.meo-native-theme .right-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.meo-native-theme .right-group {
-  margin-left: auto;
-  margin-right: 12px;
-}
-
-.meo-native-theme .format-separator {
-  width: 1px;
-  height: 18px;
-  margin: 3px 4px;
-  align-self: center;
-  background-color: var(--panel-border);
 }
 
 .meo-native-theme .heading-wrapper {
@@ -1674,10 +1645,6 @@
 }
 
 @media (max-width: 920px) {
-  .meo-native-theme .mode-toolbar {
-    padding-left: 14px;
-  }
-
   .meo-native-theme .find-panel {
     right: -10px;
   }

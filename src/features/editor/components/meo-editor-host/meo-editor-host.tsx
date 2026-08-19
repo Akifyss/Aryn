@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { GitChangeItem, GitDiffBlockAction, GitDiffSelection, GitRepositoryState } from '@/features/git/types'
 import type { WorkspaceFileGitDiffRequest } from '@/features/workspace/store/use-workspace-store'
 import type { MeoSettings } from '@/hooks/use-settings-store'
@@ -18,7 +18,7 @@ type MeoEditorHostProps = {
   filePath: string
   gitDiffRequest?: WorkspaceFileGitDiffRequest | null
   gitRepositoryState?: GitRepositoryState | null
-  hasLeadingToolbarInset?: boolean
+  leadingToolbarAction?: ReactNode
   meoSettings: MeoSettings
   onCompositionChange?: (isComposing: boolean) => void
   onOpenFile?: (filePath: string) => void
@@ -74,7 +74,7 @@ export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>
   filePath,
   gitDiffRequest = null,
   gitRepositoryState,
-  hasLeadingToolbarInset = false,
+  leadingToolbarAction,
   meoSettings,
   onCompositionChange,
   onOpenFile,
@@ -452,10 +452,12 @@ export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>
     <div
       ref={shellRef}
       className={`meo-editor-shell meo-native-theme ${resolvedTheme}`}
-      data-leading-toolbar-inset={hasLeadingToolbarInset ? 'true' : undefined}
       data-theme={resolvedTheme}
     >
-      <MeoNativeEditorChrome ref={editorChromeRef} />
+      <MeoNativeEditorChrome
+        ref={editorChromeRef}
+        leadingToolbarAction={leadingToolbarAction}
+      />
     </div>
   )
 })

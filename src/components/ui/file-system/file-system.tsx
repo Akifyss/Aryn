@@ -1408,7 +1408,7 @@ function FileSystemCsvViewerFromUrl({
   const renderFallback = (message?: string) => (
     <div className={cn("flex h-full min-h-0 flex-col bg-[var(--background-primary)]", className)}>
       {showToolbar ? (
-        <ViewerToolbar>
+        <ViewerToolbar aria-label="文件浏览器工具栏">
           {toolbarActions ? (
             <ViewerToolbarGroup align="end">{toolbarActions}</ViewerToolbarGroup>
           ) : null}
@@ -3287,8 +3287,8 @@ export function FileSystem({
       )}
     >
       <FileSystemIconSpriteSheet />
-      <div className="file-system-toolbar">
-        <div className="file-system-toolbar-leading">
+      <ViewerToolbar aria-label="文件浏览器工具栏">
+        <ViewerToolbarGroup>
           <AppIconButton
             type="button"
             aria-label={FILE_SYSTEM_COPY.toolbar.back}
@@ -3307,13 +3307,13 @@ export function FileSystem({
           >
             <RightLine aria-hidden="true" className="size-[var(--icon-size-md)]" />
           </AppIconButton>
-          {headerLayout !== "minimal" ? (
-            <span className="file-system-toolbar-title">
-              {currentFolderName}
-            </span>
-          ) : null}
-        </div>
-        <div className="file-system-toolbar-trailing">
+        </ViewerToolbarGroup>
+        {headerLayout !== "minimal" ? (
+          <span className="viewer-toolbar-title">
+            {currentFolderName}
+          </span>
+        ) : null}
+        <ViewerToolbarGroup align="end" className="file-system-toolbar-trailing">
           {viewSwitcher}
           <FileSystemSortSelect
             layout={headerLayout}
@@ -3336,8 +3336,8 @@ export function FileSystem({
             onValueChange={setSearchInput}
             value={searchInput}
           />
-        </div>
-      </div>
+        </ViewerToolbarGroup>
+      </ViewerToolbar>
       {hasActiveFilters ? (
         <div className="file-system-filter-bar">
           {filters.map((filter) => {

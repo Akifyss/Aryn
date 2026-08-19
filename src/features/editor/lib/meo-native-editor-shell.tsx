@@ -46,8 +46,16 @@ import {
   type ReactNode,
   type Ref,
 } from 'react'
-import { AppIconButton } from '@/components/app-icon-button'
+import {
+  AppIconButton,
+  type AppIconButtonSize,
+} from '@/components/app-icon-button'
 import { AppMenu as Menu } from '@/components/app-menu'
+import {
+  ViewerToolbar,
+  ViewerToolbarGroup,
+  ViewerToolbarSeparator,
+} from '@/components/ui/document-viewer-controls'
 import {
   SegmentedTabs,
   type SegmentedTabOption,
@@ -174,6 +182,7 @@ type MeoToolbarIconButtonProps = {
   className?: string
   label: string
   pressed?: boolean
+  size?: AppIconButtonSize
 }
 
 type NativeMeoShellEditor = Pick<
@@ -195,7 +204,7 @@ export type NativeMeoEditorShell = {
   setHeadingLevelHandler: (handler: ((level: number) => void) | null) => void
   setMode: (mode: MeoEditorMode) => void
   setModeChangeHandler: (handler: ((mode: MeoEditorMode) => void) | null) => void
-  toolbar: HTMLDivElement
+  toolbar: HTMLElement
 }
 
 function createElementSlot<T extends Element>(): ElementSlot<T> {
@@ -259,12 +268,13 @@ function MeoToolbarIconButton({
   className,
   label,
   pressed,
+  size = 'md',
 }: MeoToolbarIconButtonProps) {
   return (
     <AppIconButton
       ref={bindElementSlot(buttonRef)}
       type='button'
-      size='sm'
+      size={size}
       variant='ghost'
       className={['format-button', className].filter(Boolean).join(' ')}
       data-action={action}
@@ -292,7 +302,7 @@ const MeoHeadingMenu = forwardRef(function MeoHeadingMenu({
     <Menu.Root modal={false} open={open} onOpenChange={setOpen}>
       <Menu.Trigger
         type='button'
-        size='sm'
+        size='md'
         variant='icon'
         iconTooltip='Heading'
         className='format-button meo-heading-menu-trigger'
@@ -360,6 +370,7 @@ function MeoFindPanel({
           className='toggle-button find-option-button'
           label='Whole word'
           pressed={false}
+          size='sm'
         >
           <OfflineIcon aria-hidden='true' icon={wholeWordIcon} />
         </MeoToolbarIconButton>
@@ -369,6 +380,7 @@ function MeoFindPanel({
           className='toggle-button find-option-button'
           label='Case sensitive'
           pressed={false}
+          size='sm'
         >
           <FontSizeLine aria-hidden='true' />
         </MeoToolbarIconButton>
@@ -376,6 +388,7 @@ function MeoFindPanel({
           action='findPrevious'
           buttonRef={refs.findPrevBtn}
           label='Previous match'
+          size='sm'
         >
           <UpLine aria-hidden='true' />
         </MeoToolbarIconButton>
@@ -383,6 +396,7 @@ function MeoFindPanel({
           action='findNext'
           buttonRef={refs.findNextBtn}
           label='Next match'
+          size='sm'
         >
           <DownLine aria-hidden='true' />
         </MeoToolbarIconButton>
@@ -402,6 +416,7 @@ function MeoFindPanel({
           action='replaceCurrent'
           buttonRef={refs.replaceBtn}
           label='Replace current match'
+          size='sm'
         >
           <OfflineIcon aria-hidden='true' icon={replaceIcon} />
         </MeoToolbarIconButton>
@@ -409,6 +424,7 @@ function MeoFindPanel({
           action='replaceAll'
           buttonRef={refs.replaceAllBtn}
           label='Replace all matches'
+          size='sm'
         >
           <OfflineIcon aria-hidden='true' icon={replaceAllIcon} />
         </MeoToolbarIconButton>
@@ -459,7 +475,7 @@ function MeoEditorToolbar({
 
   return (
     <>
-      <div className='format-group'>
+      <ViewerToolbarGroup>
         <MeoHeadingMenu ref={headingMenuControllerRef} actions={actions} />
         <MeoToolbarIconButton action='bulletList' buttonRef={buttons.bulletListBtn} label='Bullet list'>
           <ListCheckLine aria-hidden='true' />
@@ -470,7 +486,7 @@ function MeoEditorToolbar({
         <MeoToolbarIconButton action='task' buttonRef={buttons.taskBtn} label='Task list'>
           <ListCheck3Line aria-hidden='true' />
         </MeoToolbarIconButton>
-        <div className='format-separator' role='separator' aria-orientation='vertical' />
+        <ViewerToolbarSeparator />
         <MeoToolbarIconButton action='table' buttonRef={buttons.tableBtn} label='Table'>
           <Table2Line aria-hidden='true' />
         </MeoToolbarIconButton>
@@ -492,9 +508,9 @@ function MeoEditorToolbar({
         <MeoToolbarIconButton action='hr' buttonRef={buttons.hrBtn} label='Horizontal rule'>
           <OfflineIcon aria-hidden='true' icon={minusIcon} />
         </MeoToolbarIconButton>
-      </div>
+      </ViewerToolbarGroup>
 
-      <div className='right-group'>
+      <ViewerToolbarGroup align='end'>
         <MeoToolbarIconButton
           action='outline'
           buttonRef={buttons.outlineBtn}
@@ -547,7 +563,7 @@ function MeoEditorToolbar({
         >
           <GitCompareLine aria-hidden='true' />
         </MeoToolbarIconButton>
-      </div>
+      </ViewerToolbarGroup>
 
       <div
         ref={bindElementSlot(refs.modeGroup)}
@@ -607,11 +623,15 @@ function resolveFindPanelElements(
 }
 
 const MeoNativeEditorChromeImpl = forwardRef(function MeoNativeEditorChrome(
-  _props: Record<never, never>,
+  {
+    leadingToolbarAction,
+  }: {
+    leadingToolbarAction?: ReactNode
+  },
   forwardedRef: Ref<NativeMeoEditorShell>,
 ) {
   const rootRef = useRef<HTMLDivElement | null>(null)
-  const toolbarRef = useRef<HTMLDivElement | null>(null)
+  const toolbarRef = useRef<HTMLElement | null>(null)
   const editorWrapperRef = useRef<HTMLDivElement | null>(null)
   const editorHostRef = useRef<HTMLDivElement | null>(null)
   const selectionMenuRef = useRef<HTMLDivElement | null>(null)
@@ -715,19 +735,21 @@ const MeoNativeEditorChromeImpl = forwardRef(function MeoNativeEditorChrome(
       ref={rootRef}
       className='meo-editor-root-host meo-native-root editor-root'
     >
-      <div
+      <ViewerToolbar
         ref={toolbarRef}
         className='mode-toolbar'
-        role='toolbar'
-        aria-label='Markdown editor toolbar'
+        aria-label='Markdown 编辑器工具栏'
       >
+        {leadingToolbarAction ? (
+          <ViewerToolbarGroup>{leadingToolbarAction}</ViewerToolbarGroup>
+        ) : null}
         <MeoEditorToolbar
           actions={actions}
           headingMenuControllerRef={headingMenuControllerRef}
           mode={mode}
           refs={refs}
         />
-      </div>
+      </ViewerToolbar>
       <div ref={editorWrapperRef} className='editor-wrapper'>
         <div ref={editorHostRef} className='editor-host' />
         <nav className='outline-sidebar' aria-label='Document outline'>

@@ -814,7 +814,7 @@ function WorkbookToolbar({
   }, [setZoomScale, workbookIdentity]);
 
   return (
-    <ViewerToolbar>
+    <ViewerToolbar aria-label="工作簿工具栏">
       {leadingToolbarActions ? (
         <ViewerToolbarGroup>{leadingToolbarActions}</ViewerToolbarGroup>
       ) : null}
@@ -869,7 +869,7 @@ function WorkbookStandaloneToolbar({
   toolbarActions?: React.ReactNode;
 }) {
   return (
-    <ViewerToolbar>
+    <ViewerToolbar aria-label="工作簿工具栏">
       <ViewerToolbarGroup align="end">
         {toolbarActions ? <>{toolbarActions}</> : null}
         {showUploadButton ? (
