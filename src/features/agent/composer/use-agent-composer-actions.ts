@@ -26,6 +26,7 @@ import {
 
 type UseAgentComposerActionsOptions = {
   agentState: AgentWorkspaceState
+  canPerformComposerAction: boolean
   closeComposerMenu: () => void
   composerAttachmentsRef: RefObject<AgentComposerAttachment[]>
   composerStateRef: RefObject<AgentComposerState>
@@ -81,6 +82,7 @@ export function resolveSupportedRunningPromptBehavior(
 
 export function useAgentComposerActions({
   agentState,
+  canPerformComposerAction,
   closeComposerMenu,
   composerAttachmentsRef,
   composerStateRef,
@@ -215,6 +217,10 @@ export function useAgentComposerActions({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
+    if (!canPerformComposerAction) {
+      return
+    }
+
     const hasPayload = hasAgentComposerPayload(composerStateRef.current, composerAttachmentsRef.current)
 
     if (isViewingActiveRuntime && agentState.runtime.isStreaming) {
@@ -233,6 +239,10 @@ export function useAgentComposerActions({
   function handleComposerKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
+
+      if (!canPerformComposerAction) {
+        return
+      }
 
       if (!hasAgentComposerPayload(composerStateRef.current, composerAttachmentsRef.current)) {
         return

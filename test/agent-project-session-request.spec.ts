@@ -1,11 +1,93 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isAgentNewConversationPresentation,
+  resolvePendingAgentNewSessionProject,
   resolveAgentWorkspaceSessionRestore,
   shouldApplyAgentSessionOperationResult,
   shouldApplyAgentWorkspaceState,
   shouldPersistAgentWorkspaceSelection,
   type AgentProjectSessionRequest,
 } from '../src/features/agent/lib/project-session-request'
+
+const projects = [{
+  addedAt: '2026-08-20T00:00:00.000Z',
+  id: 'project-1',
+  lastFilePath: null,
+  lastOpenedAt: '2026-08-20T00:00:00.000Z',
+  name: 'Career',
+  path: 'C:/work/career',
+}]
+
+describe('resolvePendingAgentNewSessionProject', () => {
+  it('resolves only a new-session request owned by the active project', () => {
+    const request: AgentProjectSessionRequest = {
+      kind: 'new',
+      projectId: 'project-1',
+      requestId: 1,
+    }
+
+    expect(resolvePendingAgentNewSessionProject(
+      request,
+      { kind: 'project', projectId: 'project-1' },
+      projects,
+    )).toBe(projects[0])
+    expect(resolvePendingAgentNewSessionProject(
+      request,
+      { kind: 'project', projectId: 'project-2' },
+      projects,
+    )).toBeNull()
+    expect(resolvePendingAgentNewSessionProject(
+      request,
+      { kind: 'conversationDraft' },
+      projects,
+    )).toBeNull()
+  })
+
+  it('does not treat an existing-session request as a new-conversation surface', () => {
+    expect(resolvePendingAgentNewSessionProject({
+      agentId: 'codex',
+      kind: 'session',
+      projectId: 'project-1',
+      requestId: 1,
+      sessionPath: 'thread-1',
+    }, { kind: 'project', projectId: 'project-1' }, projects)).toBeNull()
+  })
+})
+
+describe('isAgentNewConversationPresentation', () => {
+  it('keeps an explicit project draft active across normalized workspace paths', () => {
+    expect(isAgentNewConversationPresentation(
+      { kind: 'new' },
+      'c:\\work\\career\\',
+      { kind: 'project', projectId: 'project-1' },
+      projects,
+    )).toBe(true)
+  })
+
+  it('recognizes standalone drafts without leaking them into another context', () => {
+    expect(isAgentNewConversationPresentation(
+      { kind: 'new' },
+      null,
+      { kind: 'conversationDraft' },
+      projects,
+    )).toBe(true)
+    expect(isAgentNewConversationPresentation(
+      { kind: 'new' },
+      null,
+      { kind: 'project', projectId: 'project-1' },
+      projects,
+    )).toBe(false)
+  })
+
+  it('ends the draft presentation after a session becomes selected', () => {
+    expect(isAgentNewConversationPresentation(
+      { agentId: 'codex', kind: 'session', sessionPath: 'thread-1' },
+      'C:/work/career',
+      { kind: 'project', projectId: 'project-1' },
+      projects,
+    )).toBe(false)
+  })
+})
 
 describe('resolveAgentWorkspaceSessionRestore', () => {
   it('uses the requested project session instead of the last restored session', () => {

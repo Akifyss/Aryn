@@ -41,6 +41,7 @@ import {
   type ConversationTitleSuggestion,
 } from '@/features/agent/components/agent-sidebar/agent-sidebar-context'
 import {
+  resolvePendingAgentNewSessionProject,
   type AgentProjectSessionRequest,
   type AgentSessionSelection,
 } from '@/features/agent/lib/project-session-request'
@@ -482,12 +483,14 @@ function AgentProvider({
     handlePrefetchSession,
     handleStartNewSession,
     isAgentSessionOperationCurrent,
+    isExplicitNewConversationPresentation,
     isSessionSnapshotLoading,
     openSessionRequestIdRef,
     sessionPresentation,
     showSessionSnapshotLoadingIndicator,
   } = useAgentSessionNavigation({
     externalRequest: {
+      activeWorkspaceContext,
       hasLoadedWorkspaceState,
       isLoading,
       onExternalSessionRequestHandled,
@@ -655,9 +658,34 @@ function AgentProvider({
       || activeConversation?.agentSessionPath
     ),
   )
+  const pendingNewSessionProject = resolvePendingAgentNewSessionProject(
+    externalSessionRequest,
+    activeWorkspaceContext,
+    projectState.projects,
+  )
+  const isStandaloneDraftRuntimeReady = Boolean(
+    activeWorkspaceContext.kind === 'conversationDraft'
+    && !workspacePath
+    && hasLoadedWorkspaceState
+    && agentState.runtime.agentId === selectedAgentId
+    && agentState.runtime.workspacePath === null,
+  )
+  const isNewConversationPreparing = Boolean(
+    pendingNewSessionProject
+    || (
+      activeWorkspaceContext.kind === 'conversationDraft'
+      && !isStandaloneDraftRuntimeReady
+    ),
+  )
+  const isImmediateNewConversationSurface = Boolean(
+    isExplicitNewConversationPresentation
+    || pendingNewSessionProject
+    || activeWorkspaceContext.kind === 'conversationDraft',
+  )
   const isSessionLoading = isSessionSnapshotLoading || isWorkspaceSessionLoading
-  const showSessionLoadingIndicator = showSessionSnapshotLoadingIndicator
-    || isWorkspaceSessionLoading
+  const showSessionLoadingIndicator = !isImmediateNewConversationSurface && (
+    showSessionSnapshotLoadingIndicator || isWorkspaceSessionLoading
+  )
   const selectedSessionPath = activeSessionSelection.kind === 'session'
     ? activeSessionSelection.sessionPath
     : null
@@ -729,6 +757,38 @@ function AgentProvider({
       syncNewSessionModelDraft,
     },
   })
+  const hasComposerPayload = hasAgentComposerPayload(composerState, composerAttachments)
+  const isConversationDraftContext = activeWorkspaceContext.kind === 'conversationDraft'
+  const canCreateConversationWorkspace = Boolean(isConversationDraftContext && onCreateConversationWorkspace)
+  const canUseComposerWithoutWorkspace = Boolean(!workspacePath && canCreateConversationWorkspace)
+  const canSend = Boolean(
+    hasComposerPayload
+    && !isOpenCodeChildSession
+    && !isSubmittingComposerPrompt
+    && !isSessionLoading
+    && !isNewConversationPreparing
+    && (
+      (workspacePath && agentState.runtime.hasConfiguredModels)
+      || (canUseComposerWithoutWorkspace && agentState.runtime.hasConfiguredModels)
+    ),
+  )
+  const canStopActivePrompt = Boolean(
+    workspacePath
+    && !isOpenCodeChildSession
+    && isViewingActiveRuntime
+    && agentState.runtime.isStreaming
+    && !isLoading
+  )
+  const composerAction: AgentComposerAction = canStopActivePrompt && !hasComposerPayload
+    ? 'stop'
+    : 'send'
+  const canPerformComposerAction = composerAction === 'stop'
+    ? canStopActivePrompt
+    : canSend
+  const shouldShowComposerSendSpinner = composerAction === 'send'
+    && isSubmittingComposerPrompt
+    && activeSessionSelection.kind === 'new'
+  const streamingShortcutModifierLabel = window.appApi.platform === 'darwin' ? '⌘↵' : 'Ctrl+Enter'
   const {
     handleComposerKeyDown,
     handleQueuedMessageUpdate,
@@ -737,6 +797,7 @@ function AgentProvider({
     stoppingPrompt,
   } = useAgentComposerActions({
     agentState,
+    canPerformComposerAction,
     closeComposerMenu,
     composerAttachmentsRef,
     composerStateRef,
@@ -796,37 +857,6 @@ function AgentProvider({
       setPanelError,
     },
   })
-  const hasComposerPayload = hasAgentComposerPayload(composerState, composerAttachments)
-  const isConversationDraftContext = activeWorkspaceContext.kind === 'conversationDraft'
-  const canCreateConversationWorkspace = Boolean(isConversationDraftContext && onCreateConversationWorkspace)
-  const canUseComposerWithoutWorkspace = Boolean(!workspacePath && canCreateConversationWorkspace)
-  const canSend = Boolean(
-    hasComposerPayload
-    && !isOpenCodeChildSession
-    && !isSubmittingComposerPrompt
-    && !isSessionLoading
-    && (
-      (workspacePath && agentState.runtime.hasConfiguredModels)
-      || (canUseComposerWithoutWorkspace && agentState.runtime.hasConfiguredModels)
-    ),
-  )
-  const canStopActivePrompt = Boolean(
-    workspacePath
-    && !isOpenCodeChildSession
-    && isViewingActiveRuntime
-    && agentState.runtime.isStreaming
-    && !isLoading
-  )
-  const composerAction: AgentComposerAction = canStopActivePrompt && !hasComposerPayload
-    ? 'stop'
-    : 'send'
-  const canPerformComposerAction = composerAction === 'stop'
-    ? canStopActivePrompt
-    : canSend
-  const shouldShowComposerSendSpinner = composerAction === 'send'
-    && isSubmittingComposerPrompt
-    && activeSessionSelection.kind === 'new'
-  const streamingShortcutModifierLabel = window.appApi.platform === 'darwin' ? '⌘↵' : 'Ctrl+Enter'
   const hasImageComposerAttachments = composerAttachments.some((attachment) => attachment.kind === 'image')
   const attachmentCapabilityMessage = hasImageComposerAttachments && !selectedModelSupportsImages
     ? '当前模型不支持图片输入，图片不会作为视觉内容发送。'
@@ -919,6 +949,8 @@ function AgentProvider({
     isViewingActiveRuntime,
     isProjectAddMenuOpen,
     isLoading,
+    isNewConversationPreparing,
+    isNewConversationSurfaceImmediate: isImmediateNewConversationSurface,
     isSessionLoading,
     showSessionLoadingIndicator,
     isThinkingStreaming,
@@ -1029,6 +1061,8 @@ function AgentProvider({
     isViewingActiveRuntime,
     isProjectAddMenuOpen,
     isLoading,
+    isNewConversationPreparing,
+    isImmediateNewConversationSurface,
     isSessionLoading,
     showSessionLoadingIndicator,
     isThinkingStreaming,

@@ -1,4 +1,6 @@
 import type { AgentId } from '@/features/agent/agent-definition'
+import type { ActiveWorkspaceContext } from '@/features/conversations/types'
+import type { ProjectRecord } from '@/features/workspace/types'
 
 export type AgentProjectSessionRequest = {
   kind: 'new'
@@ -37,6 +39,50 @@ export type AgentSessionOperationIdentity = {
   agentId: AgentId
   sessionPath: string
   workspacePath: string
+}
+
+export function resolvePendingAgentNewSessionProject(
+  request: AgentProjectSessionRequest | null | undefined,
+  activeWorkspaceContext: ActiveWorkspaceContext,
+  projects: ProjectRecord[],
+) {
+  if (
+    request?.kind !== 'new'
+    || activeWorkspaceContext.kind !== 'project'
+    || request.projectId !== activeWorkspaceContext.projectId
+  ) {
+    return null
+  }
+
+  return projects.find((project) => project.id === request.projectId) ?? null
+}
+
+export function isAgentNewConversationPresentation(
+  selection: AgentSessionSelection,
+  presentationWorkspacePath: string | null | undefined,
+  activeWorkspaceContext: ActiveWorkspaceContext,
+  projects: ProjectRecord[],
+) {
+  if (selection.kind !== 'new') {
+    return false
+  }
+
+  if (activeWorkspaceContext.kind === 'conversationDraft') {
+    return presentationWorkspacePath === null
+  }
+
+  if (
+    activeWorkspaceContext.kind !== 'project'
+    || typeof presentationWorkspacePath !== 'string'
+  ) {
+    return false
+  }
+
+  const activeProject = projects.find((project) => project.id === activeWorkspaceContext.projectId)
+  return Boolean(
+    activeProject
+    && normalizeAgentWorkspacePath(activeProject.path) === normalizeAgentWorkspacePath(presentationWorkspacePath),
+  )
 }
 
 function normalizeAgentWorkspacePath(value: string) {

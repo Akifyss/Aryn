@@ -7,7 +7,13 @@ async function readSource(relativePath: string) {
 
 describe('agent session loading state', () => {
   it('retains the committed surface during the 200ms grace period and commits the snapshot immediately', async () => {
-    const [composerSource, navigationSource, sidebarSource, surfaceSource, promptSource] = await Promise.all([
+    const [
+      composerSource,
+      navigationSource,
+      sidebarSource,
+      surfaceSource,
+      promptSource,
+    ] = await Promise.all([
       readSource('../src/features/agent/components/agent-composer-surface/agent-composer-surface.tsx'),
       readSource('../src/features/agent/hooks/use-agent-session-navigation.ts'),
       readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
@@ -47,7 +53,6 @@ describe('agent session loading state', () => {
     expect(sidebarSource).toContain('activeSessionPath: selectedSessionPath')
     expect(sidebarSource).toContain('visibleSessionPath: activeSessionPath')
     expect(sidebarSource).toMatch(/const isSessionLoading = isSessionSnapshotLoading \|\| isWorkspaceSessionLoading/)
-    expect(sidebarSource).toMatch(/const showSessionLoadingIndicator = showSessionSnapshotLoadingIndicator\s*\|\| isWorkspaceSessionLoading/)
     expect(sidebarSource).toMatch(/const canSend = Boolean\([\s\S]*?&& !isSessionLoading/)
     expect(composerSource).toMatch(/disabled=\{[\s\S]*?\|\| isSessionLoading/)
     expect(composerSource).toContain('getAgentDefinition(visibleAgentId).label')
@@ -57,6 +62,34 @@ describe('agent session loading state', () => {
     expect(surfaceSource).toContain('activeSessionPath={visibleSessionPath}')
     expect(promptSource).toContain("visibleSessionSelection.kind === 'session'")
     expect(promptSource).toContain('selectedAgentId={visibleAgentId}')
+  })
+
+  it('presents new-conversation drafts immediately while runtime-dependent actions stay gated', async () => {
+    const [
+      composerActionsSource,
+      composerSource,
+      navigationSource,
+      sidebarSource,
+      workspaceLifecycleSource,
+    ] = await Promise.all([
+      readSource('../src/features/agent/composer/use-agent-composer-actions.ts'),
+      readSource('../src/features/agent/components/agent-composer-surface/agent-composer-surface.tsx'),
+      readSource('../src/features/agent/hooks/use-agent-session-navigation.ts'),
+      readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
+      readSource('../src/features/agent/runtime/use-agent-workspace-lifecycle.ts'),
+    ])
+
+    expect(sidebarSource).toMatch(/const showSessionLoadingIndicator = !isImmediateNewConversationSurface && \(\s*showSessionSnapshotLoadingIndicator \|\| isWorkspaceSessionLoading/)
+    expect(sidebarSource).toMatch(/const canSend = Boolean\([\s\S]*?&& !isNewConversationPreparing/)
+    expect(sidebarSource).toContain('canPerformComposerAction,')
+    expect(composerActionsSource.match(/if \(!canPerformComposerAction\)/g)).toHaveLength(2)
+    expect(composerSource).toContain('!isNewConversationSurfaceImmediate')
+    expect(composerSource).toContain('const mentionWorkspacePath = isNewConversationPreparing ? null : workspacePath')
+    expect(composerSource).toContain("placeholder={mentionWorkspacePath ? '发送消息，输入 @ 来提及文件…' : '发送消息…'}")
+    expect(navigationSource).toContain('useLayoutEffect(() => {')
+    expect(navigationSource).toContain('handleStartNewSession(pendingNewSessionProject.path)')
+    expect(navigationSource).toContain('isExplicitNewConversationPresentation')
+    expect(workspaceLifecycleSource).toMatch(/if \(activeWorkspaceContext\.kind !== 'conversationDraft'\) \{\s*resetComposer\(\)/)
   })
 
   it('preloads the unified surface and does not add a second visual loading gate', async () => {

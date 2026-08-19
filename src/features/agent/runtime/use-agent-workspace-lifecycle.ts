@@ -202,7 +202,11 @@ export function useAgentWorkspaceLifecycle({
     if (!workspacePath) {
       setAgentState(initialAgentState)
       setViewedSessionSnapshot(null)
-      resetComposer()
+      // Navigation already committed and cleared a standalone draft before
+      // paint. A later runtime response must not erase text entered meanwhile.
+      if (activeWorkspaceContext.kind !== 'conversationDraft') {
+        resetComposer()
+      }
       syncNewSessionModelDraft(getRuntimeDefaultModelDraft(initialAgentState.runtime))
       syncModelDraft(getRuntimeDefaultModelDraft(initialAgentState.runtime))
       setModelDrafts({

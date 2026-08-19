@@ -93,6 +93,8 @@ export function AgentComposerSurface({
     hasComposerPayload,
     iconTheme,
     isLoading,
+    isNewConversationPreparing,
+    isNewConversationSurfaceImmediate,
     isSessionLoading,
     isViewingActiveRuntime,
     isSwitchingModel,
@@ -225,6 +227,7 @@ export function AgentComposerSurface({
       />
     </div>
   ) : null
+  const mentionWorkspacePath = isNewConversationPreparing ? null : workspacePath
 
   const composerFooter = (
     <div ref={modelFieldRef} className='agent-composer-meta'>
@@ -243,6 +246,7 @@ export function AgentComposerSurface({
             || (!workspacePath && !canUseDraftRuntimeWithoutWorkspace)
             || !agentState.runtime.hasConfiguredModels
             || isSessionLoading
+            || isNewConversationPreparing
             || isSwitchingModel
             || isSwitchingThinkingLevel
           }
@@ -267,6 +271,7 @@ export function AgentComposerSurface({
               || (!workspacePath && !canUseComposerWithoutWorkspace)
               || isLoading
               || isSessionLoading
+              || isNewConversationPreparing
             }
             tooltip='附加文件'
             onClick={() => {
@@ -309,22 +314,29 @@ export function AgentComposerSurface({
           aria-label={`向 ${getAgentDefinition(visibleAgentId).label} 发送消息`}
           disabled={
             isOpenCodeChildSession
-            || (!workspacePath && !canUseComposerWithoutWorkspace)
-            || isLoading
-            || isSessionLoading
+            || (
+              !isNewConversationSurfaceImmediate
+              && (
+                (!workspacePath && !canUseComposerWithoutWorkspace)
+                || isLoading
+                || isSessionLoading
+              )
+            )
           }
           iconTheme={iconTheme}
           mentions={composerState.mentions}
           onChange={setComposerState}
-          onFilesPastedOrDropped={(files) => {
-            void addComposerFiles(files)
-          }}
+          onFilesPastedOrDropped={isNewConversationPreparing
+            ? undefined
+            : (files) => {
+                void addComposerFiles(files)
+              }}
           onSubmitShortcut={handleComposerKeyDown}
           portalContainer={surfaceMode === 'drawer' ? localOverlayRoot : undefined}
-          placeholder={workspacePath ? '发送消息，输入 @ 来提及文件...' : '发送消息...'}
+          placeholder={mentionWorkspacePath ? '发送消息，输入 @ 来提及文件…' : '发送消息…'}
           value={composerState.value}
           workspaceNodes={workspaceTree}
-          workspacePath={workspacePath}
+          workspacePath={mentionWorkspacePath}
           header={composerHeaderContent}
           footer={composerFooter}
         />

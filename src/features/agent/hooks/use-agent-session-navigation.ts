@@ -3,6 +3,7 @@ import {
   type RefObject,
   type SetStateAction,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react'
@@ -27,6 +28,8 @@ import {
 } from '@/features/agent/lib/agent-session-snapshot-loader'
 import { createDelayedLoadingIndicator } from '@/features/agent/lib/delayed-loading-indicator'
 import {
+  isAgentNewConversationPresentation,
+  resolvePendingAgentNewSessionProject,
   shouldApplyAgentSessionOperationResult,
   type AgentProjectSessionRequest,
   type AgentSessionSelection,
@@ -36,10 +39,12 @@ import type {
   AgentSessionSnapshot,
   AgentWorkspaceState,
 } from '@/features/agent/types'
+import type { ActiveWorkspaceContext } from '@/features/conversations/types'
 import type { ProjectState } from '@/features/workspace/types'
 
 type UseAgentSessionNavigationOptions = {
   externalRequest: {
+    activeWorkspaceContext: ActiveWorkspaceContext
     hasLoadedWorkspaceState: boolean
     isLoading: boolean
     onExternalSessionRequestHandled?: (requestId: number) => void
@@ -105,6 +110,7 @@ function workspacePathsMatch(left: string | null | undefined, right: string | nu
 
 export function useAgentSessionNavigation({
   externalRequest: {
+    activeWorkspaceContext,
     hasLoadedWorkspaceState,
     isLoading,
     onExternalSessionRequestHandled,
@@ -138,8 +144,14 @@ export function useAgentSessionNavigation({
 }: UseAgentSessionNavigationOptions) {
   const openSessionRequestIdRef = useRef(0)
   const handledExternalSessionRequestRef = useRef<number | null>(null)
+  const presentedExternalNewSessionRequestRef = useRef<number | null>(null)
   const [isSessionSnapshotLoading, setIsSessionSnapshotLoading] = useState(false)
   const [showSessionSnapshotLoadingIndicator, setShowSessionSnapshotLoadingIndicator] = useState(false)
+  // undefined means no explicit draft presentation, null means standalone,
+  // and a path identifies a project-backed draft.
+  const [newConversationPresentationWorkspacePath, setNewConversationPresentationWorkspacePath] = useState<
+    string | null | undefined
+  >(activeWorkspaceContext.kind === 'conversationDraft' ? null : undefined)
   const [sessionPresentation, setSessionPresentation] = useState<AgentSessionPresentation>(() => ({
     agentId: selectedAgentId,
     selection: activeSessionSelection,
@@ -302,10 +314,11 @@ export function useAgentSessionNavigation({
       )
   }
 
-  function handleStartNewSession() {
+  function handleStartNewSession(presentationWorkspacePath = workspacePath) {
     openSessionRequestIdRef.current += 1
     loadingIndicator.finish()
     setIsSessionSnapshotLoading(false)
+    setNewConversationPresentationWorkspacePath(presentationWorkspacePath)
     const nextDraft = normalizeAgentModelDraft(
       newSessionModelDraftRef.current,
       agentState.runtime,
@@ -316,7 +329,7 @@ export function useAgentSessionNavigation({
     syncSessionPresentation({
       agentId: selectedAgentId,
       selection: { kind: 'new' },
-      workspacePath,
+      workspacePath: presentationWorkspacePath,
     })
     setViewedSessionSnapshot(null)
     syncModelDraft(nextDraft)
@@ -324,6 +337,51 @@ export function useAgentSessionNavigation({
     setPanelError(null)
     closeSessionOverlay()
   }
+
+  const pendingNewSessionProject = resolvePendingAgentNewSessionProject(
+    externalSessionRequest,
+    activeWorkspaceContext,
+    projectState.projects,
+  )
+
+  // A new-conversation command owns the visible surface as soon as its project
+  // switch is accepted. Commit that presentation before paint; workspace state,
+  // session discovery, and external Agent startup can continue in the background.
+  useLayoutEffect(() => {
+    if (
+      !pendingNewSessionProject
+      || externalSessionRequest?.kind !== 'new'
+      || presentedExternalNewSessionRequestRef.current === externalSessionRequest.requestId
+    ) {
+      return
+    }
+
+    presentedExternalNewSessionRequestRef.current = externalSessionRequest.requestId
+    handleStartNewSession(pendingNewSessionProject.path)
+  }, [externalSessionRequest, pendingNewSessionProject])
+
+  const isStandaloneConversationDraft = activeWorkspaceContext.kind === 'conversationDraft'
+  const presentedStandaloneConversationDraftRef = useRef(false)
+  useLayoutEffect(() => {
+    if (!isStandaloneConversationDraft) {
+      presentedStandaloneConversationDraftRef.current = false
+      return
+    }
+
+    if (presentedStandaloneConversationDraftRef.current) {
+      return
+    }
+
+    presentedStandaloneConversationDraftRef.current = true
+    handleStartNewSession(null)
+  }, [isStandaloneConversationDraft])
+
+  const isExplicitNewConversationPresentation = isAgentNewConversationPresentation(
+    activeSessionSelection,
+    newConversationPresentationWorkspacePath,
+    activeWorkspaceContext,
+    projectState.projects,
+  )
 
   function handlePrefetchSession(
     operationWorkspacePath: string,
@@ -510,7 +568,9 @@ export function useAgentSessionNavigation({
     onExternalSessionRequestHandled?.(externalSessionRequest.requestId)
 
     if (externalSessionRequest.kind === 'new') {
-      handleStartNewSession()
+      if (presentedExternalNewSessionRequestRef.current !== externalSessionRequest.requestId) {
+        handleStartNewSession(requestedProject?.path ?? workspacePath)
+      }
       return
     }
 
@@ -530,6 +590,7 @@ export function useAgentSessionNavigation({
     handlePrefetchSession,
     handleStartNewSession,
     isAgentSessionOperationCurrent,
+    isExplicitNewConversationPresentation,
     isSessionSnapshotLoading,
     openSessionRequestIdRef,
     sessionPresentation,
