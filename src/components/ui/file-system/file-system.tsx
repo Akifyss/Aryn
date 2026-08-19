@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { Icon as IconifyIcon } from "@iconify/react"
+import galleryThumbnailsIcon from "@iconify-icons/lucide/gallery-thumbnails"
+import { Icon as OfflineIcon } from "@iconify/react/offline"
 import {
   Calendar2Line,
   CheckLine,
@@ -83,7 +84,7 @@ function SystemIcon({
 }
 
 function GalleryThumbnailsIcon({ className }: { className?: string }) {
-  return <IconifyIcon aria-hidden="true" className={className} icon="lucide:gallery-thumbnails" />
+  return <OfflineIcon aria-hidden="true" className={className} icon={galleryThumbnailsIcon} />
 }
 
 type CommandContextValue = {

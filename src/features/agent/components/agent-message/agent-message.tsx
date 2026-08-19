@@ -8,7 +8,9 @@ import {
   useState,
 } from 'react'
 import { Disclosure } from '@heroui/react'
-import { Icon } from '@iconify/react'
+import errorOutlineIcon from '@iconify-icons/ci/error-outline'
+import barsRotateFadeIcon from '@iconify-icons/svg-spinners/bars-rotate-fade'
+import { Icon as OfflineIcon } from '@iconify/react/offline'
 import {
   AiLine,
   BrainLine,
@@ -335,9 +337,9 @@ function getMessageDisclosureIcon(kind: 'details' | 'thinking' | 'tool', title: 
 function getMessageStatusIcon(status: AgentSidebarMessageStatus) {
   switch (status) {
     case 'running':
-      return <Icon aria-hidden='true' className='agent-message-status-icon is-running' icon='svg-spinners:bars-rotate-fade' />
+      return <OfflineIcon aria-hidden='true' className='agent-message-status-icon is-running' icon={barsRotateFadeIcon} />
     case 'error':
-      return <Icon aria-hidden='true' className='agent-message-status-icon is-error' icon='ci:error-outline' />
+      return <OfflineIcon aria-hidden='true' className='agent-message-status-icon is-error' icon={errorOutlineIcon} />
     default:
       return null
   }

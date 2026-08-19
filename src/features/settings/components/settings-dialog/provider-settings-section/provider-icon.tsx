@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Icon } from '@iconify/react'
+import { Key2Line } from '@mingcute/react'
 import type { AppIconSize } from '@/components/icon-size'
 import {
   Azure,
@@ -147,7 +147,7 @@ export function ProviderIcon({
       icon = renderLobeIcon(Bedrock)
       break
     default:
-      icon = <Icon icon='mingcute:key-2-line' />
+      icon = <Key2Line aria-hidden='true' />
   }
 
   return (

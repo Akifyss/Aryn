@@ -1,17 +1,17 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import binaryFileIcon from '@iconify-icons/streamline-flex-color/file-code-1-flat'
+import renderErrorIcon from '@iconify-icons/streamline-flex-color/monitor-error-flat'
+import cleanIcon from '@iconify-icons/streamline-plump-color/check-thick-flat'
+import repositoryIcon from '@iconify-icons/streamline-plump-color/end-point-branches-flat'
+import imageUnavailableIcon from '@iconify-icons/streamline-plump-color/no-photo-taking-zone-flat'
+import unreadableIcon from '@iconify-icons/streamline-plump-color/broken-link-2-flat'
 import { EMPTY_STATE_ICONS } from '@/components/empty-state'
 import {
   DIFF_UNSAFE_CSS,
   GitDiffEditor,
 } from '@/features/editor/components/git-diff-editor/git-diff-editor'
 import type { GitFileDiffResult } from '@/features/git/types'
-
-vi.mock('@iconify/react', () => ({
-  Icon: ({ className, icon }: { className?: string; icon: string }) => (
-    <span className={className} data-icon={icon} />
-  ),
-}))
 
 const baseDiff: GitFileDiffResult = {
   change: {
@@ -143,20 +143,20 @@ describe('GitDiffEditor states', () => {
     expect(DIFF_UNSAFE_CSS).toContain('letter-spacing: 0;')
   })
 
-  it('keeps shared empty-state artwork in the Streamline Color family', () => {
+  it('bundles shared empty-state artwork as local Iconify data', () => {
     expect(Object.values(EMPTY_STATE_ICONS).every(
-      (icon) => /^streamline-(?:plump|flex)-color:/.test(icon),
+      (icon) => typeof icon.body === 'string' && icon.body.length > 0,
     )).toBe(true)
   })
 
   it('maps empty-state artwork to the state it communicates', () => {
     expect(EMPTY_STATE_ICONS).toMatchObject({
-      binaryFile: 'streamline-flex-color:file-code-1-flat',
-      clean: 'streamline-plump-color:check-thick-flat',
-      imageUnavailable: 'streamline-plump-color:no-photo-taking-zone-flat',
-      renderError: 'streamline-flex-color:monitor-error-flat',
-      repository: 'streamline-plump-color:end-point-branches-flat',
-      unreadable: 'streamline-plump-color:broken-link-2-flat',
+      binaryFile: binaryFileIcon,
+      clean: cleanIcon,
+      imageUnavailable: imageUnavailableIcon,
+      renderError: renderErrorIcon,
+      repository: repositoryIcon,
+      unreadable: unreadableIcon,
     })
   })
 
@@ -183,7 +183,7 @@ describe('GitDiffEditor states', () => {
     expect(binaryMarkup).toContain('role="status"')
     expect(binaryMarkup).toContain('二进制文件已更改')
     expect(binaryMarkup).toContain('用系统默认程序打开')
-    expect(binaryMarkup).toContain(EMPTY_STATE_ICONS.binaryFile)
+    expect(binaryMarkup).toContain('class="app-empty-state-icon"')
     expect(largeTextMarkup).toContain('class="app-empty-state git-diff-unavailable"')
     expect(largeTextMarkup).toContain('这是一个较大的文本差异')
     expect(largeTextMarkup).toContain('仍然显示')
@@ -327,6 +327,6 @@ describe('GitDiffEditor states', () => {
     expect(markup).toContain('已修改内容和未跟踪文件')
     expect(markup).toContain('git@github.com:example/module.git')
     expect(markup).toContain('打开子模块文件夹')
-    expect(markup).toContain(EMPTY_STATE_ICONS.repository)
+    expect(markup).toContain('class="app-empty-state-icon"')
   })
 })

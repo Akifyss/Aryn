@@ -5,8 +5,10 @@ import {
   useMemo,
   useState,
 } from 'react'
+import fileExportIcon from '@iconify-icons/material-symbols/file-export-outline-rounded'
+import minusIcon from '@iconify-icons/mdi/minus'
+import { Icon as OfflineIcon } from '@iconify/react/offline'
 import { AddLine, Back2Line, MarkdownLine } from '@mingcute/react'
-import { Icon } from '@iconify/react'
 import {
   FileChangeStatusBadge,
   WorkspaceFileIcon,
@@ -101,7 +103,7 @@ function GitRowActions({
             onOpenFile?.()
           }}
         >
-          <Icon icon='material-symbols:file-export-outline-rounded' aria-hidden='true' />
+          <OfflineIcon icon={fileExportIcon} aria-hidden='true' />
         </AppItemActionButton>
       ) : null}
       {showMeoDiff ? (
@@ -125,7 +127,7 @@ function GitRowActions({
             onUnstage?.()
           }}
         >
-          <Icon icon='mdi:minus' aria-hidden='true' />
+          <OfflineIcon icon={minusIcon} aria-hidden='true' />
         </AppItemActionButton>
       ) : null}
       {showStageControls ? (

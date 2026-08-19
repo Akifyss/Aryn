@@ -1,5 +1,15 @@
 import { Input } from '@heroui/react'
-import { Icon } from '@iconify/react'
+import {
+  CheckLine,
+  Delete2Line,
+  DownLine,
+  EntranceLine,
+  ExitLine,
+  EyeCloseLine,
+  EyeLine,
+  InformationLine,
+  Key2Line,
+} from '@mingcute/react'
 import { AppButton } from '@/components/app-button'
 import { AppIconButton } from '@/components/app-icon-button'
 import type { AgentProviderCategory } from '@/features/agent/provider-auth'
@@ -95,8 +105,8 @@ export function ProviderCard({
             {status.label}
           </span>
 
-          <Icon
-            icon='mingcute:down-line'
+          <DownLine
+            aria-hidden='true'
             className={`settings-secondary-icon size-[var(--icon-size-md)] transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
           />
         </div>
@@ -118,8 +128,8 @@ export function ProviderCard({
 
               {provider.setupHint ? (
                 <div className='provider-setup-hint flex gap-2 p-3 rounded-xl'>
-                  <Icon
-                    icon='mingcute:information-line'
+                  <InformationLine
+                    aria-hidden='true'
                     className='size-[var(--icon-size-md)] flex-shrink-0 mt-0.5'
                   />
                   <span>{provider.setupHint}</span>
@@ -132,7 +142,7 @@ export function ProviderCard({
                 <label className='provider-apikey-label'>配置 API 密钥</label>
                 <div className='relative flex items-center w-full provider-apikey-input-container'>
                   <span className='settings-secondary-icon absolute left-3 pointer-events-none flex items-center justify-center z-20'>
-                    <Icon icon='mingcute:key-2-line' className='size-[var(--icon-size-md)]' />
+                    <Key2Line aria-hidden='true' className='size-[var(--icon-size-md)]' />
                   </span>
                   <Input
                     aria-label={`${provider.label} API key`}
@@ -156,10 +166,9 @@ export function ProviderCard({
                     }}
                     className='absolute right-3 z-10'
                   >
-                    <Icon
-                      icon={showPassword ? 'mingcute:eye-line' : 'mingcute:eye-close-line'}
-                      className='size-[var(--icon-size-md)]'
-                    />
+                    {showPassword
+                      ? <EyeLine aria-hidden='true' className='size-[var(--icon-size-md)]' />
+                      : <EyeCloseLine aria-hidden='true' className='size-[var(--icon-size-md)]' />}
                   </AppIconButton>
                 </div>
               </div>
@@ -172,7 +181,7 @@ export function ProviderCard({
                   variant='primary'
                   onClick={onLogin}
                 >
-                  <Icon aria-hidden='true' icon='mingcute:entrance-line' />
+                  <EntranceLine aria-hidden='true' />
                   {hasStoredOAuth ? '重新登录' : '订阅登录'}
                 </AppButton>
               ) : null}
@@ -185,7 +194,7 @@ export function ProviderCard({
                     onSave(draftValue)
                   }}
                 >
-                  <Icon aria-hidden='true' icon='mingcute:check-line' />
+                  <CheckLine aria-hidden='true' />
                   保存密钥
                 </AppButton>
               ) : null}
@@ -203,12 +212,9 @@ export function ProviderCard({
                     }
                   }}
                 >
-                  <Icon
-                    aria-hidden='true'
-                    icon={showsOAuthActions
-                      ? 'mingcute:exit-line'
-                      : 'mingcute:delete-2-line'}
-                  />
+                  {showsOAuthActions
+                    ? <ExitLine aria-hidden='true' />
+                    : <Delete2Line aria-hidden='true' />}
                   {showsOAuthActions ? '退出登录' : '清除密钥'}
                 </AppButton>
               ) : null}

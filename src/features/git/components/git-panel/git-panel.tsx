@@ -1,5 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { ScrollArea } from '@base-ui/react/scroll-area'
+import minusIcon from '@iconify-icons/mdi/minus'
+import { Icon as OfflineIcon } from '@iconify/react/offline'
 import {
   AddLine,
   ArrowDownLine,
@@ -10,7 +12,6 @@ import {
   Back2Line,
   ListCheckLine,
 } from '@mingcute/react'
-import { Icon } from '@iconify/react'
 import { AppButton } from '@/components/app-button'
 import { AppLoadingState } from '@/components/app-loading-state'
 import { EMPTY_STATE_ICONS, EmptyState } from '@/components/empty-state'
@@ -614,7 +615,7 @@ export function GitPanel({
                   disabled={Boolean(busyLabel)}
                   onClick={() => onUnstage(stagedPaths)}
                 >
-                  <Icon icon='mdi:minus' aria-hidden='true' />
+                  <OfflineIcon icon={minusIcon} aria-hidden='true' />
                 </AppItemActionButton>
               }
             />

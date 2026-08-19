@@ -26,7 +26,6 @@ describe('app shell icons', () => {
     )))
 
     for (const source of sources) {
-      expect(source).not.toContain('@iconify/react')
       expect(source).not.toContain('material-symbols:chrome-')
       expect(source).not.toContain('lucide:search')
       expect(source).not.toContain('lucide:settings')

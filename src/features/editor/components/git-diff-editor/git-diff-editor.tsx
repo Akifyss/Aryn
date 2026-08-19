@@ -17,10 +17,12 @@ import {
   type PostRenderPhase,
 } from '@pierre/diffs'
 import { Editor, type EditorOptions } from '@pierre/diffs/edit'
-import { Icon } from '@iconify/react'
+import minusIcon from '@iconify-icons/mdi/minus'
+import { Icon as OfflineIcon, type IconifyIcon } from '@iconify/react/offline'
 import {
   AddLine,
   Back2Line,
+  GitBranchLine,
 } from '@mingcute/react'
 import { AppButton } from '@/components/app-button'
 import { AppIconButton } from '@/components/app-icon-button'
@@ -1208,7 +1210,7 @@ function DiffUnavailableState({ diff }: { diff: GitFileDiffResult }) {
   const presentation = getGitFileDiffPresentation(diff)
   let description = '这个文件没有可显示的逐行差异。'
   let title = '无法显示差异'
-  let icon: string = EMPTY_STATE_ICONS.unavailable
+  let icon: IconifyIcon = EMPTY_STATE_ICONS.unavailable
 
   if (presentation.kind === 'too-large') {
     title = '文件过大，无法安全显示'
@@ -1383,7 +1385,7 @@ function DiffHeader({
           </h3>
           {presentation.kind === 'submodule' ? (
             <span className='git-diff-header-kind' aria-label='差异类型：子模块'>
-              <Icon icon='mingcute:git-branch-line' aria-hidden='true' />
+              <GitBranchLine aria-hidden='true' />
               子模块
             </span>
           ) : null}
@@ -1427,7 +1429,7 @@ function DiffHeader({
               disabled={!areFileGitActionsEnabled}
               onClick={() => onUnstageChange(diff.change)}
             >
-              <Icon icon='mdi:minus' aria-hidden='true' />
+              <OfflineIcon icon={minusIcon} aria-hidden='true' />
             </AppIconButton>
           )
         ) : null}

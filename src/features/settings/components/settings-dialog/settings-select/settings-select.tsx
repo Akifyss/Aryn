@@ -1,4 +1,4 @@
-import { Icon } from '@iconify/react'
+import { CheckLine, DownLine } from '@mingcute/react'
 import {
   AppMenuSelect as Select,
 } from '@/components/app-menu'
@@ -52,7 +52,7 @@ export function SettingsSelect({
       >
         <Select.Value className='settings-select-value' placeholder={placeholder} />
         <Select.Icon className='settings-select-icon'>
-          <Icon icon='mingcute:down-line' />
+          <DownLine aria-hidden='true' />
         </Select.Icon>
       </Select.Trigger>
       <Select.Positioner
@@ -68,7 +68,7 @@ export function SettingsSelect({
             {options.map((option) => (
               <Select.Item
                 key={option.value}
-                indicator={<Icon icon='mingcute:check-line' />}
+                indicator={<CheckLine aria-hidden='true' />}
                 label={option.label}
                 text={option.label}
                 value={option.value}

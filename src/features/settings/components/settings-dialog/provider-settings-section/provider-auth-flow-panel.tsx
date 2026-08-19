@@ -1,5 +1,9 @@
 import { Input } from '@heroui/react'
-import { Icon } from '@iconify/react'
+import {
+  CloseCircleLine,
+  ExternalLinkLine,
+  Loading3Line,
+} from '@mingcute/react'
 import { AppButton } from '@/components/app-button'
 import type { ProviderAuthFlowState } from './provider-settings-model'
 
@@ -25,7 +29,7 @@ export function ProviderAuthFlowPanel({
       <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
         <div className='flex items-center gap-3'>
           <div className='settings-auth-flow-icon flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0'>
-            <Icon icon='mingcute:loading-3-line' className='size-[var(--icon-size-lg)] animate-spin' />
+            <Loading3Line aria-hidden='true' className='size-[var(--icon-size-lg)] animate-spin' />
           </div>
           <div className='flex flex-col min-w-0'>
             <span className='text-sm font-semibold truncate'>{providerLabel} 登录中</span>
@@ -43,7 +47,7 @@ export function ProviderAuthFlowPanel({
               variant='primary'
               onClick={() => void window.appApi.openExternalLink(authUrl)}
             >
-              <Icon aria-hidden='true' icon='mingcute:external-link-line' />
+              <ExternalLinkLine aria-hidden='true' />
               打开登录页
             </AppButton>
           ) : null}
@@ -51,7 +55,7 @@ export function ProviderAuthFlowPanel({
             variant='outline'
             onClick={onCancel}
           >
-            <Icon aria-hidden='true' icon='mingcute:close-circle-line' />
+            <CloseCircleLine aria-hidden='true' />
             取消登录
           </AppButton>
         </div>

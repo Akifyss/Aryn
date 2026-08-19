@@ -4,7 +4,9 @@ import {
   useMemo,
   useRef,
 } from 'react'
-import { Icon } from '@iconify/react'
+import dotIcon from '@iconify-icons/octicon/dot-16'
+import dotFillIcon from '@iconify-icons/octicon/dot-fill-16'
+import { Icon as OfflineIcon } from '@iconify/react/offline'
 import { Back2Line, GitCommitFill, GitCommitLine } from '@mingcute/react'
 import { AppLoadingState } from '@/components/app-loading-state'
 import { EMPTY_STATE_ICONS, EmptyState } from '@/components/empty-state'
@@ -212,8 +214,8 @@ export function GitHistoryPane({
                   itemAs='div'
                   icon={(
                     <AppItemIcon>
-                      <Icon
-                        icon={historySelection.kind === 'working-tree' ? 'octicon:dot-fill-16' : 'octicon:dot-16'}
+                      <OfflineIcon
+                        icon={historySelection.kind === 'working-tree' ? dotFillIcon : dotIcon}
                         aria-hidden='true'
                       />
                     </AppItemIcon>

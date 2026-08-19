@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Input, Tabs } from '@heroui/react'
-import { Icon } from '@iconify/react'
+import { EmptyBoxLine, SearchLine } from '@mingcute/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
 import type { AgentProviderCategory } from '@/features/agent/provider-auth'
 import type { AgentWorkspaceState } from '@/features/agent/types'
@@ -379,7 +379,7 @@ export function ProviderSettingsSection({
 
               <div className='settings-search-wrapper relative w-full sm:w-56 flex items-center'>
                 <span className='settings-secondary-icon absolute left-3 flex items-center justify-center pointer-events-none z-10'>
-                  <Icon icon='mingcute:search-line' className='size-[var(--icon-size-md)]' />
+                  <SearchLine aria-hidden='true' className='size-[var(--icon-size-md)]' />
                 </span>
                 <Input
                   aria-label='搜索提供商'
@@ -452,8 +452,8 @@ export function ProviderSettingsSection({
                   </div>
                 ) : (
                   <div className='settings-empty-state'>
-                    <Icon
-                      icon='mingcute:empty-box-line'
+                    <EmptyBoxLine
+                      aria-hidden='true'
                       className='settings-secondary-icon size-[var(--icon-size-xl)] mb-3'
                     />
                     <p className='settings-secondary-text'>

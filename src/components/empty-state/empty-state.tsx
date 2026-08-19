@@ -1,21 +1,35 @@
 import type { HTMLAttributes, ReactNode } from 'react'
-import { Icon } from '@iconify/react'
+import binaryFileIcon from '@iconify-icons/streamline-flex-color/file-code-1-flat'
+import historyIcon from '@iconify-icons/streamline-flex-color/search-history-browser-flat'
+import renderErrorIcon from '@iconify-icons/streamline-flex-color/monitor-error-flat'
+import blockIcon from '@iconify-icons/streamline-plump-color/block-1-flat'
+import unreadableIcon from '@iconify-icons/streamline-plump-color/broken-link-2-flat'
+import cleanIcon from '@iconify-icons/streamline-plump-color/check-thick-flat'
+import repositoryIcon from '@iconify-icons/streamline-plump-color/end-point-branches-flat'
+import fileSuccessIcon from '@iconify-icons/streamline-plump-color/file-check-alternate-flat'
+import folderIcon from '@iconify-icons/streamline-plump-color/file-folder-flat'
+import imageIcon from '@iconify-icons/streamline-plump-color/gallery-2-flat'
+import multipleFilesIcon from '@iconify-icons/streamline-plump-color/multiple-file-1-flat'
+import newFolderIcon from '@iconify-icons/streamline-plump-color/new-folder-flat'
+import imageUnavailableIcon from '@iconify-icons/streamline-plump-color/no-photo-taking-zone-flat'
+import warningIcon from '@iconify-icons/streamline-plump-color/warning-diamond-flat'
+import { Icon as OfflineIcon, type IconifyIcon } from '@iconify/react/offline'
 
 export const EMPTY_STATE_ICONS = {
-  binaryFile: 'streamline-flex-color:file-code-1-flat',
-  clean: 'streamline-plump-color:check-thick-flat',
-  fileSuccess: 'streamline-plump-color:file-check-alternate-flat',
-  folder: 'streamline-plump-color:file-folder-flat',
-  history: 'streamline-flex-color:search-history-browser-flat',
-  image: 'streamline-plump-color:gallery-2-flat',
-  imageUnavailable: 'streamline-plump-color:no-photo-taking-zone-flat',
-  multipleFiles: 'streamline-plump-color:multiple-file-1-flat',
-  newFolder: 'streamline-plump-color:new-folder-flat',
-  renderError: 'streamline-flex-color:monitor-error-flat',
-  repository: 'streamline-plump-color:end-point-branches-flat',
-  unavailable: 'streamline-plump-color:block-1-flat',
-  unreadable: 'streamline-plump-color:broken-link-2-flat',
-  warning: 'streamline-plump-color:warning-diamond-flat',
+  binaryFile: binaryFileIcon,
+  clean: cleanIcon,
+  fileSuccess: fileSuccessIcon,
+  folder: folderIcon,
+  history: historyIcon,
+  image: imageIcon,
+  imageUnavailable: imageUnavailableIcon,
+  multipleFiles: multipleFilesIcon,
+  newFolder: newFolderIcon,
+  renderError: renderErrorIcon,
+  repository: repositoryIcon,
+  unavailable: blockIcon,
+  unreadable: unreadableIcon,
+  warning: warningIcon,
 } as const
 
 export type EmptyStateProps = Omit<HTMLAttributes<HTMLDivElement>, 'children' | 'title'> & {
@@ -23,7 +37,7 @@ export type EmptyStateProps = Omit<HTMLAttributes<HTMLDivElement>, 'children' | 
   actions?: ReactNode
   description?: ReactNode
   fill?: boolean
-  icon?: string
+  icon?: IconifyIcon
   iconClassName?: string
 }
 
@@ -48,7 +62,7 @@ export function EmptyState({
     >
       <div className='app-empty-state-content'>
         {icon ? (
-          <Icon
+          <OfflineIcon
             icon={icon}
             className={joinClasses('app-empty-state-icon', iconClassName)}
             aria-hidden='true'

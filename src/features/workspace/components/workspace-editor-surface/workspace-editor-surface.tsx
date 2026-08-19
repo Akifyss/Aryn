@@ -1,10 +1,9 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef } from 'react'
-import {
-  FolderOpenLine,
-  LayoutLeftbarCloseLine,
-  LayoutLeftbarOpenLine,
-} from '@mingcute/react'
+import { FolderOpenLine } from '@mingcute/react'
+import menuFoldIcon from '@iconify-icons/ri/menu-fold-line'
+import menuUnfoldIcon from '@iconify-icons/ri/menu-unfold-line'
+import { Icon as OfflineIcon } from '@iconify/react/offline'
 import { AppButton } from '@/components/app-button'
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppLoadingState } from '@/components/app-loading-state'
@@ -66,9 +65,10 @@ export function WorkspaceEditorDirectoryToggle({
       onClick={onToggle}
       tooltip={isVisible ? '隐藏目录' : '显示目录'}
     >
-      {isVisible
-        ? <LayoutLeftbarCloseLine aria-hidden='true' />
-        : <LayoutLeftbarOpenLine aria-hidden='true' />}
+      <OfflineIcon
+        aria-hidden='true'
+        icon={isVisible ? menuFoldIcon : menuUnfoldIcon}
+      />
     </AppIconButton>
   )
 }
