@@ -28,7 +28,10 @@ import {
 } from '@/features/agent/lib/agent-surface-state'
 import { buildBbSessionRuntimeState } from '@/features/agent/lib/bb-session-runtime-state'
 import { toBbCodexOptimisticMessages } from '@/features/agent/lib/optimistic-user-messages'
-import { formatAgentSessionLabel } from '@/features/agent/lib/session-tree'
+import {
+  formatAgentSessionLabel,
+  normalizeAgentProjectPath,
+} from '@/features/agent/lib/session-tree'
 import './styles.css'
 
 const AGENT_SESSION_MENU_POSITIONER_PROPS = {
@@ -92,6 +95,7 @@ export function AgentChatSurface() {
     theme,
     visibleSessionPath,
     visibleSessionSelection,
+    visibleWorkspacePath,
     workspacePath,
   } = useAgentContext()
   const isNewConversation = shouldShowAgentNewConversationPrompt(
@@ -129,10 +133,24 @@ export function AgentChatSurface() {
       ? '新对话'
       : activeConversationTitle
         || (activeSession ? formatAgentSessionLabel(activeSession) : '未命名会话')
+  const canOpenVisibleWorkspaceFiles = Boolean(
+    !isWorkspaceContextPreparing
+    && workspacePath
+    && visibleWorkspacePath
+    && normalizeAgentProjectPath(workspacePath) === normalizeAgentProjectPath(visibleWorkspacePath),
+  )
+  const visibleMessageFileHandler = canOpenVisibleWorkspaceFiles ? onOpenMessageFile : undefined
   const handleOpenWorkspaceFileFromMessage = useCallback((filePath: string) => {
+    if (!canOpenVisibleWorkspaceFiles) return
     void onOpenMessageFile?.(filePath, 'updated')
-  }, [onOpenMessageFile])
+  }, [canOpenVisibleWorkspaceFiles, onOpenMessageFile])
   const nativeSession = codexNativeSession ?? openCodeNativeSession ?? piWebNativeSession
+  const showConversationEmptyState = activeWorkspaceContext.kind === 'conversation'
+    && !isSessionLoading
+    && !nativeSession
+    && renderedMessages.length === 0
+    && !panelError
+    && !sessionStatus
   const shouldPreloadUnifiedSurface = isSessionLoading || Boolean(nativeSession)
   const unifiedSessionId = codexNativeSession?.thread.id
     ?? piWebNativeSession?.sessionId
@@ -350,6 +368,10 @@ export function AgentChatSurface() {
             />
           </div>
         </div>
+      ) : showConversationEmptyState ? (
+        <div className='agent-conversation-empty-state' role='status'>
+          <p>{statusMessage ?? '这个对话还没有可显示的内容。'}</p>
+        </div>
       ) : (
         <>
           {statusMessage ? (
@@ -358,7 +380,7 @@ export function AgentChatSurface() {
             </div>
           ) : null}
 
-          {workspacePath && nativeSession ? (
+          {visibleWorkspacePath && nativeSession ? (
             <BbSessionTimeline
               fileChanges={unifiedFileChanges}
               interactionRecords={unifiedInteractionRecords}
@@ -368,7 +390,7 @@ export function AgentChatSurface() {
               onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
               sessionId={unifiedSessionId}
               theme={theme}
-              workspacePath={workspacePath}
+              workspacePath={visibleWorkspacePath}
             />
           ) : (
             <AgentMessageViewport
@@ -377,11 +399,11 @@ export function AgentChatSurface() {
               messages={renderedMessages}
               messagesScrollElement={messagesScrollElement}
               messagesScrollViewportRef={messagesScrollViewportRef}
-              onOpenMessageFile={onOpenMessageFile}
+              onOpenMessageFile={visibleMessageFileHandler}
               onOpenWorkspaceFile={handleOpenWorkspaceFileFromMessage}
               roundFileChangesByMessageId={roundFileChangesByMessageId}
               sessionStatus={sessionStatus}
-              workspacePath={workspacePath}
+              workspacePath={visibleWorkspacePath}
             />
           )}
         </>

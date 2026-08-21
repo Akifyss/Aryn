@@ -70,7 +70,14 @@ export function useAgentVisibleSession({
   const activeSessionPath = activeSessionSelection.kind === 'session'
     ? activeSessionSelection.sessionPath
     : null
-  const activeSession = activeSessionPath && runtime.agentId === selectedAgentId
+  const runtimeOwnsVisibleWorkspace = Boolean(
+    workspacePath
+    && runtime.workspacePath
+    && normalizeAgentProjectPath(runtime.workspacePath) === normalizeAgentProjectPath(workspacePath),
+  )
+  const activeSession = activeSessionPath
+    && runtime.agentId === selectedAgentId
+    && runtimeOwnsVisibleWorkspace
     ? sessions.find((session) => session.path === activeSessionPath) ?? null
     : null
 
@@ -88,10 +95,15 @@ export function useAgentVisibleSession({
 
   const isViewingActiveRuntime = Boolean(
     activeSessionPath
+    && workspacePath
     && runtime.agentId === selectedAgentId
-    && activeSessionSnapshot?.sessionPath === activeSessionPath,
+    && runtimeOwnsVisibleWorkspace
+    && activeSessionSnapshot?.sessionPath === activeSessionPath
+    && normalizeAgentProjectPath(activeSessionSnapshot.workspacePath) === normalizeAgentProjectPath(workspacePath)
   )
-  const viewedSessionForSelection = viewedSessionSnapshot?.sessionPath === activeSessionPath
+  const viewedSessionForSelection = workspacePath
+    && viewedSessionSnapshot?.sessionPath === activeSessionPath
+    && normalizeAgentProjectPath(viewedSessionSnapshot.workspacePath) === normalizeAgentProjectPath(workspacePath)
     ? viewedSessionSnapshot
     : null
   const visibleSessionSnapshot = isViewingActiveRuntime

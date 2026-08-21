@@ -21,7 +21,7 @@ describe('agent session loading state', () => {
       readSource('../src/features/agent/components/agent-new-conversation-prompt/agent-new-conversation-prompt.tsx'),
     ])
 
-    const cacheRead = navigationSource.indexOf('getCachedAgentSessionSnapshot(agentId, workspacePath, sessionPath)')
+    const cacheRead = navigationSource.indexOf('getCachedAgentSessionSnapshot(agentId, operationWorkspacePath, sessionPath)')
     const cachedSnapshotCommit = navigationSource.indexOf('setViewedSessionSnapshot(cachedSnapshot)')
     const loadingStart = navigationSource.indexOf('setIsSessionSnapshotLoading(true)')
     const delayedIndicatorStart = navigationSource.indexOf('loadingIndicator.begin()', loadingStart)
@@ -46,10 +46,11 @@ describe('agent session loading state', () => {
     expect(snapshotCommit).toBeGreaterThan(presentationCommit)
     expect(historyRead).toBeGreaterThan(snapshotCommit)
     expect(loadingEnd).toBeGreaterThan(snapshotCommit)
-    expect(navigationSource).toMatch(/if \(!canPresentCachedSnapshot\) \{\s*syncActiveSessionSelection\(fallbackPresentation\.selection\)\s*setSelectedAgentIdValue\(fallbackPresentation\.agentId\)\s*syncSessionPresentation\(fallbackPresentation\)/)
+    expect(navigationSource).toMatch(/if \(options\.rollbackOnError === false\) \{\s*setViewedSessionSnapshot\(null\)\s*syncSessionPresentation\(targetPresentation\)\s*\} else \{\s*syncActiveSessionSelection\(fallbackPresentation\.selection\)/)
     expect(navigationSource).toMatch(/finally \{\s*if \(requestId === openSessionRequestIdRef\.current\) \{\s*loadingIndicator\.finish\(\)\s*setIsSessionSnapshotLoading\(false\)/)
     expect(sidebarSource).toContain('activeSessionSelection: sessionPresentation.selection')
     expect(sidebarSource).toContain('selectedAgentId: sessionPresentation.agentId')
+    expect(sidebarSource).toContain('workspacePath: sessionPresentation.workspacePath')
     expect(sidebarSource).toContain('activeSessionPath: selectedSessionPath')
     expect(sidebarSource).toContain('visibleSessionPath: activeSessionPath')
     expect(sidebarSource).toMatch(/const isSessionLoading = isSessionSnapshotLoading \|\| isWorkspaceSessionLoading/)
@@ -65,8 +66,17 @@ describe('agent session loading state', () => {
     expect(surfaceSource).toContain('disabled={!workspacePath || isWorkspaceContextPreparing}')
     expect(surfaceSource).toContain("activeSession ? formatAgentSessionLabel(activeSession) : '未命名会话'")
     expect(surfaceSource).toContain("label='正在加载会话…'")
+    expect(surfaceSource).toContain("showConversationEmptyState ? (")
+    expect(surfaceSource).toContain('这个对话还没有可显示的内容。')
+    expect(surfaceSource).toMatch(/const showConversationEmptyState = activeWorkspaceContext\.kind === 'conversation'[\s\S]*?&& !sessionStatus/)
+    expect(surfaceSource).not.toMatch(/const showConversationEmptyState =[\s\S]*?&& !isWorkspaceContextPreparing[\s\S]*?const shouldPreloadUnifiedSurface/)
     expect(surfaceSource).toContain('activeSessionPath={visibleSessionPath}')
-    expect(navigationSource).toMatch(/void handleOpenSession\(externalSessionRequest\.agentId, externalSessionRequest\.sessionPath\)\.finally\(\(\) => \{\s*onExternalSessionRequestHandled\?\.\(externalSessionRequest\.requestId\)/)
+    expect(surfaceSource).toContain('workspacePath={visibleWorkspacePath}')
+    expect(navigationSource).toContain('resolveAgentSessionNavigationTarget({')
+    expect(navigationSource).toMatch(/const navigationTarget = sessionNavigationTargetRef\.current[\s\S]*?if \(navigationTarget\) \{\s*return/)
+    expect(navigationSource).toContain('conversationFallbackPresentationKey')
+    expect(navigationSource).toMatch(/useLayoutEffect\(\(\) => \{[\s\S]*?void handleOpenSession\([\s\S]*?navigationTarget: sessionNavigationTarget/)
+    expect(navigationSource).toMatch(/if \(externalSessionRequest\.kind === 'session'\) \{\s*onExternalSessionRequestHandled\?\.\(externalSessionRequest\.requestId\)\s*return/)
     expect(promptSource).toContain("visibleSessionSelection.kind === 'session'")
     expect(promptSource).toContain('selectedAgentId={visibleAgentId}')
   })
@@ -100,6 +110,10 @@ describe('agent session loading state', () => {
     expect(navigationSource).toContain('handleStartNewSession(pendingNewSessionProject.path)')
     expect(navigationSource).toContain('isExplicitNewConversationPresentation')
     expect(workspaceLifecycleSource).toMatch(/if \(activeWorkspaceContext\.kind !== 'conversationDraft'\) \{\s*resetComposer\(\)/)
+    expect(workspaceLifecycleSource).toMatch(/if \(!isAgentWorkspacePathReadyForTarget\(workspacePath, targetWorkspacePath\)\) \{[\s\S]*?setIsLoading\(false\)\s*return/)
+    expect(workspaceLifecycleSource).not.toContain('setViewedSessionSnapshot(null)\n    setHasLoadedWorkspaceState(false)')
+    expect(workspaceLifecycleSource).toContain('targetAgentSessionPath === currentSelection.sessionPath')
+    expect(workspaceLifecycleSource).toMatch(/if \(nextSelection\.kind === 'new' \|\| runtimeOwnsNextSelection\) \{\s*setViewedSessionSnapshot\(null\)/)
   })
 
   it('preloads the unified surface and does not add a second visual loading gate', async () => {
@@ -122,5 +136,21 @@ describe('agent session loading state', () => {
     expect(timelineSource).toContain('getPreloadedBbSessionSurface()')
     expect(timelineSource).not.toContain("import { AppLoadingState } from '@/components/app-loading-state'")
     expect(timelineSource).not.toMatch(/<AppLoadingState[\s\S]*?正在加载会话/)
+  })
+
+  it('prefetches conversation rows and scopes visible snapshots to their presentation workspace', async () => {
+    const [projectTreeSource, sidebarSource, visibleSessionSource] = await Promise.all([
+      readSource('../src/features/agent/components/agent-session-tree/project-tree.tsx'),
+      readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
+      readSource('../src/features/agent/hooks/use-agent-visible-session.ts'),
+    ])
+
+    expect(projectTreeSource).toMatch(/onPrefetch=\{conversationWorkspacePath && conversationSessionPath[\s\S]*?handlePrefetchSession\(/)
+    expect(projectTreeSource).toMatch(/const isCurrentActiveConversationWorkspace = Boolean\([\s\S]*?normalizeAgentProjectPath\(conversationWorkspacePath\)/)
+    expect(sidebarSource).toContain('visibleWorkspacePath: sessionPresentation.workspacePath')
+    expect(sidebarSource).toMatch(/const runtimeSessionTitle = isViewingActiveRuntime[\s\S]*?agentState\.activeSession\.name/)
+    expect(visibleSessionSource).toMatch(/const activeSession = activeSessionPath[\s\S]*?&& runtimeOwnsVisibleWorkspace/)
+    expect(visibleSessionSource).toMatch(/runtime\.workspacePath[\s\S]*?activeSessionSnapshot\.workspacePath/)
+    expect(visibleSessionSource).toMatch(/viewedSessionSnapshot\?\.sessionPath === activeSessionPath[\s\S]*?viewedSessionSnapshot\.workspacePath/)
   })
 })

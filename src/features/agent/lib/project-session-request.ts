@@ -1,5 +1,8 @@
 import type { AgentId } from '@/features/agent/agent-definition'
-import type { ActiveWorkspaceContext } from '@/features/conversations/types'
+import type {
+  ActiveWorkspaceContext,
+  ConversationRecord,
+} from '@/features/conversations/types'
 import type { ProjectRecord } from '@/features/workspace/types'
 
 export type AgentProjectSessionRequest = {
@@ -45,6 +48,10 @@ export type AgentSessionOperationIdentity = {
   agentId: AgentId
   sessionPath: string
   workspacePath: string
+}
+
+export type AgentSessionNavigationTarget = AgentSessionOperationIdentity & {
+  navigationKey: string
 }
 
 type AgentWorkspaceTargetPreparation = {
@@ -143,6 +150,102 @@ function agentWorkspacePathsMatch(
 ) {
   if (left === null || right === null) return left === right
   return normalizeAgentWorkspacePath(left) === normalizeAgentWorkspacePath(right)
+}
+
+export function isAgentWorkspacePathReadyForTarget(
+  currentWorkspacePath: string | null,
+  targetWorkspacePath: string | null | undefined,
+) {
+  return targetWorkspacePath !== undefined
+    && agentWorkspacePathsMatch(currentWorkspacePath, targetWorkspacePath)
+}
+
+/**
+ * Resolve the session snapshot that owns the accepted navigation intent. The
+ * result deliberately does not depend on the currently connected workspace or
+ * Agent runtime, so its read can run in parallel with both.
+ */
+export function resolveAgentSessionNavigationTarget({
+  activeConversation,
+  activeWorkspaceContext,
+  projects,
+  request,
+}: {
+  activeConversation: ConversationRecord | null
+  activeWorkspaceContext: ActiveWorkspaceContext
+  projects: ProjectRecord[]
+  request: AgentProjectSessionRequest | null | undefined
+}): AgentSessionNavigationTarget | null {
+  if (
+    activeWorkspaceContext.kind === 'conversation'
+    && activeConversation?.id === activeWorkspaceContext.conversationId
+    && activeConversation.workspacePath
+    && activeConversation.agentSessionPath
+  ) {
+    return {
+      agentId: activeConversation.agentId,
+      navigationKey: `conversation:${activeConversation.id}:${activeConversation.agentSessionPath}`,
+      sessionPath: activeConversation.agentSessionPath,
+      workspacePath: activeConversation.workspacePath,
+    }
+  }
+
+  if (
+    activeWorkspaceContext.kind !== 'project'
+    || request?.kind !== 'session'
+    || request.projectId !== activeWorkspaceContext.projectId
+  ) {
+    return null
+  }
+
+  const project = projects.find((item) => item.id === request.projectId)
+  if (!project) return null
+
+  return {
+    agentId: request.agentId,
+    navigationKey: `project:${request.requestId}`,
+    sessionPath: request.sessionPath,
+    workspacePath: project.path,
+  }
+}
+
+export function agentSessionNavigationTargetsMatch(
+  left: AgentSessionNavigationTarget | null,
+  right: AgentSessionNavigationTarget | null,
+) {
+  if (!left || !right) return left === right
+  return left.navigationKey === right.navigationKey
+    && left.agentId === right.agentId
+    && left.sessionPath === right.sessionPath
+    && agentWorkspacePathsMatch(left.workspacePath, right.workspacePath)
+}
+
+/**
+ * A project navigation request is transient and may be acknowledged once its
+ * runtime is ready, while the independent snapshot read is still in flight.
+ * Keep accepting that read only if either the request still owns navigation or
+ * its exact presentation identity is still selected after acknowledgement.
+ */
+export function shouldApplyAgentSessionNavigationResult({
+  currentNavigationTarget,
+  currentSelection,
+  currentWorkspacePath,
+  operationTarget,
+}: {
+  currentNavigationTarget: AgentSessionNavigationTarget | null
+  currentSelection: AgentSessionSelection
+  currentWorkspacePath: string | null
+  operationTarget: AgentSessionNavigationTarget
+}) {
+  if (agentSessionNavigationTargetsMatch(currentNavigationTarget, operationTarget)) {
+    return true
+  }
+  return currentNavigationTarget === null
+    && shouldApplyAgentSessionOperationResult(
+      currentSelection,
+      currentWorkspacePath,
+      operationTarget,
+    )
 }
 
 /**

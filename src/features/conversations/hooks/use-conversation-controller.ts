@@ -231,19 +231,24 @@ export function useConversationController({
         return
       }
 
-      if (conversation.agentSessionPath) {
-        await window.appApi.updateWorkspaceState(targetWorkspacePath, {
-          lastAgentSessionPath: conversation.agentSessionPath,
-        })
-      }
-      const sessionExists = conversation.agentSessionPath
-        ? (await window.appApi.agentSessionExists({
+      const persistSessionSelection = conversation.agentSessionPath
+        ? window.appApi.updateWorkspaceState(targetWorkspacePath, {
+            lastAgentSessionPath: conversation.agentSessionPath,
+          })
+        : Promise.resolve()
+      const sessionExistsRequest = conversation.agentSessionPath
+        ? window.appApi.agentSessionExists({
             agentId: conversation.agentId,
             workspacePath: targetWorkspacePath,
-          }, conversation.agentSessionPath)).exists
-        : false
-      await connectWorkspace(targetWorkspacePath)
+          }, conversation.agentSessionPath)
+        : Promise.resolve({ exists: false })
+      const [, , sessionExistsResult] = await Promise.all([
+        connectWorkspace(targetWorkspacePath),
+        persistSessionSelection,
+        sessionExistsRequest,
+      ])
       await restoreWorkspaceTabs(targetWorkspacePath)
+      const sessionExists = sessionExistsResult.exists
       clearPendingAgentProjectSessionRequest()
       setStatusMessage(conversation.title)
 
@@ -370,24 +375,29 @@ export function useConversationController({
         return true
       }
 
-      if (activeConversation.agentSessionPath) {
-        await window.appApi.updateWorkspaceState(activeConversation.workspacePath, {
-          lastAgentSessionPath: activeConversation.agentSessionPath,
-        })
-      }
-      const sessionExists = activeConversation.agentSessionPath
-        ? (await window.appApi.agentSessionExists({
+      const persistSessionSelection = activeConversation.agentSessionPath
+        ? window.appApi.updateWorkspaceState(activeConversation.workspacePath, {
+            lastAgentSessionPath: activeConversation.agentSessionPath,
+          })
+        : Promise.resolve()
+      const sessionExistsRequest = activeConversation.agentSessionPath
+        ? window.appApi.agentSessionExists({
             agentId: activeConversation.agentId,
             workspacePath: activeConversation.workspacePath,
-          }, activeConversation.agentSessionPath)).exists
-        : false
-      await connectWorkspace(activeConversation.workspacePath)
+          }, activeConversation.agentSessionPath)
+        : Promise.resolve({ exists: false })
+      const [, , sessionExistsResult] = await Promise.all([
+        connectWorkspace(activeConversation.workspacePath),
+        persistSessionSelection,
+        sessionExistsRequest,
+      ])
 
       if (!isCancelled()) {
         await restoreWorkspaceTabs(activeConversation.workspacePath)
       }
 
       if (!isCancelled()) {
+        const sessionExists = sessionExistsResult.exists
         setStatusMessage(activeConversation.title)
 
         if (!sessionExists) {

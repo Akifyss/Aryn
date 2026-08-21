@@ -30,8 +30,11 @@ import { createDelayedLoadingIndicator } from '@/features/agent/lib/delayed-load
 import {
   isAgentNewConversationPresentation,
   resolvePendingAgentNewSessionProject,
+  resolveAgentSessionNavigationTarget,
+  shouldApplyAgentSessionNavigationResult,
   shouldApplyAgentSessionOperationResult,
   type AgentProjectSessionRequest,
+  type AgentSessionNavigationTarget,
   type AgentSessionSelection,
 } from '@/features/agent/lib/project-session-request'
 import { normalizeAgentProjectPath } from '@/features/agent/lib/session-tree'
@@ -39,11 +42,15 @@ import type {
   AgentSessionSnapshot,
   AgentWorkspaceState,
 } from '@/features/agent/types'
-import type { ActiveWorkspaceContext } from '@/features/conversations/types'
+import type {
+  ActiveWorkspaceContext,
+  ConversationRecord,
+} from '@/features/conversations/types'
 import type { ProjectState } from '@/features/workspace/types'
 
 type UseAgentSessionNavigationOptions = {
   externalRequest: {
+    activeConversation: ConversationRecord | null
     activeWorkspaceContext: ActiveWorkspaceContext
     hasLoadedWorkspaceState: boolean
     isLoading: boolean
@@ -77,6 +84,12 @@ type UseAgentSessionNavigationOptions = {
   }
 }
 
+type OpenAgentSessionOptions = {
+  navigationTarget?: AgentSessionNavigationTarget
+  rollbackOnError?: boolean
+  workspacePath?: string
+}
+
 export type AgentSessionPresentation = {
   agentId: AgentId
   selection: AgentSessionSelection
@@ -88,7 +101,7 @@ function presentationsMatch(
   right: AgentSessionPresentation,
 ) {
   return left.agentId === right.agentId
-    && left.workspacePath === right.workspacePath
+    && workspacePathsMatch(left.workspacePath, right.workspacePath)
     && left.selection.kind === right.selection.kind
     && (
       left.selection.kind === 'new'
@@ -101,15 +114,13 @@ function presentationsMatch(
 }
 
 function workspacePathsMatch(left: string | null | undefined, right: string | null | undefined) {
-  return Boolean(
-    left
-    && right
-    && normalizeAgentProjectPath(left) === normalizeAgentProjectPath(right),
-  )
+  if (left == null || right == null) return left === right
+  return normalizeAgentProjectPath(left) === normalizeAgentProjectPath(right)
 }
 
 export function useAgentSessionNavigation({
   externalRequest: {
+    activeConversation,
     activeWorkspaceContext,
     hasLoadedWorkspaceState,
     isLoading,
@@ -144,6 +155,7 @@ export function useAgentSessionNavigation({
 }: UseAgentSessionNavigationOptions) {
   const openSessionRequestIdRef = useRef(0)
   const handledExternalSessionRequestRef = useRef<number | null>(null)
+  const handledNavigationTargetRef = useRef<string | null>(null)
   const presentedExternalNewSessionRequestRef = useRef<number | null>(null)
   const [isSessionSnapshotLoading, setIsSessionSnapshotLoading] = useState(false)
   const [showSessionSnapshotLoadingIndicator, setShowSessionSnapshotLoadingIndicator] = useState(false)
@@ -165,6 +177,33 @@ export function useAgentSessionNavigation({
     })
   }
   const loadingIndicator = loadingIndicatorRef.current
+  const sessionNavigationTarget = resolveAgentSessionNavigationTarget({
+    activeConversation,
+    activeWorkspaceContext,
+    projects: projectState.projects,
+    request: externalSessionRequest,
+  })
+  const sessionNavigationTargetRef = useRef(sessionNavigationTarget)
+  sessionNavigationTargetRef.current = sessionNavigationTarget
+
+  const sessionNavigationTargetKey = sessionNavigationTarget
+    ? [
+        sessionNavigationTarget.navigationKey,
+        sessionNavigationTarget.agentId,
+        normalizeAgentProjectPath(sessionNavigationTarget.workspacePath),
+        sessionNavigationTarget.sessionPath,
+      ].join('\n')
+    : null
+  const conversationFallbackPresentationKey = activeWorkspaceContext.kind === 'conversation'
+    && activeConversation?.id === activeWorkspaceContext.conversationId
+    && !sessionNavigationTarget
+    ? [
+        activeConversation.id,
+        activeConversation.agentId,
+        activeConversation.workspacePath ?? '',
+        activeConversation.agentSessionPath ?? '',
+      ].join('\n')
+    : null
 
   function syncSessionPresentation(presentation: AgentSessionPresentation) {
     sessionPresentationRef.current = presentation
@@ -174,6 +213,14 @@ export function useAgentSessionNavigation({
   }
 
   useEffect(() => {
+    const navigationTarget = sessionNavigationTargetRef.current
+    // The accepted target owns presentation while the workspace connection is
+    // catching up. An intermediate or late workspace result must not cancel a
+    // snapshot read that is independent from runtime activation.
+    if (navigationTarget) {
+      return
+    }
+
     openSessionRequestIdRef.current += 1
     loadingIndicator.finish()
     setIsSessionSnapshotLoading(false)
@@ -188,6 +235,27 @@ export function useAgentSessionNavigation({
     openSessionRequestIdRef.current += 1
     loadingIndicator.cancelPending()
   }, [loadingIndicator])
+
+  // A conversation whose workspace or session is unavailable still owns an
+  // explicit empty/error presentation. Clear the prior session before paint so
+  // it cannot leak beneath the newly accepted conversation title.
+  useLayoutEffect(() => {
+    if (!conversationFallbackPresentationKey || !activeConversation) return
+
+    openSessionRequestIdRef.current += 1
+    loadingIndicator.finish()
+    setIsSessionSnapshotLoading(false)
+    setSelectedAgentIdValue(activeConversation.agentId)
+    syncActiveSessionSelection({ kind: 'new' })
+    setViewedSessionSnapshot(null)
+    syncSessionPresentation({
+      agentId: activeConversation.agentId,
+      selection: { kind: 'new' },
+      workspacePath: activeConversation.workspacePath,
+    })
+    setPanelError(null)
+    closeSessionOverlay()
+  }, [conversationFallbackPresentationKey])
 
   useEffect(() => {
     const runtimeWorkspacePath = agentState.runtime.workspacePath
@@ -401,18 +469,23 @@ export function useAgentSessionNavigation({
     }).catch(() => undefined)
   }
 
-  async function handleOpenSession(agentId: AgentId, sessionPath: string) {
-    if (!workspacePath) {
+  async function handleOpenSession(
+    agentId: AgentId,
+    sessionPath: string,
+    options: OpenAgentSessionOptions = {},
+  ) {
+    const operationWorkspacePath = options.workspacePath ?? workspacePath
+    if (!operationWorkspacePath) {
       return
     }
 
     void preloadBbSessionSurface().catch(() => undefined)
     const isActiveRuntimeSession = agentState.runtime.agentId === agentId
-      && workspacePathsMatch(agentState.runtime.workspacePath, workspacePath)
+      && workspacePathsMatch(agentState.runtime.workspacePath, operationWorkspacePath)
       && agentState.activeSession?.sessionPath === sessionPath
     const cachedSnapshot = isActiveRuntimeSession
       ? null
-      : getCachedAgentSessionSnapshot(agentId, workspacePath, sessionPath)
+      : getCachedAgentSessionSnapshot(agentId, operationWorkspacePath, sessionPath)
     const canPresentCachedSnapshot = Boolean(
       cachedSnapshot
       && (!cachedSnapshot.native || getPreloadedBbSessionSurface()),
@@ -422,7 +495,7 @@ export function useAgentSessionNavigation({
     const targetPresentation: AgentSessionPresentation = {
       agentId,
       selection: targetSelection,
-      workspacePath,
+      workspacePath: operationWorkspacePath,
     }
     setSelectedAgentIdValue(agentId)
     syncActiveSessionSelection(targetSelection)
@@ -432,11 +505,18 @@ export function useAgentSessionNavigation({
 
     const isCurrentRequest = () => (
       requestId === openSessionRequestIdRef.current
-      && shouldApplyAgentSessionOperationResult(
-        activeSessionSelectionRef.current,
-        workspacePathRef.current,
-        { agentId, sessionPath, workspacePath },
-      )
+      && (options.navigationTarget
+        ? shouldApplyAgentSessionNavigationResult({
+            currentNavigationTarget: sessionNavigationTargetRef.current,
+            currentSelection: activeSessionSelectionRef.current,
+            currentWorkspacePath: workspacePathRef.current,
+            operationTarget: options.navigationTarget,
+          })
+        : shouldApplyAgentSessionOperationResult(
+            activeSessionSelectionRef.current,
+            workspacePathRef.current,
+            { agentId, sessionPath, workspacePath: operationWorkspacePath },
+          ))
     )
 
     if (isActiveRuntimeSession) {
@@ -465,7 +545,7 @@ export function useAgentSessionNavigation({
       const nextSnapshot = await loadAgentSessionSnapshot({
         agentId,
         sessionPath,
-        workspacePath,
+        workspacePath: operationWorkspacePath,
       })
       if (nextSnapshot.native) await preloadBbSessionSurface()
       if (!isCurrentRequest()) {
@@ -474,26 +554,29 @@ export function useAgentSessionNavigation({
 
       const retainedInteractionHistory = cachedSnapshot?.interactionHistory ?? (
         agentState.runtime.agentId === agentId
-        && workspacePathsMatch(agentState.runtime.workspacePath, workspacePath)
+        && workspacePathsMatch(agentState.runtime.workspacePath, operationWorkspacePath)
         && agentState.activeSession?.sessionPath === sessionPath
-        && workspacePathsMatch(agentState.activeSession.workspacePath, workspacePath)
+        && workspacePathsMatch(agentState.activeSession.workspacePath, operationWorkspacePath)
           ? agentState.activeSession.interactionHistory
           : undefined
       )
       const immediateSnapshot = retainedInteractionHistory
         ? { ...nextSnapshot, interactionHistory: retainedInteractionHistory }
         : nextSnapshot
-      cacheAgentSessionSnapshot(agentId, workspacePath, sessionPath, immediateSnapshot)
+      cacheAgentSessionSnapshot(agentId, operationWorkspacePath, sessionPath, immediateSnapshot)
       loadingIndicator.finish()
       syncSessionPresentation(targetPresentation)
 
       const shouldRefreshActiveRuntime = isActiveRuntimeSession || (
         selectedAgentIdRef.current === agentId
+        && workspacePathsMatch(activeRuntimeSessionRef.current?.workspacePath, operationWorkspacePath)
         && activeRuntimeSessionRef.current?.sessionPath === sessionPath
       )
       if (shouldRefreshActiveRuntime) {
         syncActiveRuntimeSessionSnapshot(agentId, immediateSnapshot)
-        syncModelDraft(getRuntimeSelectedModelDraft(agentState.runtime))
+        if (isActiveRuntimeSession) {
+          syncModelDraft(getRuntimeSelectedModelDraft(agentState.runtime))
+        }
       } else {
         setViewedSessionSnapshot(immediateSnapshot)
       }
@@ -502,13 +585,14 @@ export function useAgentSessionNavigation({
         if (!isCurrentRequest()) return
         void window.appApi.readAgentSessionInteractionHistory({
           agentId,
-          workspacePath,
+          workspacePath: operationWorkspacePath,
         }, nextSnapshot.sessionId).then((interactionHistory) => {
           if (!isCurrentRequest()) return
           const enrichedSnapshot = { ...immediateSnapshot, interactionHistory }
-          cacheAgentSessionSnapshot(agentId, workspacePath, sessionPath, enrichedSnapshot)
+          cacheAgentSessionSnapshot(agentId, operationWorkspacePath, sessionPath, enrichedSnapshot)
           const shouldRefreshCurrentRuntime = (
             selectedAgentIdRef.current === agentId
+            && workspacePathsMatch(activeRuntimeSessionRef.current?.workspacePath, operationWorkspacePath)
             && activeRuntimeSessionRef.current?.sessionPath === sessionPath
           )
           if (shouldRefreshCurrentRuntime) {
@@ -530,12 +614,26 @@ export function useAgentSessionNavigation({
       }
 
       loadingIndicator.finish()
-      if (!canPresentCachedSnapshot) {
-        syncActiveSessionSelection(fallbackPresentation.selection)
-        setSelectedAgentIdValue(fallbackPresentation.agentId)
-        syncSessionPresentation(fallbackPresentation)
+      const hasCurrentRuntimeSnapshot = selectedAgentIdRef.current === agentId
+        && workspacePathsMatch(activeRuntimeSessionRef.current?.workspacePath, operationWorkspacePath)
+        && activeRuntimeSessionRef.current?.sessionPath === sessionPath
+      if (hasCurrentRuntimeSnapshot) {
+        setViewedSessionSnapshot(null)
+        syncSessionPresentation(targetPresentation)
+        setPanelError(null)
+        return
       }
-      setPanelError(error instanceof Error ? error.message : 'Unable to open that session.')
+      if (!canPresentCachedSnapshot) {
+        if (options.rollbackOnError === false) {
+          setViewedSessionSnapshot(null)
+          syncSessionPresentation(targetPresentation)
+        } else {
+          syncActiveSessionSelection(fallbackPresentation.selection)
+          setSelectedAgentIdValue(fallbackPresentation.agentId)
+          syncSessionPresentation(fallbackPresentation)
+        }
+      }
+      setPanelError(error instanceof Error ? error.message : '无法打开该会话，请重试。')
     } finally {
       if (requestId === openSessionRequestIdRef.current) {
         loadingIndicator.finish()
@@ -543,6 +641,30 @@ export function useAgentSessionNavigation({
       }
     }
   }
+
+  // Snapshot presentation follows the accepted navigation intent immediately.
+  // Workspace discovery, Git setup, file watching, and runtime activation are
+  // independent background work and must not delay the first useful frame.
+  useLayoutEffect(() => {
+    if (!sessionNavigationTarget || !sessionNavigationTargetKey) {
+      handledNavigationTargetRef.current = null
+      return
+    }
+    if (handledNavigationTargetRef.current === sessionNavigationTargetKey) {
+      return
+    }
+
+    handledNavigationTargetRef.current = sessionNavigationTargetKey
+    void handleOpenSession(
+      sessionNavigationTarget.agentId,
+      sessionNavigationTarget.sessionPath,
+      {
+        navigationTarget: sessionNavigationTarget,
+        rollbackOnError: false,
+        workspacePath: sessionNavigationTarget.workspacePath,
+      },
+    )
+  }, [sessionNavigationTargetKey])
 
   useEffect(() => {
     const requestedProject = externalSessionRequest
@@ -566,17 +688,15 @@ export function useAgentSessionNavigation({
 
     handledExternalSessionRequestRef.current = externalSessionRequest.requestId
 
-    if (externalSessionRequest.kind === 'new') {
+    if (externalSessionRequest.kind === 'session') {
       onExternalSessionRequestHandled?.(externalSessionRequest.requestId)
-      if (presentedExternalNewSessionRequestRef.current !== externalSessionRequest.requestId) {
-        handleStartNewSession(requestedProject?.path ?? workspacePath)
-      }
       return
     }
 
-    void handleOpenSession(externalSessionRequest.agentId, externalSessionRequest.sessionPath).finally(() => {
-      onExternalSessionRequestHandled?.(externalSessionRequest.requestId)
-    })
+    onExternalSessionRequestHandled?.(externalSessionRequest.requestId)
+    if (presentedExternalNewSessionRequestRef.current !== externalSessionRequest.requestId) {
+      handleStartNewSession(requestedProject?.path ?? workspacePath)
+    }
   }, [
     externalSessionRequest,
     hasLoadedWorkspaceState,

@@ -230,7 +230,7 @@ describe('bb unified session surface build contract', () => {
       'utf8',
     )
 
-    expect(source).toContain('workspacePath && nativeSession ?')
+    expect(source).toContain('visibleWorkspacePath && nativeSession ?')
     expect(source).toContain('<BbSessionTimeline')
     expect(source).not.toContain('sessionView')
     expect(source).not.toContain('<CodexSessionTimeline')

@@ -84,6 +84,7 @@ function AgentConversationRow({
   onCancelRename,
   onDelete,
   onMenuOpenChange,
+  onPrefetch,
   onRename,
   onRequestRename,
 }: {
@@ -97,6 +98,7 @@ function AgentConversationRow({
   onCancelRename: () => void
   onDelete: () => void
   onMenuOpenChange: (open: boolean) => void
+  onPrefetch?: () => void
   onRename: (name: string) => Promise<void>
   onRequestRename: () => void
 }) {
@@ -120,6 +122,7 @@ function AgentConversationRow({
       onDelete={onDelete}
       onMenuOpenChange={onMenuOpenChange}
       onOpen={onOpen}
+      onPrefetch={onPrefetch}
       onRename={onRename}
       onRequestRename={onRequestRename}
     />
@@ -550,6 +553,16 @@ export function AgentProjectTree({
     }
 
     const { conversation } = row
+    const conversationWorkspacePath = conversation.workspacePath
+    const conversationSessionPath = conversation.agentSessionPath
+    const isActiveConversation = activeWorkspaceContext.kind === 'conversation'
+      && activeWorkspaceContext.conversationId === conversation.id
+    const isCurrentActiveConversationWorkspace = Boolean(
+      isActiveConversation
+      && workspacePath
+      && conversationWorkspacePath
+      && normalizeAgentProjectPath(workspacePath) === normalizeAgentProjectPath(conversationWorkspacePath),
+    )
     return (
       <AgentConversationRow
         activity={conversation.agentSessionPath
@@ -558,7 +571,7 @@ export function AgentProjectTree({
         conversation={conversation}
         isDeleting={deletingConversationId === conversation.id}
         isRenaming={renamingConversationId === conversation.id}
-        isActive={activeWorkspaceContext.kind === 'conversation' && activeWorkspaceContext.conversationId === conversation.id}
+        isActive={isActiveConversation}
         menuPortalTarget={menuPortalTarget}
         onCancelRename={() => setRenamingConversationId(null)}
         onDelete={() => {
@@ -573,10 +586,22 @@ export function AgentProjectTree({
         onOpen={() => {
           setRenamingSessionPath(null)
           setRenamingConversationId(null)
-          void Promise.resolve(onOpenConversation?.(conversation)).then(() => {
+          const openConversation = isCurrentActiveConversationWorkspace && conversationSessionPath
+            ? handleOpenSession(conversation.agentId, conversationSessionPath)
+            : onOpenConversation?.(conversation)
+          void Promise.resolve(openConversation).then(() => {
             onRequestClose?.()
           })
         }}
+        onPrefetch={conversationWorkspacePath && conversationSessionPath
+          ? () => {
+              handlePrefetchSession(
+                conversationWorkspacePath,
+                conversation.agentId,
+                conversationSessionPath,
+              )
+            }
+          : undefined}
         onRename={(title) => Promise.resolve(onRenameConversation?.(conversation, title))}
         onRequestRename={() => setRenamingConversationId(conversation.id)}
       />

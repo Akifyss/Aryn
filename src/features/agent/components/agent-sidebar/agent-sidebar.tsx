@@ -316,10 +316,13 @@ function AgentProvider({
   const activeProject = activeWorkspaceContext.kind === 'project'
     ? projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId) ?? null
     : null
-  const requestedProjectAgentId = externalSessionRequest?.kind === 'session'
+  const activeProjectSessionRequest = externalSessionRequest
     && activeWorkspaceContext.kind === 'project'
     && externalSessionRequest.projectId === activeWorkspaceContext.projectId
-    ? externalSessionRequest.agentId
+    ? externalSessionRequest
+    : null
+  const requestedProjectAgentId = activeProjectSessionRequest?.kind === 'session'
+    ? activeProjectSessionRequest.agentId
     : null
   const selectedAgentId = activeConversation?.agentId
     ?? requestedProjectAgentId
@@ -327,15 +330,24 @@ function AgentProvider({
   const targetWorkspacePath = activeWorkspaceContext.kind === 'project'
     ? activeProject?.path
     : activeWorkspaceContext.kind === 'conversation'
-      ? activeConversation?.workspacePath
+      ? activeConversation?.workspacePath ?? undefined
       : null
-  const isWorkspaceContextPreparing = isAgentWorkspaceTargetPreparing({
-    currentWorkspacePath: workspacePath,
-    hasLoadedWorkspaceState,
-    runtime: agentState.runtime,
-    selectedAgentId,
-    targetWorkspacePath,
-  })
+  const targetAgentSessionPath = activeWorkspaceContext.kind === 'conversation'
+    ? activeConversation?.agentSessionPath ?? null
+    : activeProjectSessionRequest
+      ? activeProjectSessionRequest.kind === 'session' ? activeProjectSessionRequest.sessionPath : null
+      : undefined
+  const isUnavailableConversationWorkspace = activeWorkspaceContext.kind === 'conversation'
+    && Boolean(activeConversation)
+    && !activeConversation?.workspacePath
+  const isWorkspaceContextPreparing = !isUnavailableConversationWorkspace
+    && isAgentWorkspaceTargetPreparing({
+      currentWorkspacePath: workspacePath,
+      hasLoadedWorkspaceState,
+      runtime: agentState.runtime,
+      selectedAgentId,
+      targetWorkspacePath,
+    })
   const sessionControlTarget = useMemo(() => {
     return resolveAgentSessionControlPresentation({
       activeProject,
@@ -481,6 +493,8 @@ function AgentProvider({
     workspace: {
       onWorkspaceStateChange,
       projectState,
+      targetAgentSessionPath,
+      targetWorkspacePath,
       workspacePath,
       workspaceState,
     },
@@ -536,6 +550,7 @@ function AgentProvider({
     showSessionSnapshotLoadingIndicator,
   } = useAgentSessionNavigation({
     externalRequest: {
+      activeConversation,
       activeWorkspaceContext,
       hasLoadedWorkspaceState,
       isLoading,
@@ -595,14 +610,14 @@ function AgentProvider({
     sessions: agentState.sessions,
     setOptimisticUserMessages,
     viewedSessionSnapshot,
-    workspacePath,
+    workspacePath: sessionPresentation.workspacePath,
   })
   const pendingInteraction = findVisiblePendingInteraction({
     activeRuntimeSessionId: agentState.activeSession?.sessionId ?? null,
     isViewingActiveRuntime,
     pendingInteractions,
     selectedAgentId: sessionPresentation.agentId,
-    workspacePath,
+    workspacePath: sessionPresentation.workspacePath,
   })
   const visibleInteractionTimelineRecords = useMemo(() => mergeInteractionTimelineRecords(
     interactionTimelineRecords,
@@ -614,12 +629,17 @@ function AgentProvider({
       return
     }
 
-    const runtimeSessionTitle = agentState.activeSession?.sessionPath === activeSessionPath
+    const runtimeSessionTitle = isViewingActiveRuntime
+      && agentState.activeSession?.sessionPath === activeSessionPath
       ? agentState.activeSession.name
       : null
     const suggestedTitle = (runtimeSessionTitle ?? activeSession?.name ?? '').trim()
     const suggestedSessionPath = activeSession?.path
-      ?? (agentState.activeSession?.sessionPath === activeSessionPath ? agentState.activeSession.sessionPath : null)
+      ?? (
+        isViewingActiveRuntime && agentState.activeSession?.sessionPath === activeSessionPath
+          ? agentState.activeSession.sessionPath
+          : null
+      )
 
     if (!suggestedTitle || !suggestedSessionPath) {
       return
@@ -661,6 +681,7 @@ function AgentProvider({
     agentState.activeSession?.name,
     agentState.activeSession?.sessionPath,
     conversationState.conversations,
+    isViewingActiveRuntime,
     onConversationTitleSuggested,
   ])
 
@@ -689,19 +710,16 @@ function AgentProvider({
       persistedMessages: visiblePersistedMessages,
       snapshot: visibleSessionSnapshot,
     },
-    workspacePath,
+    workspacePath: sessionPresentation.workspacePath,
   })
 
   const isWorkspaceSessionLoading = Boolean(
-    isLoading && !visibleSessionSnapshot && (
-      (
-        activeWorkspaceContext.kind === 'project'
-        && !(
-          externalSessionRequest?.kind === 'new'
-          && externalSessionRequest.projectId === activeWorkspaceContext.projectId
-        )
-      )
-      || activeConversation?.agentSessionPath
+    isLoading
+    && !visibleSessionSnapshot
+    && activeWorkspaceContext.kind === 'project'
+    && !(
+      externalSessionRequest?.kind === 'new'
+      && externalSessionRequest.projectId === activeWorkspaceContext.projectId
     ),
   )
   const pendingNewSessionProject = resolvePendingAgentNewSessionProject(
@@ -1039,6 +1057,7 @@ function AgentProvider({
     visibleAgentId: sessionPresentation.agentId,
     visibleSessionPath: activeSessionPath,
     visibleSessionSelection: sessionPresentation.selection,
+    visibleWorkspacePath: sessionPresentation.workspacePath,
     setSelectedAgentId,
     statusMessage,
     stoppingPrompt,

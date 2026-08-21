@@ -14,6 +14,7 @@ import {
   type AgentModelDraft,
 } from '@/features/agent/lib/model-selection'
 import {
+  isAgentWorkspacePathReadyForTarget,
   resolveAgentWorkspaceSessionRestore,
   shouldApplyAgentWorkspaceState,
   shouldPersistAgentWorkspaceSelection,
@@ -79,6 +80,8 @@ type UseAgentWorkspaceLifecycleOptions = {
   workspace: {
     onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
     projectState: ProjectState
+    targetAgentSessionPath: string | null | undefined
+    targetWorkspacePath: string | null | undefined
     workspacePath: string | null
     workspaceState?: AgentWorkspaceState | null
   }
@@ -126,6 +129,8 @@ export function useAgentWorkspaceLifecycle({
   workspace: {
     onWorkspaceStateChange,
     projectState,
+    targetAgentSessionPath,
+    targetWorkspacePath,
     workspacePath,
     workspaceState,
   },
@@ -141,6 +146,7 @@ export function useAgentWorkspaceLifecycle({
     if (
       !workspacePath
       || !workspaceState
+      || !isAgentWorkspacePathReadyForTarget(workspacePath, targetWorkspacePath)
       || !shouldPersistAgentWorkspaceSelection(workspaceState.runtime, selectedAgentId, workspacePath)
     ) {
       return
@@ -189,13 +195,20 @@ export function useAgentWorkspaceLifecycle({
       syncModelDraft(nextDraft)
     }
     setHasLoadedWorkspaceState(true)
-  }, [selectedAgentId, workspacePath, workspaceState])
+  }, [selectedAgentId, targetWorkspacePath, workspacePath, workspaceState])
 
   useEffect(() => {
     const requestId = loadAgentStateRequestIdRef.current + 1
     loadAgentStateRequestIdRef.current = requestId
     primaryLoadPendingRef.current = true
     backgroundRefreshRequestIdRef.current += 1
+
+    if (!isAgentWorkspacePathReadyForTarget(workspacePath, targetWorkspacePath)) {
+      primaryLoadPendingRef.current = false
+      setHasLoadedWorkspaceState(false)
+      setIsLoading(false)
+      return
+    }
 
     if (!workspacePath) {
       setAgentState(initialAgentState)
@@ -252,7 +265,9 @@ export function useAgentWorkspaceLifecycle({
 
     setIsLoading(true)
     setPanelError(null)
-    setViewedSessionSnapshot(null)
+    // A target snapshot may already be paintable before runtime activation.
+    // Keep it committed until the restored runtime state can replace it
+    // atomically; session identity filtering prevents stale content leakage.
     setHasLoadedWorkspaceState(false)
     const requestedProject = externalSessionRequestRef.current
       ? projectState.projects.find((project) => project.id === externalSessionRequestRef.current?.projectId) ?? null
@@ -262,6 +277,10 @@ export function useAgentWorkspaceLifecycle({
       ? externalSessionRequestRef.current
       : null
     const shouldStartNewSession = matchingExternalRequest?.kind === 'new'
+      || (
+        activeWorkspaceContext.kind === 'conversation'
+        && targetAgentSessionPath === null
+      )
 
     if (shouldStartNewSession) {
       syncActiveSessionSelection({ kind: 'new' })
@@ -293,7 +312,12 @@ export function useAgentWorkspaceLifecycle({
           return
         }
 
+        const currentSelection = activeSessionSelectionRef.current
         const nativeRestoredSessionPath = nextState.activeSession?.sessionPath ?? null
+        const acceptedSessionSelection = currentSelection.kind === 'session'
+          && targetAgentSessionPath === currentSelection.sessionPath
+          ? currentSelection
+          : null
         if (
           activeWorkspaceContext.kind === 'conversation'
           && activeConversation
@@ -311,7 +335,6 @@ export function useAgentWorkspaceLifecycle({
           markAgentUnavailable(selectedAgentId, nextState.runtime.setupHint ?? '当前 Agent 没有可用模型。')
         }
         setAgentState(nextState)
-        setViewedSessionSnapshot(null)
         const nextActiveSessionPath = nextState.activeSession?.sessionPath
         const hasRestoredSession = Boolean(
           nextActiveSessionPath
@@ -320,9 +343,16 @@ export function useAgentWorkspaceLifecycle({
         const restoredSessionPath = hasRestoredSession ? nextActiveSessionPath : null
         const nextSelection = shouldStartNewSession
           ? { kind: 'new' as const }
-          : restoredSessionPath
-            ? { agentId: selectedAgentId, kind: 'session' as const, sessionPath: restoredSessionPath }
-            : { kind: 'new' as const }
+          : acceptedSessionSelection
+            ?? (restoredSessionPath
+              ? { agentId: selectedAgentId, kind: 'session' as const, sessionPath: restoredSessionPath }
+              : { kind: 'new' as const })
+        const runtimeOwnsNextSelection = nextSelection.kind === 'session'
+          && nextState.activeSession?.sessionPath === nextSelection.sessionPath
+          && shouldPersistAgentWorkspaceSelection(nextState.runtime, nextSelection.agentId, workspacePath)
+        if (nextSelection.kind === 'new' || runtimeOwnsNextSelection) {
+          setViewedSessionSnapshot(null)
+        }
         syncActiveSessionSelection(nextSelection)
         const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
         const nextNewSessionDraft = normalizeAgentModelDraft(defaultDraft, nextState.runtime, defaultDraft)
@@ -344,7 +374,7 @@ export function useAgentWorkspaceLifecycle({
           setIsLoading(false)
         }
       })
-  }, [markAgentUnavailable, selectedAgentId, workspacePath])
+  }, [markAgentUnavailable, selectedAgentId, targetAgentSessionPath, targetWorkspacePath, workspacePath])
 
   // Opening the Agent selector refreshes discovery in the background. Revalidate
   // the current new-session runtime without replacing the surface with a loader
@@ -362,6 +392,7 @@ export function useAgentWorkspaceLifecycle({
     if (
       primaryLoadPendingRef.current
       || isLoading
+      || !isAgentWorkspacePathReadyForTarget(workspacePath, targetWorkspacePath)
       || currentSelection.kind !== 'new'
       || activeWorkspaceContext.kind === 'conversation'
       || (hasLoadedWorkspaceState && !isCurrentRuntime)
@@ -423,6 +454,7 @@ export function useAgentWorkspaceLifecycle({
     selectedAgentId,
     syncModelDraft,
     syncNewSessionModelDraft,
+    targetWorkspacePath,
     workspacePath,
   ])
 
@@ -431,6 +463,7 @@ export function useAgentWorkspaceLifecycle({
       !workspacePath
       || isLoading
       || !hasLoadedWorkspaceState
+      || !isAgentWorkspacePathReadyForTarget(workspacePath, targetWorkspacePath)
       || !shouldPersistAgentWorkspaceSelection(agentState.runtime, selectedAgentId, workspacePath)
     ) {
       return
@@ -455,6 +488,7 @@ export function useAgentWorkspaceLifecycle({
     isLoading,
     restorableSessionPath,
     selectedAgentId,
+    targetWorkspacePath,
     workspacePath,
   ])
 

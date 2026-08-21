@@ -189,6 +189,7 @@ export type AgentContextValue = {
   visibleAgentId: AgentId
   visibleSessionPath: string | null
   visibleSessionSelection: AgentSessionSelection
+  visibleWorkspacePath: string | null
   setSelectedAgentId: (agentId: AgentId) => void
   statusMessage: string | null
   stoppingPrompt: AgentStoppingPromptState | null

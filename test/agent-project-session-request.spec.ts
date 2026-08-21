@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  agentSessionNavigationTargetsMatch,
   isAgentWorkspaceTargetPreparing,
+  isAgentWorkspacePathReadyForTarget,
   isAgentNewConversationPresentation,
   resolveAgentSessionControlTarget,
+  resolveAgentSessionNavigationTarget,
   resolvePendingAgentNewSessionProject,
   resolveAgentWorkspaceSessionRestore,
+  shouldApplyAgentSessionNavigationResult,
   shouldApplyAgentSessionOperationResult,
   shouldApplyAgentWorkspaceState,
   shouldPersistAgentWorkspaceSelection,
@@ -19,6 +23,127 @@ const projects = [{
   name: 'Career',
   path: 'C:/work/career',
 }]
+
+describe('resolveAgentSessionNavigationTarget', () => {
+  const conversation = {
+    agentId: 'pi' as const,
+    agentSessionPath: 'C:/sessions/conversation.jsonl',
+    createdAt: '2026-08-20T00:00:00.000Z',
+    id: 'conversation-1',
+    lastMessagePreview: 'Hello',
+    status: 'active' as const,
+    title: 'Conversation',
+    titleSource: 'user' as const,
+    updatedAt: '2026-08-20T00:00:00.000Z',
+    workspacePath: 'C:/work/conversation',
+  }
+
+  it('resolves an accepted conversation without waiting for the connected workspace', () => {
+    expect(resolveAgentSessionNavigationTarget({
+      activeConversation: conversation,
+      activeWorkspaceContext: { kind: 'conversation', conversationId: conversation.id },
+      projects,
+      request: null,
+    })).toMatchObject({
+      agentId: 'pi',
+      navigationKey: 'conversation:conversation-1:C:/sessions/conversation.jsonl',
+      sessionPath: 'C:/sessions/conversation.jsonl',
+      workspacePath: 'C:/work/conversation',
+    })
+  })
+
+  it('resolves only the project session request owned by the active context', () => {
+    const request: AgentProjectSessionRequest = {
+      agentId: 'codex',
+      kind: 'session',
+      projectId: 'project-1',
+      requestId: 7,
+      sessionLabel: 'Target',
+      sessionPath: 'C:/sessions/target.jsonl',
+    }
+    expect(resolveAgentSessionNavigationTarget({
+      activeConversation: null,
+      activeWorkspaceContext: { kind: 'project', projectId: 'project-1' },
+      projects,
+      request,
+    })).toMatchObject({
+      navigationKey: 'project:7',
+      workspacePath: 'C:/work/career',
+    })
+    expect(resolveAgentSessionNavigationTarget({
+      activeConversation: null,
+      activeWorkspaceContext: { kind: 'project', projectId: 'another-project' },
+      projects,
+      request,
+    })).toBeNull()
+  })
+
+  it('uses the full normalized identity to reject late navigation results', () => {
+    const target = resolveAgentSessionNavigationTarget({
+      activeConversation: conversation,
+      activeWorkspaceContext: { kind: 'conversation', conversationId: conversation.id },
+      projects,
+      request: null,
+    })
+    expect(target).not.toBeNull()
+    if (!target) throw new Error('Expected a conversation navigation target.')
+    expect(agentSessionNavigationTargetsMatch(target, {
+      ...target,
+      workspacePath: 'c:\\work\\conversation\\',
+    })).toBe(true)
+    expect(agentSessionNavigationTargetsMatch(target, {
+      ...target,
+      navigationKey: 'conversation:2',
+    })).toBe(false)
+  })
+})
+
+describe('isAgentWorkspacePathReadyForTarget', () => {
+  it('starts runtime work only after the connected path owns the accepted target', () => {
+    expect(isAgentWorkspacePathReadyForTarget('C:/work/old', 'C:/work/career')).toBe(false)
+    expect(isAgentWorkspacePathReadyForTarget('c:\\work\\career\\', 'C:/work/career')).toBe(true)
+    expect(isAgentWorkspacePathReadyForTarget(null, null)).toBe(true)
+    expect(isAgentWorkspacePathReadyForTarget(null, undefined)).toBe(false)
+  })
+})
+
+describe('shouldApplyAgentSessionNavigationResult', () => {
+  const operationTarget = {
+    agentId: 'codex' as const,
+    navigationKey: 'project:7',
+    sessionPath: 'C:/sessions/target.jsonl',
+    workspacePath: 'C:/work/career',
+  }
+  const selectedTarget = {
+    agentId: 'codex' as const,
+    kind: 'session' as const,
+    sessionPath: operationTarget.sessionPath,
+  }
+
+  it('keeps a snapshot result valid after its transient project request is acknowledged', () => {
+    expect(shouldApplyAgentSessionNavigationResult({
+      currentNavigationTarget: null,
+      currentSelection: selectedTarget,
+      currentWorkspacePath: 'c:\\work\\career\\',
+      operationTarget,
+    })).toBe(true)
+  })
+
+  it('rejects the result when another navigation or presentation has taken ownership', () => {
+    expect(shouldApplyAgentSessionNavigationResult({
+      currentNavigationTarget: { ...operationTarget, navigationKey: 'project:8' },
+      currentSelection: selectedTarget,
+      currentWorkspacePath: operationTarget.workspacePath,
+      operationTarget,
+    })).toBe(false)
+    expect(shouldApplyAgentSessionNavigationResult({
+      currentNavigationTarget: null,
+      currentSelection: { kind: 'new' },
+      currentWorkspacePath: operationTarget.workspacePath,
+      operationTarget,
+    })).toBe(false)
+  })
+})
 
 describe('resolvePendingAgentNewSessionProject', () => {
   it('resolves only a new-session request owned by the active project', () => {
