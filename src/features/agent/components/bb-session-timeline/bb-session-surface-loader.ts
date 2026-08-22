@@ -137,10 +137,13 @@ export function scheduleBbSessionSurfacePreload() {
     surfacePreloadScheduled = false
     void preloadBbSessionSurface().catch(() => undefined)
   }
-  const requestIdle = window.requestIdleCallback
-  if (typeof requestIdle === 'function') {
-    requestIdle(run, { timeout: 500 })
-    return
-  }
-  globalThis.setTimeout(run, 100)
+  // This renderer is required by every native Agent conversation. Waiting for
+  // an idle callback leaves a first-click race where the session snapshot is
+  // already available but its message view is not. Start the non-blocking
+  // import immediately after the first paint instead: app chrome remains the
+  // startup priority, while later session navigation never owns this one-time
+  // module cost.
+  window.requestAnimationFrame(() => {
+    globalThis.setTimeout(run, 0)
+  })
 }

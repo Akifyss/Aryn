@@ -313,6 +313,13 @@ export function useAgentSessionNavigation({
   // Commit a restored runtime selection before the browser paints. A passive
   // effect would expose one frame of the temporary new-session presentation.
   useLayoutEffect(() => {
+    // An accepted navigation target already owns the visible chrome and
+    // message surface. The connected workspace can still point at the source
+    // conversation while filesystem, Git, watch, and runtime setup continue in
+    // the background; synchronizing from that lagging runtime would hide an
+    // already-loaded target snapshot until unrelated workspace work finishes.
+    if (sessionNavigationTargetRef.current) return
+
     const runtimeWorkspacePath = agentState.runtime.workspacePath
     const isPresentationWorkspaceReady = workspacePath
       ? Boolean(
@@ -334,6 +341,7 @@ export function useAgentSessionNavigation({
     isLoading,
     isSessionSnapshotLoading,
     selectedAgentId,
+    sessionNavigationTargetKey,
     workspacePath,
   ])
 
@@ -534,13 +542,15 @@ export function useAgentSessionNavigation({
       return
     }
 
-    void preloadBbSessionSurface().catch(() => undefined)
+    const surfaceReadyPromise = preloadBbSessionSurface()
+    void surfaceReadyPromise.catch(() => undefined)
     const isActiveRuntimeSession = agentState.runtime.agentId === agentId
       && workspacePathsMatch(agentState.runtime.workspacePath, operationWorkspacePath)
       && agentState.activeSession?.sessionPath === sessionPath
     const cachedSnapshot = isActiveRuntimeSession
       ? null
       : getCachedAgentSessionSnapshot(agentId, operationWorkspacePath, sessionPath)
+    const hasCachedSnapshot = cachedSnapshot !== null
     const canPresentCachedSnapshot = Boolean(
       cachedSnapshot
       && (!cachedSnapshot.native || getPreloadedBbSessionSurface()),
@@ -598,6 +608,17 @@ export function useAgentSessionNavigation({
       // previous session under the target session's controls.
       setViewedSessionSnapshot(null)
       syncSessionPresentation(targetPresentation)
+      if (cachedSnapshot?.native) {
+        // A persisted native snapshot is already useful data. If only the
+        // shared message renderer is still warming, reveal that snapshot as
+        // soon as the renderer is ready and let source validation continue in
+        // the background instead of extending the visual loading gate.
+        void surfaceReadyPromise.then(() => {
+          if (!isCurrentRequest()) return
+          setViewedSessionSnapshot(cachedSnapshot)
+          setIsSessionSnapshotContentPending(false)
+        }).catch(() => undefined)
+      }
     }
 
     try {
@@ -607,7 +628,7 @@ export function useAgentSessionNavigation({
         sessionPath,
         workspacePath: operationWorkspacePath,
       })
-      if (nextSnapshot.native) await preloadBbSessionSurface()
+      if (nextSnapshot.native) await surfaceReadyPromise
       if (!isCurrentRequest()) {
         return
       }
@@ -681,7 +702,10 @@ export function useAgentSessionNavigation({
         setPanelError(null)
         return
       }
-      if (!canPresentCachedSnapshot) {
+      // A cached native snapshot may have become paintable while source
+      // validation was in flight. Keep that useful fallback even if it was not
+      // immediately presentable at navigation start.
+      if (!hasCachedSnapshot) {
         if (options.rollbackOnError === false) {
           setViewedSessionSnapshot(null)
           syncSessionPresentation(targetPresentation)

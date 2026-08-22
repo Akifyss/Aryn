@@ -32,9 +32,9 @@ describe('agent session loading state', () => {
       'setIsSessionSnapshotContentPending(true)',
       loadingStart,
     )
-    const surfacePreload = navigationSource.indexOf('void preloadBbSessionSurface().catch(() => undefined)')
+    const surfacePreload = navigationSource.indexOf('const surfaceReadyPromise = preloadBbSessionSurface()')
     const sessionRead = navigationSource.indexOf('await loadAgentSessionSnapshot({')
-    const surfaceReady = navigationSource.indexOf('await preloadBbSessionSurface()', sessionRead)
+    const surfaceReady = navigationSource.indexOf('await surfaceReadyPromise', sessionRead)
     const targetPresentationCommit = navigationSource.indexOf(
       'setViewedSessionSnapshot(null)\n      syncSessionPresentation(targetPresentation)',
       loadingStart,
@@ -53,6 +53,10 @@ describe('agent session loading state', () => {
     expect(surfaceReady).toBeGreaterThan(sessionRead)
     expect(targetPresentationCommit).toBeGreaterThan(loadingStart)
     expect(targetPresentationCommit).toBeLessThan(sessionRead)
+    expect(navigationSource).toMatch(/if \(cachedSnapshot\?\.native\) \{[\s\S]*?surfaceReadyPromise\.then\(\(\) => \{[\s\S]*?setViewedSessionSnapshot\(cachedSnapshot\)[\s\S]*?setIsSessionSnapshotContentPending\(false\)/)
+    expect(navigationSource).toContain('const hasCachedSnapshot = cachedSnapshot !== null')
+    expect(navigationSource).toContain('if (!hasCachedSnapshot) {')
+    expect(navigationSource).not.toContain('if (!canPresentCachedSnapshot) {')
     expect(historyRead).toBeGreaterThan(snapshotCommit)
     expect(loadingEnd).toBeGreaterThan(snapshotCommit)
     expect(navigationSource).toMatch(/if \(options\.rollbackOnError === false\) \{\s*setViewedSessionSnapshot\(null\)\s*syncSessionPresentation\(targetPresentation\)\s*\} else \{\s*syncActiveSessionSelection\(fallbackPresentation\.selection\)/)
@@ -111,7 +115,8 @@ describe('agent session loading state', () => {
     expect(navigationSource).toMatch(/const navigationTarget = sessionNavigationTargetRef\.current[\s\S]*?if \(navigationTarget\) \{\s*return/)
     expect(navigationSource).toContain('conversationFallbackPresentationKey')
     expect(navigationSource).toMatch(/useLayoutEffect\(\(\) => \{[\s\S]*?void handleOpenSession\([\s\S]*?navigationTarget: sessionNavigationTarget/)
-    expect(navigationSource).toMatch(/useLayoutEffect\(\(\) => \{\s*const runtimeWorkspacePath = agentState\.runtime\.workspacePath[\s\S]*?syncSessionPresentation/)
+    expect(navigationSource).toMatch(/useLayoutEffect\(\(\) => \{[\s\S]*?if \(sessionNavigationTargetRef\.current\) return[\s\S]*?const runtimeWorkspacePath = agentState\.runtime\.workspacePath[\s\S]*?syncSessionPresentation/)
+    expect(navigationSource).toMatch(/selectedAgentId,\s*sessionNavigationTargetKey,\s*workspacePath,/)
     expect(navigationSource).toMatch(/if \(externalSessionRequest\.kind === 'session'\) \{\s*onExternalSessionRequestHandled\?\.\(externalSessionRequest\.requestId\)\s*return/)
     expect(promptSource).toContain("visibleSessionSelection.kind === 'session'")
     expect(promptSource).toContain('selectedAgentId={visibleAgentId}')
@@ -163,7 +168,9 @@ describe('agent session loading state', () => {
     expect(mainSource).toContain('scheduleBbSessionSurfacePreload()')
     expect(mainSource).toContain('scheduleAgentSessionSnapshotCacheWarmup()')
     expect(mainSource).toContain('preloadBbSessionSurfaceResources()')
-    expect(loaderSource).toContain('window.requestIdleCallback')
+    expect(loaderSource).toContain('window.requestAnimationFrame(() => {')
+    expect(loaderSource).toContain('globalThis.setTimeout(run, 0)')
+    expect(loaderSource).not.toContain('window.requestIdleCallback')
     expect(loaderSource).toContain("'modulepreload'")
     expect(loaderSource).toContain("'preload'")
     expect(surfaceSource).toContain('if (!shouldPreloadUnifiedSurface) return')
