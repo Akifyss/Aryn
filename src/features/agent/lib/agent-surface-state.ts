@@ -37,6 +37,22 @@ export function shouldShowAgentProjectSessionMenu(
   return activeWorkspaceContext.kind === 'project'
 }
 
+export function shouldShowAgentSessionLoadingIndicator({
+  hasVisibleSessionContent,
+  isImmediateNewConversationSurface,
+  isSessionContentLoading,
+  showDelayedLoadingIndicator,
+}: {
+  hasVisibleSessionContent: boolean
+  isImmediateNewConversationSurface: boolean
+  isSessionContentLoading: boolean
+  showDelayedLoadingIndicator: boolean
+}) {
+  return !isImmediateNewConversationSurface
+    && isSessionContentLoading
+    && (!hasVisibleSessionContent || showDelayedLoadingIndicator)
+}
+
 export function resolveAgentSessionControlPresentation({
   activeProject,
   activeSelection,

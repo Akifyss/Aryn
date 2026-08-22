@@ -3,6 +3,7 @@ import {
   resolveAgentSessionControlPresentation,
   shouldShowAgentNewConversationPrompt,
   shouldShowAgentProjectSessionMenu,
+  shouldShowAgentSessionLoadingIndicator,
   shouldShowAgentThreadbarSessionControl,
 } from '../src/features/agent/lib/agent-surface-state'
 
@@ -69,6 +70,48 @@ describe('shouldShowAgentNewConversationPrompt', () => {
     expect(shouldShowAgentProjectSessionMenu({
       kind: 'conversation',
       conversationId: 'conversation-1',
+    })).toBe(false)
+  })
+})
+
+describe('shouldShowAgentSessionLoadingIndicator', () => {
+  it('shows loading immediately when no prior session content can cover the transition', () => {
+    expect(shouldShowAgentSessionLoadingIndicator({
+      hasVisibleSessionContent: false,
+      isImmediateNewConversationSurface: false,
+      isSessionContentLoading: true,
+      showDelayedLoadingIndicator: false,
+    })).toBe(true)
+  })
+
+  it('retains visible content during the grace period and shows loading after it expires', () => {
+    const loadingState = {
+      hasVisibleSessionContent: true,
+      isImmediateNewConversationSurface: false,
+      isSessionContentLoading: true,
+    }
+    expect(shouldShowAgentSessionLoadingIndicator({
+      ...loadingState,
+      showDelayedLoadingIndicator: false,
+    })).toBe(false)
+    expect(shouldShowAgentSessionLoadingIndicator({
+      ...loadingState,
+      showDelayedLoadingIndicator: true,
+    })).toBe(true)
+  })
+
+  it('never covers completed sessions or immediate new-conversation surfaces', () => {
+    expect(shouldShowAgentSessionLoadingIndicator({
+      hasVisibleSessionContent: false,
+      isImmediateNewConversationSurface: false,
+      isSessionContentLoading: false,
+      showDelayedLoadingIndicator: true,
+    })).toBe(false)
+    expect(shouldShowAgentSessionLoadingIndicator({
+      hasVisibleSessionContent: false,
+      isImmediateNewConversationSurface: true,
+      isSessionContentLoading: true,
+      showDelayedLoadingIndicator: true,
     })).toBe(false)
   })
 })

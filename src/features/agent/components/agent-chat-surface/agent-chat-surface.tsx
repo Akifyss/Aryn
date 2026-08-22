@@ -145,12 +145,6 @@ export function AgentChatSurface() {
     void onOpenMessageFile?.(filePath, 'updated')
   }, [canOpenVisibleWorkspaceFiles, onOpenMessageFile])
   const nativeSession = codexNativeSession ?? openCodeNativeSession ?? piWebNativeSession
-  const showConversationEmptyState = activeWorkspaceContext.kind === 'conversation'
-    && !isSessionLoading
-    && !nativeSession
-    && renderedMessages.length === 0
-    && !panelError
-    && !sessionStatus
   const shouldPreloadUnifiedSurface = isSessionLoading || Boolean(nativeSession)
   const unifiedSessionId = codexNativeSession?.thread.id
     ?? piWebNativeSession?.sessionId
@@ -367,10 +361,6 @@ export function AgentChatSurface() {
               }
             />
           </div>
-        </div>
-      ) : showConversationEmptyState ? (
-        <div className='agent-conversation-empty-state' role='status'>
-          <p>{statusMessage ?? '这个对话还没有可显示的内容。'}</p>
         </div>
       ) : (
         <>

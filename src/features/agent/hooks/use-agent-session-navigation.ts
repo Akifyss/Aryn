@@ -26,7 +26,6 @@ import {
   loadAgentSessionSnapshot,
   prefetchAgentSessionSnapshot,
 } from '@/features/agent/lib/agent-session-snapshot-loader'
-import { createDelayedLoadingIndicator } from '@/features/agent/lib/delayed-loading-indicator'
 import {
   isAgentNewConversationPresentation,
   resolvePendingAgentNewSessionProject,
@@ -158,7 +157,10 @@ export function useAgentSessionNavigation({
   const handledNavigationTargetRef = useRef<string | null>(null)
   const presentedExternalNewSessionRequestRef = useRef<number | null>(null)
   const [isSessionSnapshotLoading, setIsSessionSnapshotLoading] = useState(false)
-  const [showSessionSnapshotLoadingIndicator, setShowSessionSnapshotLoadingIndicator] = useState(false)
+  // Source validation can continue after a cached snapshot is paintable.
+  // Track missing visual content separately so background validation never
+  // replaces useful content with a loading indicator.
+  const [isSessionSnapshotContentPending, setIsSessionSnapshotContentPending] = useState(false)
   // undefined means no explicit draft presentation, null means standalone,
   // and a path identifies a project-backed draft.
   const [newConversationPresentationWorkspacePath, setNewConversationPresentationWorkspacePath] = useState<
@@ -170,13 +172,6 @@ export function useAgentSessionNavigation({
     workspacePath,
   }))
   const sessionPresentationRef = useRef(sessionPresentation)
-  const loadingIndicatorRef = useRef<ReturnType<typeof createDelayedLoadingIndicator> | null>(null)
-  if (!loadingIndicatorRef.current) {
-    loadingIndicatorRef.current = createDelayedLoadingIndicator({
-      onVisibilityChange: setShowSessionSnapshotLoadingIndicator,
-    })
-  }
-  const loadingIndicator = loadingIndicatorRef.current
   const sessionNavigationTarget = resolveAgentSessionNavigationTarget({
     activeConversation,
     activeWorkspaceContext,
@@ -194,6 +189,65 @@ export function useAgentSessionNavigation({
         sessionNavigationTarget.sessionPath,
       ].join('\n')
     : null
+  const targetProjectPresentationWorkspacePath = activeWorkspaceContext.kind === 'project'
+    ? projectState.projects.find((project) => project.id === activeWorkspaceContext.projectId)?.path ?? null
+    : null
+  // Project context is accepted before the workspace/runtime restore finishes.
+  // Treat a source-workspace presentation as pending even when there is no
+  // explicit session request, so it cannot remain visible indefinitely.
+  const isSessionPresentationPending = Boolean(
+    (
+      sessionNavigationTarget
+      && !presentationsMatch(sessionPresentation, {
+        agentId: sessionNavigationTarget.agentId,
+        selection: {
+          agentId: sessionNavigationTarget.agentId,
+          kind: 'session',
+          sessionPath: sessionNavigationTarget.sessionPath,
+        },
+        workspacePath: sessionNavigationTarget.workspacePath,
+      })
+    )
+    || (
+      targetProjectPresentationWorkspacePath
+      && !workspacePathsMatch(
+        sessionPresentation.workspacePath,
+        targetProjectPresentationWorkspacePath,
+      )
+    ),
+  )
+  const sessionTransitionScopeKey = activeWorkspaceContext.kind === 'conversation'
+    ? `conversation:${activeWorkspaceContext.conversationId}`
+    : activeWorkspaceContext.kind === 'project'
+      ? `project:${activeWorkspaceContext.projectId}`
+      : 'conversation-draft'
+  const sessionTransitionKeyRef = useRef<{
+    key: string
+    scope: string
+  } | null>(null)
+  // The workspace controller clears an explicit request as soon as runtime
+  // accepts it. Keep that request's identity until the visual transition is
+  // complete so acknowledgement cannot restart the loading grace period.
+  const isSessionTransitionPending = isSessionSnapshotLoading
+    || isSessionSnapshotContentPending
+    || isSessionPresentationPending
+  const nextNavigationTransitionKey = sessionNavigationTargetKey
+    ? `navigation:${sessionNavigationTargetKey}`
+    : null
+  if (
+    !sessionTransitionKeyRef.current
+    || sessionTransitionKeyRef.current.scope !== sessionTransitionScopeKey
+  ) {
+    sessionTransitionKeyRef.current = {
+      key: nextNavigationTransitionKey ?? `${sessionTransitionScopeKey}:restore`,
+      scope: sessionTransitionScopeKey,
+    }
+  } else if (nextNavigationTransitionKey) {
+    sessionTransitionKeyRef.current.key = nextNavigationTransitionKey
+  } else if (!isSessionTransitionPending) {
+    sessionTransitionKeyRef.current.key = `${sessionTransitionScopeKey}:restore`
+  }
+  const sessionTransitionKey = sessionTransitionKeyRef.current.key
   const conversationFallbackPresentationKey = activeWorkspaceContext.kind === 'conversation'
     && activeConversation?.id === activeWorkspaceContext.conversationId
     && !sessionNavigationTarget
@@ -222,19 +276,18 @@ export function useAgentSessionNavigation({
     }
 
     openSessionRequestIdRef.current += 1
-    loadingIndicator.finish()
     setIsSessionSnapshotLoading(false)
+    setIsSessionSnapshotContentPending(false)
     syncSessionPresentation({
       agentId: selectedAgentIdRef.current,
       selection: { kind: 'new' },
       workspacePath,
     })
-  }, [loadingIndicator, workspacePath])
+  }, [workspacePath])
 
   useEffect(() => () => {
     openSessionRequestIdRef.current += 1
-    loadingIndicator.cancelPending()
-  }, [loadingIndicator])
+  }, [])
 
   // A conversation whose workspace or session is unavailable still owns an
   // explicit empty/error presentation. Clear the prior session before paint so
@@ -243,8 +296,8 @@ export function useAgentSessionNavigation({
     if (!conversationFallbackPresentationKey || !activeConversation) return
 
     openSessionRequestIdRef.current += 1
-    loadingIndicator.finish()
     setIsSessionSnapshotLoading(false)
+    setIsSessionSnapshotContentPending(false)
     setSelectedAgentIdValue(activeConversation.agentId)
     syncActiveSessionSelection({ kind: 'new' })
     setViewedSessionSnapshot(null)
@@ -257,7 +310,9 @@ export function useAgentSessionNavigation({
     closeSessionOverlay()
   }, [conversationFallbackPresentationKey])
 
-  useEffect(() => {
+  // Commit a restored runtime selection before the browser paints. A passive
+  // effect would expose one frame of the temporary new-session presentation.
+  useLayoutEffect(() => {
     const runtimeWorkspacePath = agentState.runtime.workspacePath
     const isPresentationWorkspaceReady = workspacePath
       ? Boolean(
@@ -384,8 +439,8 @@ export function useAgentSessionNavigation({
 
   function handleStartNewSession(presentationWorkspacePath = workspacePath) {
     openSessionRequestIdRef.current += 1
-    loadingIndicator.finish()
     setIsSessionSnapshotLoading(false)
+    setIsSessionSnapshotContentPending(false)
     setNewConversationPresentationWorkspacePath(presentationWorkspacePath)
     const nextDraft = normalizeAgentModelDraft(
       newSessionModelDraftRef.current,
@@ -520,8 +575,8 @@ export function useAgentSessionNavigation({
     )
 
     if (isActiveRuntimeSession) {
-      loadingIndicator.finish()
       setIsSessionSnapshotLoading(false)
+      setIsSessionSnapshotContentPending(false)
       setViewedSessionSnapshot(null)
       syncSessionPresentation(targetPresentation)
       syncModelDraft(getRuntimeSelectedModelDraft(agentState.runtime))
@@ -529,15 +584,15 @@ export function useAgentSessionNavigation({
       return
     }
     if (cachedSnapshot && canPresentCachedSnapshot) {
-      loadingIndicator.finish()
       // Keep mutation/composer actions gated until the source validation
       // finishes, even though the cached conversation is already paintable.
       setIsSessionSnapshotLoading(true)
+      setIsSessionSnapshotContentPending(false)
       setViewedSessionSnapshot(cachedSnapshot)
       syncSessionPresentation(targetPresentation)
     } else {
       setIsSessionSnapshotLoading(true)
-      loadingIndicator.begin()
+      setIsSessionSnapshotContentPending(true)
     }
 
     try {
@@ -564,7 +619,6 @@ export function useAgentSessionNavigation({
         ? { ...nextSnapshot, interactionHistory: retainedInteractionHistory }
         : nextSnapshot
       cacheAgentSessionSnapshot(agentId, operationWorkspacePath, sessionPath, immediateSnapshot)
-      loadingIndicator.finish()
       syncSessionPresentation(targetPresentation)
 
       const shouldRefreshActiveRuntime = isActiveRuntimeSession || (
@@ -580,6 +634,7 @@ export function useAgentSessionNavigation({
       } else {
         setViewedSessionSnapshot(immediateSnapshot)
       }
+      setIsSessionSnapshotContentPending(false)
 
       window.requestAnimationFrame(() => {
         if (!isCurrentRequest()) return
@@ -613,7 +668,6 @@ export function useAgentSessionNavigation({
         return
       }
 
-      loadingIndicator.finish()
       const hasCurrentRuntimeSnapshot = selectedAgentIdRef.current === agentId
         && workspacePathsMatch(activeRuntimeSessionRef.current?.workspacePath, operationWorkspacePath)
         && activeRuntimeSessionRef.current?.sessionPath === sessionPath
@@ -634,10 +688,11 @@ export function useAgentSessionNavigation({
         }
       }
       setPanelError(error instanceof Error ? error.message : '无法打开该会话，请重试。')
+      setIsSessionSnapshotContentPending(false)
     } finally {
       if (requestId === openSessionRequestIdRef.current) {
-        loadingIndicator.finish()
         setIsSessionSnapshotLoading(false)
+        setIsSessionSnapshotContentPending(false)
       }
     }
   }
@@ -713,9 +768,11 @@ export function useAgentSessionNavigation({
     handleStartNewSession,
     isAgentSessionOperationCurrent,
     isExplicitNewConversationPresentation,
+    isSessionPresentationPending,
+    isSessionSnapshotContentPending,
     isSessionSnapshotLoading,
     openSessionRequestIdRef,
     sessionPresentation,
-    showSessionSnapshotLoadingIndicator,
+    sessionTransitionKey,
   }
 }

@@ -48,7 +48,11 @@ import {
 } from '@/features/agent/lib/project-session-request'
 import type { OptimisticAgentUserMessage } from '@/features/agent/lib/optimistic-user-messages'
 import { findVisiblePendingInteraction } from '@/features/agent/lib/interaction-visibility'
-import { resolveAgentSessionControlPresentation } from '@/features/agent/lib/agent-surface-state'
+import {
+  resolveAgentSessionControlPresentation,
+  shouldShowAgentNewConversationPrompt,
+  shouldShowAgentSessionLoadingIndicator,
+} from '@/features/agent/lib/agent-surface-state'
 import { SESSION_TREE_AGENT_IDS } from '@/features/agent/lib/session-tree'
 import type {
   ActiveWorkspaceContext,
@@ -66,6 +70,7 @@ import { useAgentProjectSessions } from '@/features/agent/hooks/use-agent-projec
 import { useAgentSessionMutations } from '@/features/agent/hooks/use-agent-session-mutations'
 import { useAgentSessionNavigation } from '@/features/agent/hooks/use-agent-session-navigation'
 import { useAgentVisibleSession } from '@/features/agent/hooks/use-agent-visible-session'
+import { useDelayedLoadingVisibility } from '@/features/agent/hooks/use-delayed-loading-visibility'
 import { useAgentModelMutations } from '@/features/agent/model/use-agent-model-mutations'
 import {
   useAgentModelDraftState,
@@ -544,10 +549,12 @@ function AgentProvider({
     handleStartNewSession,
     isAgentSessionOperationCurrent,
     isExplicitNewConversationPresentation,
+    isSessionPresentationPending,
+    isSessionSnapshotContentPending,
     isSessionSnapshotLoading,
     openSessionRequestIdRef,
     sessionPresentation,
-    showSessionSnapshotLoadingIndicator,
+    sessionTransitionKey,
   } = useAgentSessionNavigation({
     externalRequest: {
       activeConversation,
@@ -715,12 +722,8 @@ function AgentProvider({
 
   const isWorkspaceSessionLoading = Boolean(
     isLoading
-    && !visibleSessionSnapshot
     && activeWorkspaceContext.kind === 'project'
-    && !(
-      externalSessionRequest?.kind === 'new'
-      && externalSessionRequest.projectId === activeWorkspaceContext.projectId
-    ),
+    && !activeProjectSessionRequest,
   )
   const pendingNewSessionProject = resolvePendingAgentNewSessionProject(
     externalSessionRequest,
@@ -732,10 +735,50 @@ function AgentProvider({
     || pendingNewSessionProject
     || activeWorkspaceContext.kind === 'conversationDraft',
   )
-  const isSessionLoading = isSessionSnapshotLoading || isWorkspaceSessionLoading
-  const showSessionLoadingIndicator = !isImmediateNewConversationSurface && (
-    showSessionSnapshotLoadingIndicator || isWorkspaceSessionLoading
+  const isConversationSessionAwaitingSnapshot = Boolean(
+    activeWorkspaceContext.kind === 'conversation'
+    && activeConversation?.agentSessionPath
+    && !visibleSessionSnapshot
+    && !panelError,
   )
+  const isConversationContextPending = activeWorkspaceContext.kind === 'conversation'
+    && !activeConversation
+  // Keep data readiness separate from visual delay. Every accepted navigation
+  // must be owned by retained content, a final surface, an error, or loading.
+  const hasPendingSessionTransition = isSessionPresentationPending
+    || isSessionSnapshotLoading
+    || isWorkspaceSessionLoading
+    || isConversationSessionAwaitingSnapshot
+    || isConversationContextPending
+  const isSessionLoading = !panelError && hasPendingSessionTransition
+  const isSessionContentLoading = !panelError && (
+    isSessionPresentationPending
+    || isSessionSnapshotContentPending
+    || isWorkspaceSessionLoading
+    || isConversationSessionAwaitingSnapshot
+    || isConversationContextPending
+  )
+  const showSessionTransitionLoadingIndicator = useDelayedLoadingVisibility(
+    isSessionContentLoading,
+    sessionTransitionKey,
+  )
+  const hasVisibleSessionContent = Boolean(
+    codexNativeSession
+    || openCodeNativeSession
+    || piWebNativeSession
+    || renderedMessages.length > 0
+    || sessionStatus
+    || shouldShowAgentNewConversationPrompt(
+      activeWorkspaceContext,
+      sessionPresentation.selection,
+    ),
+  )
+  const showSessionLoadingIndicator = shouldShowAgentSessionLoadingIndicator({
+    hasVisibleSessionContent,
+    isImmediateNewConversationSurface,
+    isSessionContentLoading,
+    showDelayedLoadingIndicator: showSessionTransitionLoadingIndicator,
+  })
   const selectedSessionPath = activeSessionSelection.kind === 'session'
     ? activeSessionSelection.sessionPath
     : null
