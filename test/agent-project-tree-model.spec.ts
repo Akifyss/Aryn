@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canOpenAgentProjectSessionInPlace,
   createAgentProjectTreeRows,
   getAgentConversationRowKey,
   getAgentProjectRowKey,
@@ -61,6 +62,12 @@ function conversation(
 }
 
 describe('Agent project tree row model', () => {
+  it('routes session clicks through project navigation until the runtime context is ready', () => {
+    expect(canOpenAgentProjectSessionInPlace(true, false)).toBe(true)
+    expect(canOpenAgentProjectSessionInPlace(true, true)).toBe(false)
+    expect(canOpenAgentProjectSessionInPlace(false, false)).toBe(false)
+  })
+
   it('flattens expanded project sessions and active conversations into stable rows', () => {
     const conversations = [
       conversation('older', '2026-08-01T01:00:00.000Z'),

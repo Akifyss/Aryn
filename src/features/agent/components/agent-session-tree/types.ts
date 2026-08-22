@@ -41,6 +41,7 @@ export type AgentSessionTreeController = {
   handleRenameSession: (rootPath: string, agentId: AgentId, sessionPath: string, name: string) => Promise<void>
   handleStartNewSession: () => void
   isProjectAddMenuOpen: boolean
+  isWorkspaceContextPreparing: boolean
   loadProjectSessions: (project: ProjectRecord) => Promise<void>
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void
   onOpenConversation?: (conversation: ConversationRecord) => Promise<void> | void

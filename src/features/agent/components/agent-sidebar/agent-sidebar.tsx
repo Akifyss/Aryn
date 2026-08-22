@@ -348,6 +348,7 @@ function AgentProvider({
   const isWorkspaceContextPreparing = !isUnavailableConversationWorkspace
     && isAgentWorkspaceTargetPreparing({
       currentWorkspacePath: workspacePath,
+      hasPendingProjectSessionRequest: Boolean(activeProjectSessionRequest),
       hasLoadedWorkspaceState,
       runtime: agentState.runtime,
       selectedAgentId,

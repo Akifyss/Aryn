@@ -87,6 +87,19 @@ export function getAgentConversationRowKey(conversationId: string) {
   return `conversation:${conversationId}`
 }
 
+/**
+ * A matching filesystem path is not enough to make a project switch settled.
+ * The path is committed before Agent session restoration finishes, so another
+ * click in that window must replace the pending project navigation request
+ * instead of bypassing it through the in-place session path.
+ */
+export function canOpenAgentProjectSessionInPlace(
+  isCurrentProjectWorkspace: boolean,
+  isWorkspaceContextPreparing: boolean,
+) {
+  return isCurrentProjectWorkspace && !isWorkspaceContextPreparing
+}
+
 function getSortableConversationTimestamp(conversation: ConversationRecord) {
   const timestamp = Date.parse(conversation.updatedAt)
   return Number.isFinite(timestamp) ? timestamp : 0

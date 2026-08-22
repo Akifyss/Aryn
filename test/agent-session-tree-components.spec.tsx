@@ -65,6 +65,7 @@ function createController(
     handleRenameSession: vi.fn(async () => undefined),
     handleStartNewSession: vi.fn(),
     isProjectAddMenuOpen: false,
+    isWorkspaceContextPreparing: false,
     loadProjectSessions: vi.fn(async () => undefined),
     projectSessions: {},
     projectState: { lastProjectId: null, projects: [] },

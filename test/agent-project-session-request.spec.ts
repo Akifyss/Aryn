@@ -277,6 +277,7 @@ describe('isAgentWorkspaceTargetPreparing', () => {
   it('stays pending until the workspace surface and runtime both own the target', () => {
     expect(isAgentWorkspaceTargetPreparing({
       currentWorkspacePath: 'C:/work/previous',
+      hasPendingProjectSessionRequest: false,
       hasLoadedWorkspaceState: true,
       runtime: readyRuntime,
       selectedAgentId: 'codex',
@@ -284,6 +285,7 @@ describe('isAgentWorkspaceTargetPreparing', () => {
     })).toBe(true)
     expect(isAgentWorkspaceTargetPreparing({
       currentWorkspacePath: 'C:/work/career',
+      hasPendingProjectSessionRequest: false,
       hasLoadedWorkspaceState: true,
       runtime: { ...readyRuntime, workspacePath: 'C:/work/previous' },
       selectedAgentId: 'codex',
@@ -291,6 +293,7 @@ describe('isAgentWorkspaceTargetPreparing', () => {
     })).toBe(true)
     expect(isAgentWorkspaceTargetPreparing({
       currentWorkspacePath: 'C:/work/career',
+      hasPendingProjectSessionRequest: false,
       hasLoadedWorkspaceState: false,
       runtime: readyRuntime,
       selectedAgentId: 'codex',
@@ -301,6 +304,7 @@ describe('isAgentWorkspaceTargetPreparing', () => {
   it('accepts normalized matching targets only for the selected Agent', () => {
     expect(isAgentWorkspaceTargetPreparing({
       currentWorkspacePath: 'c:\\work\\career\\',
+      hasPendingProjectSessionRequest: false,
       hasLoadedWorkspaceState: true,
       runtime: readyRuntime,
       selectedAgentId: 'codex',
@@ -308,6 +312,7 @@ describe('isAgentWorkspaceTargetPreparing', () => {
     })).toBe(false)
     expect(isAgentWorkspaceTargetPreparing({
       currentWorkspacePath: 'C:/work/career',
+      hasPendingProjectSessionRequest: false,
       hasLoadedWorkspaceState: true,
       runtime: readyRuntime,
       selectedAgentId: 'pi',
@@ -315,9 +320,21 @@ describe('isAgentWorkspaceTargetPreparing', () => {
     })).toBe(true)
   })
 
+  it('stays pending while an accepted project session request still owns navigation', () => {
+    expect(isAgentWorkspaceTargetPreparing({
+      currentWorkspacePath: 'C:/work/career',
+      hasPendingProjectSessionRequest: true,
+      hasLoadedWorkspaceState: true,
+      runtime: readyRuntime,
+      selectedAgentId: 'codex',
+      targetWorkspacePath: 'C:/work/career',
+    })).toBe(true)
+  })
+
   it('supports a ready projectless draft and treats an unresolved target as pending', () => {
     expect(isAgentWorkspaceTargetPreparing({
       currentWorkspacePath: null,
+      hasPendingProjectSessionRequest: false,
       hasLoadedWorkspaceState: true,
       runtime: { agentId: 'codex', workspacePath: null },
       selectedAgentId: 'codex',
@@ -325,6 +342,7 @@ describe('isAgentWorkspaceTargetPreparing', () => {
     })).toBe(false)
     expect(isAgentWorkspaceTargetPreparing({
       currentWorkspacePath: null,
+      hasPendingProjectSessionRequest: false,
       hasLoadedWorkspaceState: true,
       runtime: { agentId: 'codex', workspacePath: null },
       selectedAgentId: 'codex',

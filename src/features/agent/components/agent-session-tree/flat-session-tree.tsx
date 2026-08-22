@@ -15,6 +15,7 @@ import {
   summarizeAgentProjectSessionBucket,
   type AgentSessionTreeItem,
 } from '@/features/agent/lib/session-tree'
+import { canOpenAgentProjectSessionInPlace } from './project-tree-model'
 import { AgentSessionTreeRow } from './session-row'
 import {
   AgentSessionTreeStatusItem,
@@ -76,6 +77,7 @@ export function FlatAgentSessionTree({
     handleOpenSession,
     handlePrefetchSession,
     handleRenameSession,
+    isWorkspaceContextPreparing,
     loadProjectSessions,
     onOpenProjectSession,
     projectSessions,
@@ -96,7 +98,8 @@ export function FlatAgentSessionTree({
   const operationWorkspacePath = currentProject?.path ?? (isProjectContext ? null : workspacePath)
   const usesProjectSessionBucket = isProjectContext || Boolean(currentProject)
   const isCurrentProjectWorkspace = Boolean(
-    currentProject
+    isProjectContext
+    && currentProject
     && workspacePath
     && normalizeAgentProjectPath(currentProject.path) === normalizeAgentProjectPath(workspacePath),
   )
@@ -214,7 +217,10 @@ export function FlatAgentSessionTree({
         onOpen={() => {
           setRenamingSessionPath(null)
 
-          if (isCurrentProjectWorkspace) {
+          if (canOpenAgentProjectSessionInPlace(
+            isCurrentProjectWorkspace,
+            isWorkspaceContextPreparing,
+          )) {
             void handleOpenSession(session.agentId, session.path).then(() => {
               onRequestClose?.()
             })

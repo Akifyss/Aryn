@@ -157,6 +157,19 @@ describe('agent session loading state', () => {
     expect(workspaceLifecycleSource).toMatch(/if \(nextSelection\.kind === 'new' \|\| runtimeOwnsNextSelection\) \{\s*setViewedSessionSnapshot\(null\)/)
   })
 
+  it('replaces pending project navigation when another session is selected during preparation', async () => {
+    const [flatTreeSource, projectTreeSource, sidebarSource] = await Promise.all([
+      readSource('../src/features/agent/components/agent-session-tree/flat-session-tree.tsx'),
+      readSource('../src/features/agent/components/agent-session-tree/project-tree.tsx'),
+      readSource('../src/features/agent/components/agent-sidebar/agent-sidebar.tsx'),
+    ])
+
+    expect(sidebarSource).toContain('hasPendingProjectSessionRequest: Boolean(activeProjectSessionRequest)')
+    expect(projectTreeSource).toMatch(/canOpenAgentProjectSessionInPlace\(\s*isCurrentActiveProject,\s*isWorkspaceContextPreparing,\s*\)\s*\? handleOpenSession\([\s\S]*?: onOpenProjectSession/)
+    expect(flatTreeSource).toMatch(/const isCurrentProjectWorkspace = Boolean\(\s*isProjectContext\s*&& currentProject/)
+    expect(flatTreeSource).toMatch(/if \(canOpenAgentProjectSessionInPlace\(\s*isCurrentProjectWorkspace,\s*isWorkspaceContextPreparing,\s*\)\) \{[\s\S]*?handleOpenSession\([\s\S]*?return[\s\S]*?onOpenProjectSession/)
+  })
+
   it('preloads the unified surface and does not add a second visual loading gate', async () => {
     const [loaderSource, mainSource, surfaceSource, timelineSource] = await Promise.all([
       readSource('../src/features/agent/components/bb-session-timeline/bb-session-surface-loader.ts'),

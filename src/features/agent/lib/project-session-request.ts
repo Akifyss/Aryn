@@ -56,6 +56,7 @@ export type AgentSessionNavigationTarget = AgentSessionOperationIdentity & {
 
 type AgentWorkspaceTargetPreparation = {
   currentWorkspacePath: string | null
+  hasPendingProjectSessionRequest: boolean
   hasLoadedWorkspaceState: boolean
   runtime: AgentWorkspaceRuntimeIdentity
   selectedAgentId: AgentId
@@ -248,17 +249,23 @@ export function shouldApplyAgentSessionNavigationResult({
 
 /**
  * Context selection is committed before the filesystem and Agent runtime finish
- * switching. Runtime-dependent controls must stay gated until both layers belong
- * to the resolved target, while the target surface itself may render immediately.
+ * switching. Keep runtime-dependent controls gated until those layers belong to
+ * the target and the accepted project-session request has been acknowledged;
+ * the target message surface itself may still render immediately.
  */
 export function isAgentWorkspaceTargetPreparing({
   currentWorkspacePath,
+  hasPendingProjectSessionRequest,
   hasLoadedWorkspaceState,
   runtime,
   selectedAgentId,
   targetWorkspacePath,
 }: AgentWorkspaceTargetPreparation) {
-  if (targetWorkspacePath === undefined || !hasLoadedWorkspaceState) return true
+  if (
+    hasPendingProjectSessionRequest
+    || targetWorkspacePath === undefined
+    || !hasLoadedWorkspaceState
+  ) return true
 
   return runtime.agentId !== selectedAgentId
     || !agentWorkspacePathsMatch(currentWorkspacePath, targetWorkspacePath)

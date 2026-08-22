@@ -33,6 +33,7 @@ import {
   AgentProjectMenuPopup,
 } from './menus'
 import {
+  canOpenAgentProjectSessionInPlace,
   createAgentProjectTreeRows,
   getAgentConversationRowKey,
   getAgentProjectRowKey,
@@ -148,6 +149,7 @@ export function AgentProjectTree({
     handleOpenSession,
     handlePrefetchSession,
     handleRenameSession,
+    isWorkspaceContextPreparing,
     loadProjectSessions,
     onOpenProjectAddMenu,
     onOpenConversation,
@@ -500,7 +502,10 @@ export function AgentProjectTree({
           onOpen={() => {
             setRenamingSessionPath(null)
             setRenamingConversationId(null)
-            const openSession = isCurrentActiveProject
+            const openSession = canOpenAgentProjectSessionInPlace(
+              isCurrentActiveProject,
+              isWorkspaceContextPreparing,
+            )
               ? handleOpenSession(session.agentId, session.path)
               : onOpenProjectSession?.(
                   project,
