@@ -18,6 +18,10 @@ import {
   getProjectByWorkspacePath,
   resolveActiveProject,
 } from '@/features/workspace/lib/workspace-project-state'
+import {
+  type WorkspaceNavigationCoordinator,
+  type WorkspaceNavigationIntent,
+} from '@/features/workspace/lib/workspace-navigation-coordinator'
 import { normalizeFilePath } from '@/features/workspace/lib/workspace-paths'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
 import type { ProjectRecord, ProjectState } from '@/features/workspace/types'
@@ -38,6 +42,10 @@ type WorkspaceSurfaceResetOptions = {
   unavailableMessage?: string | null
 }
 
+type WorkspaceNavigationOptions = {
+  intent?: WorkspaceNavigationIntent
+}
+
 type UseWorkspaceProjectControllerOptions = {
   activeWorkspaceContext: ActiveWorkspaceContext
   confirmDiscardDirtyTabs: (reason: 'close' | 'switch-workspace') => Promise<boolean>
@@ -45,7 +53,11 @@ type UseWorkspaceProjectControllerOptions = {
   flushDiffAutosave: () => Promise<boolean>
   flushWorkspaceAutosave: (filePath?: string) => Promise<boolean>
   isAgentLayout: boolean
-  loadTree: (rootPath: string) => Promise<void>
+  loadTree: (
+    rootPath: string,
+    options?: { shouldApply?: () => boolean },
+  ) => Promise<boolean | undefined>
+  navigationCoordinator: WorkspaceNavigationCoordinator
   prepareGitWorkspace: (workspacePath: string) => void
   refreshGitState: (
     workspacePath: string | null,
@@ -54,7 +66,11 @@ type UseWorkspaceProjectControllerOptions = {
   requestConfirmation: (options: ConfirmationOptions) => Promise<boolean>
   resetExpandedPaths: () => void
   resetGitWorkspaceState: () => void
-  restoreWorkspaceTabs: (workspacePath: string, fallbackFilePath?: string | null) => Promise<void>
+  restoreWorkspaceTabs: (
+    workspacePath: string,
+    fallbackFilePath?: string | null,
+    options?: { shouldApply?: () => boolean },
+  ) => Promise<void>
   setActiveWorkspaceContext: Dispatch<SetStateAction<ActiveWorkspaceContext>>
   setAgentWorkspaceState: Dispatch<SetStateAction<AgentWorkspaceState | null>>
   setIsAgentLayoutFixedTabActive: Dispatch<SetStateAction<boolean>>
@@ -71,6 +87,7 @@ export function useWorkspaceProjectController({
   flushWorkspaceAutosave,
   isAgentLayout,
   loadTree,
+  navigationCoordinator,
   prepareGitWorkspace,
   refreshGitState,
   requestConfirmation,
@@ -97,7 +114,10 @@ export function useWorkspaceProjectController({
   const [shouldStartAgentSessionAfterProjectCreate, setShouldStartAgentSessionAfterProjectCreate] = useState(false)
   const [pendingAgentProjectSessionRequest, setPendingAgentProjectSessionRequest] = useState<AgentProjectSessionRequest | null>(null)
   const [workspaceUnavailableMessage, setWorkspaceUnavailableMessage] = useState<string | null>(null)
+  const activeWorkspaceContextRef = useRef(activeWorkspaceContext)
   const agentProjectSessionRequestIdRef = useRef(0)
+  const watchedWorkspacePathRef = useRef<string | null>(null)
+  activeWorkspaceContextRef.current = activeWorkspaceContext
   const activeProject = useMemo(
     () => resolveActiveProject(projectState, activeWorkspaceContext, currentPath),
     [activeWorkspaceContext, currentPath, projectState],
@@ -144,17 +164,65 @@ export function useWorkspaceProjectController({
     return true
   }, [currentPath, projectState])
 
-  async function connectWorkspace(nextPath: string) {
-    if (currentPath && normalizeFilePath(currentPath) === normalizeFilePath(nextPath)) {
-      return
+  function isNavigationCurrent(intent?: WorkspaceNavigationIntent) {
+    return !intent || navigationCoordinator.isCurrent(intent)
+  }
+
+  function isWorkspacePathCurrent(workspacePath: string) {
+    return Boolean(
+      currentPathRef.current
+      && normalizeFilePath(currentPathRef.current) === normalizeFilePath(workspacePath),
+    )
+  }
+
+  function isWorkspaceSurfaceConnected(workspacePath: string) {
+    return Boolean(
+      isWorkspacePathCurrent(workspacePath)
+      && watchedWorkspacePathRef.current
+      && normalizeFilePath(watchedWorkspacePathRef.current) === normalizeFilePath(workspacePath),
+    )
+  }
+
+  async function connectWorkspace(
+    nextPath: string,
+    options: WorkspaceNavigationOptions = {},
+  ) {
+    const shouldApply = () => isNavigationCurrent(options.intent)
+
+    if (!shouldApply()) {
+      return false
+    }
+
+    if (isWorkspaceSurfaceConnected(nextPath)) {
+      return true
     }
 
     await flushWorkspaceAutosave()
+
+    if (!shouldApply()) {
+      return false
+    }
+
     await flushDiffAutosave()
+
+    if (!shouldApply()) {
+      return false
+    }
+
     await window.appApi.stopWorkspaceWatch()
+    watchedWorkspacePathRef.current = null
+
+    if (!shouldApply()) {
+      return false
+    }
 
     try {
-      await loadTree(nextPath)
+      const didLoadTree = await loadTree(nextPath, { shouldApply })
+
+      if (didLoadTree === false || !shouldApply()) {
+        return false
+      }
+
       setWorkspaceUnavailableMessage(null)
       currentPathRef.current = nextPath
       setCurrentPath(nextPath)
@@ -162,16 +230,41 @@ export function useWorkspaceProjectController({
       setIsAgentLayoutFixedTabActive(false)
       prepareGitWorkspace(nextPath)
       await refreshGitState(nextPath, { silent: false })
+
+      if (!shouldApply()) {
+        return false
+      }
+
       await window.appApi.startWorkspaceWatch(nextPath)
+
+      if (shouldApply()) {
+        watchedWorkspacePathRef.current = nextPath
+      }
+
+      if (!shouldApply()) {
+        return false
+      }
+
       await window.appApi.updateWorkspaceState(nextPath, { markAsLastOpened: true })
+      return shouldApply()
     } catch (error) {
+      if (!shouldApply()) {
+        return false
+      }
+
       await window.appApi.stopWorkspaceWatch().catch(() => undefined)
-      resetWorkspaceSurface({ unavailableMessage: '无法访问当前工作目录。' })
+      watchedWorkspacePathRef.current = null
+
+      if (shouldApply()) {
+        resetWorkspaceSurface({ unavailableMessage: '无法访问当前工作目录。' })
+      }
+
       throw error
     }
   }
 
   function resetWorkspaceSurface(options: WorkspaceSurfaceResetOptions = {}) {
+    watchedWorkspacePathRef.current = null
     currentPathRef.current = null
     setCurrentPath(null)
     setTree([])
@@ -184,36 +277,103 @@ export function useWorkspaceProjectController({
     setWorkspaceUnavailableMessage(options.unavailableMessage ?? null)
   }
 
-  async function disconnectWorkspaceSurface(options: WorkspaceSurfaceResetOptions = {}) {
+  async function disconnectWorkspaceSurface(
+    options: WorkspaceSurfaceResetOptions & WorkspaceNavigationOptions = {},
+  ) {
+    if (!isNavigationCurrent(options.intent)) {
+      return false
+    }
+
     await window.appApi.stopWorkspaceWatch()
+    watchedWorkspacePathRef.current = null
+
+    if (!isNavigationCurrent(options.intent)) {
+      return false
+    }
+
     resetWorkspaceSurface(options)
+    return true
   }
 
   async function switchActiveWorkspace(
     project: ProjectRecord,
-    options: { restoreTabs?: boolean, skipDirtyConfirm?: boolean } = {},
+    options: {
+      navigationTarget?: string
+      onAccepted?: (intent: WorkspaceNavigationIntent) => void
+      restoreTabs?: boolean
+      skipDirtyConfirm?: boolean
+    } = {},
   ) {
-    if (currentPath && normalizeFilePath(currentPath) === normalizeFilePath(project.path)) {
-      await window.appApi.setActiveProject(project.id)
-      setProjectState(await window.appApi.getProjectState())
-      setActiveWorkspaceContext({ kind: 'project', projectId: project.id })
-      return true
-    }
-
-    if (!options.skipDirtyConfirm && !(await confirmDiscardDirtyTabs('switch-workspace'))) {
+    if (
+      !isWorkspacePathCurrent(project.path)
+      && !options.skipDirtyConfirm
+      && !(await confirmDiscardDirtyTabs('switch-workspace'))
+    ) {
       return false
     }
 
-    const nextProjectState = await window.appApi.setActiveProject(project.id)
-    setProjectState(nextProjectState)
-    setActiveWorkspaceContext({ kind: 'project', projectId: project.id })
-    await connectWorkspace(project.path)
+    const intent = navigationCoordinator.begin(
+      options.navigationTarget ?? `project:${project.id}`,
+    )
+    const isCurrent = navigationCoordinator.guard(intent)
+    const previousWorkspaceContext = activeWorkspaceContextRef.current
+    let didPersistProject = false
+    const isCurrentWorkspace = isWorkspaceSurfaceConnected(project.path)
 
-    if (options.restoreTabs !== false) {
-      await restoreWorkspaceTabs(project.path)
+    if (!isCurrent()) {
+      return false
     }
 
-    return true
+    // The message snapshot owns the foreground transition. Persisting the
+    // project and preparing its filesystem/runtime happen after this commit.
+    setActiveWorkspaceContext({ kind: 'project', projectId: project.id })
+    // Project-session requests use flushSync in this callback. Scheduling the
+    // context first lets React commit the target context and request together.
+    options.onAccepted?.(intent)
+    try {
+      const result = await navigationCoordinator.run(intent, async (stillCurrent) => {
+        const nextProject = await window.appApi.setActiveProject(project.id)
+        didPersistProject = true
+
+        if (!stillCurrent()) {
+          return false
+        }
+
+        setProjectState((currentState) => ({
+          lastProjectId: nextProject.id,
+          projects: currentState.projects.map((currentProject) => (
+            currentProject.id === nextProject.id ? nextProject : currentProject
+          )),
+        }))
+
+        if (!isCurrentWorkspace) {
+          const didConnect = await connectWorkspace(project.path, { intent })
+
+          if (!didConnect || !stillCurrent()) {
+            return false
+          }
+        }
+
+        if (options.restoreTabs !== false && !isCurrentWorkspace) {
+          await restoreWorkspaceTabs(project.path, undefined, {
+            shouldApply: stillCurrent,
+          })
+        }
+
+        return stillCurrent()
+      })
+
+      return result.status === 'completed' && result.value
+    } catch (error) {
+      if (!isCurrent()) {
+        return false
+      }
+
+      if (!didPersistProject) {
+        setActiveWorkspaceContext(previousWorkspaceContext)
+      }
+      throw error
+    }
   }
 
   function openProjectMenu(
@@ -252,12 +412,14 @@ export function useWorkspaceProjectController({
 
   async function activateProjectFromState(
     nextProjectState: ProjectState,
+    intent: WorkspaceNavigationIntent,
+    stillCurrent: () => boolean,
     options: { restoreTabs?: boolean, startAgentNewSession?: boolean } = {},
   ) {
-    setProjectState(nextProjectState)
     const nextActiveProject = getLastActiveProject(nextProjectState)
+    setProjectState(nextProjectState)
 
-    if (!nextActiveProject) {
+    if (!nextActiveProject || !stillCurrent()) {
       return false
     }
 
@@ -277,15 +439,23 @@ export function useWorkspaceProjectController({
     }
 
     try {
-      await connectWorkspace(nextActiveProject.path)
+      const didConnect = await connectWorkspace(nextActiveProject.path, { intent })
 
-      if (options.restoreTabs !== false) {
-        await restoreWorkspaceTabs(nextActiveProject.path, nextActiveProject.lastFilePath)
+      if (!didConnect || !stillCurrent()) {
+        return false
       }
 
-      return true
+      if (options.restoreTabs !== false) {
+        await restoreWorkspaceTabs(
+          nextActiveProject.path,
+          nextActiveProject.lastFilePath,
+          { shouldApply: stillCurrent },
+        )
+      }
+
+      return stillCurrent()
     } catch (error) {
-      if (agentSessionRequestId !== null) {
+      if (agentSessionRequestId !== null && stillCurrent()) {
         setPendingAgentProjectSessionRequest((currentValue) => (
           currentValue?.requestId === agentSessionRequestId ? null : currentValue
         ))
@@ -305,16 +475,29 @@ export function useWorkspaceProjectController({
       return
     }
 
+    const intent = navigationCoordinator.begin('project:create')
     setIsProjectActionBusy(true)
     try {
-      const nextProjectState = await window.appApi.createEmptyProject(trimmedName)
-      await activateProjectFromState(nextProjectState, {
-        startAgentNewSession: shouldStartAgentSessionAfterProjectCreate,
+      const result = await navigationCoordinator.runDurable(intent, async (stillCurrent) => {
+        const nextProjectState = await window.appApi.createEmptyProject(trimmedName)
+        return activateProjectFromState(nextProjectState, intent, stillCurrent, {
+          startAgentNewSession: shouldStartAgentSessionAfterProjectCreate,
+        })
       })
-      setIsNewProjectDialogOpen(false)
-      setShouldStartAgentSessionAfterProjectCreate(false)
-      setStatusMessage('项目已创建')
+
+      if (result.value !== undefined) {
+        setIsNewProjectDialogOpen(false)
+        setShouldStartAgentSessionAfterProjectCreate(false)
+      }
+
+      if (result.status === 'completed' && result.value) {
+        setStatusMessage('项目已创建')
+      }
     } catch (error) {
+      if (!navigationCoordinator.isCurrent(intent)) {
+        return
+      }
+
       const message = error instanceof Error ? error.message : 'Unable to create project.'
       toast.danger('创建项目失败', { description: message })
       setStatusMessage(message)
@@ -328,21 +511,31 @@ export function useWorkspaceProjectController({
       return
     }
 
+    const intent = navigationCoordinator.begin('project:add-existing')
     setIsProjectActionBusy(true)
     setIsPickingWorkspace(true)
     try {
-      const nextProjectState = await window.appApi.addExistingProject()
+      const result = await navigationCoordinator.run(intent, async (stillCurrent) => {
+        const nextProjectState = await window.appApi.addExistingProject()
 
-      if (!nextProjectState) {
+        if (!nextProjectState) {
+          return false
+        }
+
+        return activateProjectFromState(nextProjectState, intent, stillCurrent, {
+          startAgentNewSession: shouldStartNewAgentSessionForProjectMenu(),
+        })
+      })
+
+      if (result.status === 'completed' && result.value) {
+        closeProjectMenu()
+        setStatusMessage('项目已打开')
+      }
+    } catch (error) {
+      if (!navigationCoordinator.isCurrent(intent)) {
         return
       }
 
-      await activateProjectFromState(nextProjectState, {
-        startAgentNewSession: shouldStartNewAgentSessionForProjectMenu(),
-      })
-      closeProjectMenu()
-      setStatusMessage('项目已打开')
-    } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to open project.'
       toast.danger('打开项目失败', { description: message })
       setStatusMessage(message)
@@ -363,6 +556,7 @@ export function useWorkspaceProjectController({
   ) {
     agentProjectSessionRequestIdRef.current += 1
     const requestId = agentProjectSessionRequestIdRef.current
+    let intent: WorkspaceNavigationIntent | null = null
     const nextRequest = request.kind === 'session'
       ? {
           kind: 'session' as const,
@@ -378,12 +572,16 @@ export function useWorkspaceProjectController({
           requestId,
         }
 
-    flushSync(() => {
-      setPendingAgentProjectSessionRequest(nextRequest)
-    })
-
     try {
-      const didSwitch = await switchActiveWorkspace(project)
+      const didSwitch = await switchActiveWorkspace(project, {
+        navigationTarget: `project-session:${project.id}`,
+        onAccepted: (acceptedIntent) => {
+          intent = acceptedIntent
+          flushSync(() => {
+            setPendingAgentProjectSessionRequest(nextRequest)
+          })
+        },
+      })
 
       if (!didSwitch) {
         setPendingAgentProjectSessionRequest((currentValue) => (
@@ -397,6 +595,11 @@ export function useWorkspaceProjectController({
       setPendingAgentProjectSessionRequest((currentValue) => (
         currentValue?.requestId === requestId ? null : currentValue
       ))
+
+      if (intent && !navigationCoordinator.isCurrent(intent)) {
+        return false
+      }
+
       const message = error instanceof Error ? error.message : 'Unable to open project conversation.'
       toast.danger('打开对话失败', { description: message })
       setStatusMessage(message)
@@ -442,27 +645,51 @@ export function useWorkspaceProjectController({
       return
     }
 
+    const currentWorkspaceContext = activeWorkspaceContextRef.current
+    const wasActive = currentWorkspaceContext.kind === 'project'
+      && currentWorkspaceContext.projectId === project.id
+    const intent = wasActive
+      ? navigationCoordinator.begin(`project-remove:${project.id}`)
+      : null
     setIsProjectActionBusy(true)
     try {
-      const wasActive = activeWorkspaceContext.kind === 'project'
-        && activeWorkspaceContext.projectId === project.id
       const nextProjectState = await window.appApi.removeProject(project.id)
       setProjectState(nextProjectState)
 
-      if (wasActive) {
+      if (intent && navigationCoordinator.isCurrent(intent)) {
         const nextActiveProject = getLastActiveProject(nextProjectState)
+
         if (nextActiveProject) {
           setActiveWorkspaceContext({ kind: 'project', projectId: nextActiveProject.id })
-          await connectWorkspace(nextActiveProject.path)
-          await restoreWorkspaceTabs(nextActiveProject.path, nextActiveProject.lastFilePath)
+          await navigationCoordinator.run(intent, async (stillCurrent) => {
+            const didConnect = await connectWorkspace(nextActiveProject.path, { intent })
+
+            if (!didConnect || !stillCurrent()) {
+              return
+            }
+
+            await restoreWorkspaceTabs(
+              nextActiveProject.path,
+              nextActiveProject.lastFilePath,
+              { shouldApply: stillCurrent },
+            )
+          })
         } else {
           setActiveWorkspaceContext(conversationDraftContext)
-          await disconnectWorkspaceSurface()
+          await navigationCoordinator.run(intent, async () => {
+            await disconnectWorkspaceSurface({ intent })
+          })
         }
       }
 
-      setStatusMessage('项目已移除')
+      if (!intent || navigationCoordinator.isCurrent(intent)) {
+        setStatusMessage('项目已移除')
+      }
     } catch (error) {
+      if (intent && !navigationCoordinator.isCurrent(intent)) {
+        return
+      }
+
       const message = error instanceof Error ? error.message : 'Unable to remove project.'
       toast.danger('移除项目失败', { description: message })
       setStatusMessage(message)

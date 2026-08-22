@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { describe, expect, it, vi } from 'vitest'
 import type { ActiveWorkspaceContext } from '../src/features/conversations/types'
 import type { ProjectState } from '../src/features/workspace/types'
+import { WorkspaceNavigationCoordinator } from '../src/features/workspace/lib/workspace-navigation-coordinator'
 import { restoreAppBootstrapState } from '../src/hooks/use-app-bootstrap'
 import { handleAppKeyboardShortcut } from '../src/hooks/use-app-keyboard-shortcuts'
 import { requestAppWindowClose } from '../src/hooks/use-app-window-close'
@@ -135,10 +136,11 @@ function createBootstrapFixture(activeContext: ActiveWorkspaceContext) {
     },
     conversationState,
     options: {
-      connectWorkspace: vi.fn(async () => undefined),
+      connectWorkspace: vi.fn(async () => true),
       hydrateConversationState: vi.fn(),
       hydrateProjectState: vi.fn(),
       hydrateWorkspaceIconThemes: vi.fn(async () => undefined),
+      navigationCoordinator: new WorkspaceNavigationCoordinator(),
       restoreInitialConversationContext: vi.fn(async () => false),
       restoreWorkspaceTabs: vi.fn(async () => undefined),
       setActiveWorkspaceContext: vi.fn(),
@@ -161,10 +163,14 @@ describe('application bootstrap restoration', () => {
     expect(fixture.options.hydrateConversationState).toHaveBeenCalledWith(
       fixture.conversationState,
     )
-    expect(fixture.options.connectWorkspace).toHaveBeenCalledWith('C:\\workspace')
+    expect(fixture.options.connectWorkspace).toHaveBeenCalledWith(
+      'C:\\workspace',
+      expect.objectContaining({ intent: expect.any(Object) }),
+    )
     expect(fixture.options.restoreWorkspaceTabs).toHaveBeenCalledWith(
       'C:\\workspace',
       'C:\\workspace\\notes.md',
+      expect.objectContaining({ shouldApply: expect.any(Function) }),
     )
     expect(fixture.options.setStatusMessage).toHaveBeenLastCalledWith('已恢复上次项目')
   })
@@ -185,15 +191,67 @@ describe('application bootstrap restoration', () => {
 
   it('does not hydrate state after the bootstrap is cancelled', async () => {
     const fixture = createBootstrapFixture({ kind: 'conversationDraft' })
-    let cancelled = false
-    fixture.options.hydrateWorkspaceIconThemes.mockImplementation(async () => {
-      cancelled = true
-    })
 
-    await restoreAppBootstrapState(fixture.api, fixture.options, () => cancelled)
+    await restoreAppBootstrapState(fixture.api, fixture.options, () => true)
 
     expect(fixture.api.getProjectState).toHaveBeenCalledOnce()
     expect(fixture.options.hydrateProjectState).not.toHaveBeenCalled()
+    expect(fixture.options.connectWorkspace).not.toHaveBeenCalled()
+  })
+
+  it('does not publish workspace restoration after a newer navigation begins', async () => {
+    const fixture = createBootstrapFixture({
+      kind: 'project',
+      projectId: 'project-1',
+    })
+    let releaseConnect!: () => void
+    fixture.options.connectWorkspace.mockImplementation(() => new Promise<boolean>((resolve) => {
+      releaseConnect = () => resolve(true)
+    }))
+
+    const restoration = restoreAppBootstrapState(fixture.api, fixture.options, () => false)
+    await vi.waitFor(() => {
+      expect(fixture.options.connectWorkspace).toHaveBeenCalledOnce()
+    })
+    fixture.options.navigationCoordinator.begin('conversation:user-selection')
+    releaseConnect()
+    await restoration
+
+    expect(fixture.options.restoreWorkspaceTabs).not.toHaveBeenCalled()
+    expect(fixture.options.setStatusMessage).not.toHaveBeenCalledWith('已恢复上次项目')
+  })
+
+  it('re-hydrates global lists without restoring stale workspace state after early interaction', async () => {
+    const fixture = createBootstrapFixture({
+      kind: 'project',
+      projectId: 'project-1',
+    })
+    const latestProjectState: ProjectState = {
+      lastProjectId: 'project-2',
+      projects: [{
+        ...fixture.projectState.projects[0],
+        id: 'project-2',
+        name: 'Latest workspace',
+      }],
+    }
+    let releaseProjectState!: () => void
+    fixture.api.getProjectState
+      .mockImplementationOnce(() => new Promise<ProjectState>((resolve) => {
+        releaseProjectState = () => resolve(fixture.projectState)
+      }))
+      .mockResolvedValueOnce(latestProjectState)
+
+    const restoration = restoreAppBootstrapState(fixture.api, fixture.options, () => false)
+    await Promise.resolve()
+    fixture.options.navigationCoordinator.begin('conversation:user-selection')
+    releaseProjectState()
+    await restoration
+
+    expect(fixture.api.getProjectState).toHaveBeenCalledTimes(2)
+    expect(fixture.options.hydrateProjectState).toHaveBeenCalledOnce()
+    expect(fixture.options.hydrateProjectState).toHaveBeenCalledWith(latestProjectState)
+    expect(fixture.options.hydrateConversationState).toHaveBeenCalledOnce()
+    expect(fixture.options.setActiveWorkspaceContext).not.toHaveBeenCalled()
     expect(fixture.options.connectWorkspace).not.toHaveBeenCalled()
   })
 })

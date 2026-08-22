@@ -212,17 +212,21 @@ async function filterExistingProjects(projects: PersistedProjectRecord[]) {
   return settledProjects.filter((project): project is PersistedProjectRecord => Boolean(project))
 }
 
+function toProjectRecord(project: PersistedProjectRecord): ProjectRecord {
+  return {
+    id: project.id,
+    name: project.name,
+    path: project.path,
+    addedAt: project.addedAt,
+    lastOpenedAt: project.lastOpenedAt,
+    lastFilePath: project.lastFilePath,
+  }
+}
+
 function toProjectState(projects: PersistedProjectRecord[], lastProjectId: string | null): ProjectState {
   return {
     lastProjectId,
-    projects: projects.map((project): ProjectRecord => ({
-      id: project.id,
-      name: project.name,
-      path: project.path,
-      addedAt: project.addedAt,
-      lastOpenedAt: project.lastOpenedAt,
-      lastFilePath: project.lastFilePath,
-    })),
+    projects: projects.map(toProjectRecord),
   }
 }
 
@@ -1308,18 +1312,25 @@ ipcMain.handle('project:add-existing', async () => {
 ipcMain.handle('project:set-active', async (_event, projectId: string) => {
   const normalizedProjectId = typeof projectId === 'string' ? projectId : ''
   const now = new Date().toISOString()
-  let nextActivePath: string | null = null
-  let didFindProject = false
+  const currentState = await appStateStore.read()
+  const currentProject = currentState.workspace.projects.find(
+    (project) => project.id === normalizedProjectId,
+  )
 
-  await appStateStore.update((currentState) => {
+  if (!currentProject) {
+    throw new Error('Project not found.')
+  }
+
+  if (!(await workspacePathExists(currentProject.path))) {
+    throw new Error('Project folder is no longer available.')
+  }
+
+  const nextState = await appStateStore.update((currentState) => {
     const targetProject = currentState.workspace.projects.find((project) => project.id === normalizedProjectId)
 
     if (!targetProject) {
       return currentState
     }
-
-    didFindProject = true
-    nextActivePath = targetProject.path
 
     return {
       ...currentState,
@@ -1334,19 +1345,15 @@ ipcMain.handle('project:set-active', async (_event, projectId: string) => {
       },
     }
   })
+  const nextProject = nextState.workspace.projects.find(
+    (project) => project.id === normalizedProjectId,
+  )
 
-  if (!didFindProject) {
+  if (!nextProject) {
     throw new Error('Project not found.')
   }
 
-  const nextState = await getVisibleProjectState()
-  const activeProject = nextState.projects.find((project) => project.id === nextState.lastProjectId)
-
-  if (nextActivePath && activeProject?.id !== normalizedProjectId) {
-    throw new Error('Project folder is no longer available.')
-  }
-
-  return nextState
+  return toProjectRecord(nextProject)
 })
 
 ipcMain.handle('project:remove', async (_event, projectId: string) => {

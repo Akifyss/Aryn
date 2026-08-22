@@ -551,8 +551,14 @@ export function useWorkspaceDocumentNavigation({
   const restoreWorkspaceTabs = useCallback(async (
     workspacePath: string,
     fallbackFilePath?: string | null,
+    options: { shouldApply?: () => boolean } = {},
   ) => {
     const workspaceState = await window.appApi.getWorkspaceState(workspacePath)
+
+    if (options.shouldApply && !options.shouldApply()) {
+      return
+    }
+
     const storedState = readStoredTabState(workspacePath)
     const fallbackPath = fallbackFilePath ?? workspaceState.lastFilePath
     const candidateEntries = dedupeStoredEntries([
@@ -567,6 +573,10 @@ export function useWorkspaceDocumentNavigation({
     ])
 
     if (candidateEntries.length === 0) {
+      if (options.shouldApply && !options.shouldApply()) {
+        return
+      }
+
       replaceTabs([], null)
       setIsAgentLayoutFixedTabActive(false)
       return
@@ -601,9 +611,18 @@ export function useWorkspaceDocumentNavigation({
       ? nextTabs.find((tab) => tab.id === requestedActiveId || tab.filePath === requestedActiveId)?.id ?? null
       : nextTabs[0]?.id ?? null
 
+    if (options.shouldApply && !options.shouldApply()) {
+      return
+    }
+
     replaceTabs(nextTabs, nextActiveId)
     setIsAgentLayoutFixedTabActive(false)
     const nextActiveFileTab = nextTabs.find((tab) => tab.id === nextActiveId && tab.kind === 'file')
+
+    if (options.shouldApply && !options.shouldApply()) {
+      return
+    }
+
     await window.appApi.updateWorkspaceState(workspacePath, {
       lastFilePath: nextActiveFileTab?.filePath ?? null,
     })

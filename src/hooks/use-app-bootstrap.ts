@@ -4,6 +4,10 @@ import type {
   ConversationState,
 } from '@/features/conversations/types'
 import { conversationDraftContext } from '@/features/conversations/lib/conversation-state'
+import {
+  type WorkspaceNavigationCoordinator,
+  type WorkspaceNavigationIntent,
+} from '@/features/workspace/lib/workspace-navigation-coordinator'
 import type { ProjectState } from '@/features/workspace/types'
 
 type AppBootstrapApi = Pick<
@@ -12,18 +16,26 @@ type AppBootstrapApi = Pick<
 >
 
 type AppBootstrapOptions = {
-  connectWorkspace: (workspacePath: string) => Promise<void>
+  connectWorkspace: (
+    workspacePath: string,
+    options?: { intent?: WorkspaceNavigationIntent },
+  ) => Promise<boolean>
   hydrateConversationState: (conversationState: ConversationState) => void
   hydrateProjectState: (projectState: ProjectState) => void
   hydrateWorkspaceIconThemes: (isCancelled: () => boolean) => Promise<void>
+  navigationCoordinator: WorkspaceNavigationCoordinator
   restoreInitialConversationContext: (
     activeContext: ActiveWorkspaceContext,
     conversationState: ConversationState,
-    options: { isCancelled: () => boolean },
+    options: {
+      intent?: WorkspaceNavigationIntent
+      isCancelled: () => boolean
+    },
   ) => Promise<boolean>
   restoreWorkspaceTabs: (
     workspacePath: string,
     fallbackFilePath?: string | null,
+    options?: { shouldApply?: () => boolean },
   ) => Promise<void>
   setActiveWorkspaceContext: (context: ActiveWorkspaceContext) => void
   setStatusMessage: (message: string) => void
@@ -34,8 +46,10 @@ export async function restoreAppBootstrapState(
   options: AppBootstrapOptions,
   isCancelled: () => boolean,
 ) {
-  await options.hydrateWorkspaceIconThemes(isCancelled)
-
+  const intent = options.navigationCoordinator.begin('bootstrap')
+  const isNavigationCurrent = () => (
+    !isCancelled() && options.navigationCoordinator.isCurrent(intent)
+  )
   const [
     projectState,
     conversationState,
@@ -50,6 +64,24 @@ export async function restoreAppBootstrapState(
     return
   }
 
+  if (!options.navigationCoordinator.isCurrent(intent)) {
+    // A user action owns the visible target now. Re-read only the global list
+    // data after queued navigation mutations settle; never resume the stale
+    // workspace restoration itself.
+    await options.navigationCoordinator.runDurable(intent, async () => {
+      const [latestProjectState, latestConversationState] = await Promise.all([
+        api.getProjectState(),
+        api.getConversationState(),
+      ])
+
+      if (!isCancelled()) {
+        options.hydrateProjectState(latestProjectState)
+        options.hydrateConversationState(latestConversationState)
+      }
+    })
+    return
+  }
+
   options.hydrateProjectState(projectState)
   options.hydrateConversationState(conversationState)
   options.setActiveWorkspaceContext(activeContext)
@@ -58,40 +90,52 @@ export async function restoreAppBootstrapState(
     ? projectState.projects.find((project) => project.id === activeContext.projectId) ?? null
     : projectState.projects.find((project) => project.id === projectState.lastProjectId) ?? null
 
-  if (await options.restoreInitialConversationContext(
-    activeContext,
-    conversationState,
-    { isCancelled },
-  )) {
-    return
-  }
+  await options.navigationCoordinator.run(intent, async (stillCurrent) => {
+    const shouldApply = () => stillCurrent() && isNavigationCurrent()
 
-  if (activeContext.kind === 'conversationDraft') {
-    options.setStatusMessage('新对话')
-    return
-  }
-
-  if (!activeProject) {
-    options.setActiveWorkspaceContext(conversationDraftContext)
-    options.setStatusMessage('新对话')
-    return
-  }
-
-  try {
-    await options.connectWorkspace(activeProject.path)
-
-    if (!isCancelled()) {
-      await options.restoreWorkspaceTabs(activeProject.path, activeProject.lastFilePath)
+    if (await options.restoreInitialConversationContext(
+      activeContext,
+      conversationState,
+      { intent, isCancelled: () => !shouldApply() },
+    )) {
+      return
     }
 
-    if (!isCancelled()) {
-      options.setStatusMessage('已恢复上次项目')
+    if (!shouldApply()) {
+      return
     }
-  } catch {
-    if (!isCancelled()) {
-      options.setStatusMessage('创建或打开项目以开始。')
+
+    if (activeContext.kind === 'conversationDraft') {
+      options.setStatusMessage('新对话')
+      return
     }
-  }
+
+    if (!activeProject) {
+      options.setActiveWorkspaceContext(conversationDraftContext)
+      options.setStatusMessage('新对话')
+      return
+    }
+
+    try {
+      const didConnect = await options.connectWorkspace(activeProject.path, { intent })
+
+      if (didConnect && shouldApply()) {
+        await options.restoreWorkspaceTabs(
+          activeProject.path,
+          activeProject.lastFilePath,
+          { shouldApply },
+        )
+      }
+
+      if (shouldApply()) {
+        options.setStatusMessage('已恢复上次项目')
+      }
+    } catch {
+      if (shouldApply()) {
+        options.setStatusMessage('创建或打开项目以开始。')
+      }
+    }
+  })
 }
 
 export function useAppBootstrap(options: AppBootstrapOptions) {
@@ -99,6 +143,14 @@ export function useAppBootstrap(options: AppBootstrapOptions) {
 
   useEffect(() => {
     let cancelled = false
+
+    void initialOptionsRef.current.hydrateWorkspaceIconThemes(
+      () => cancelled,
+    ).catch((error: unknown) => {
+      if (!cancelled) {
+        console.error('[app] Failed to load workspace icon themes.', error)
+      }
+    })
 
     void restoreAppBootstrapState(
       window.appApi,

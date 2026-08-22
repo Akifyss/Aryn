@@ -14,6 +14,7 @@ import type {
   GitRepositoryState,
 } from '@/features/git/types'
 import type {
+  ProjectRecord,
   ProjectState,
   WorkspaceChangeEvent,
   WorkspaceIconTheme,
@@ -44,7 +45,7 @@ declare global {
       setActiveWorkspaceContext: (context: ActiveWorkspaceContext) => Promise<ActiveWorkspaceContext>
       createEmptyProject: (name: string) => Promise<ProjectState>
       addExistingProject: () => Promise<ProjectState | null>
-      setActiveProject: (projectId: string) => Promise<ProjectState>
+      setActiveProject: (projectId: string) => Promise<ProjectRecord>
       removeProject: (projectId: string) => Promise<ProjectState>
       getConversationState: () => Promise<ConversationState>
       createConversationWorkspace: (request?: CreateConversationWorkspaceRequest) => Promise<ConversationRecord>

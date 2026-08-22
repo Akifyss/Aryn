@@ -16,6 +16,7 @@ import { createWorkspaceEditorConfiguration } from '@/features/workspace/compone
 import { createWorkspaceNavigationConfiguration } from '@/features/workspace/components/workspace-workbench/workspace-navigation-configuration'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
 import { getBaseName } from '@/features/workspace/lib/workspace-paths'
+import { WorkspaceNavigationCoordinator } from '@/features/workspace/lib/workspace-navigation-coordinator'
 import { useWorkspaceChangeSubscription } from '@/features/workspace/hooks/use-workspace-change-subscription'
 import { useWorkspaceDocumentNavigation } from '@/features/workspace/hooks/use-workspace-document-navigation'
 import { useWorkspaceDocumentPersistence } from '@/features/workspace/hooks/use-workspace-document-persistence'
@@ -59,6 +60,9 @@ function App() {
   })
 
   const [activeWorkspaceContext, setActiveWorkspaceContext] = useState<ActiveWorkspaceContext>(conversationDraftContext)
+  const workspaceNavigationCoordinatorRef = useRef<WorkspaceNavigationCoordinator | null>(null)
+  workspaceNavigationCoordinatorRef.current ??= new WorkspaceNavigationCoordinator()
+  const workspaceNavigationCoordinator = workspaceNavigationCoordinatorRef.current
 
   const {
     cancelConfirmation,
@@ -303,6 +307,7 @@ function App() {
     flushWorkspaceAutosave,
     isAgentLayout,
     loadTree,
+    navigationCoordinator: workspaceNavigationCoordinator,
     prepareGitWorkspace,
     refreshGitState,
     requestConfirmation,
@@ -336,6 +341,7 @@ function App() {
     disconnectWorkspaceSurface,
     flushDiffAutosave,
     flushWorkspaceAutosave,
+    navigationCoordinator: workspaceNavigationCoordinator,
     requestConfirmation,
     restoreWorkspaceTabs,
     setActiveWorkspaceContext,
@@ -444,6 +450,7 @@ function App() {
     hydrateConversationState,
     hydrateProjectState,
     hydrateWorkspaceIconThemes,
+    navigationCoordinator: workspaceNavigationCoordinator,
     restoreInitialConversationContext,
     restoreWorkspaceTabs,
     setActiveWorkspaceContext,

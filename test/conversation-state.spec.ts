@@ -8,6 +8,7 @@ import {
   isConversationWorkspaceCurrent,
   resolveSuggestedConversationTitle,
   shouldDisconnectConversationWorkspace,
+  upsertConversationRecord,
 } from '../src/features/conversations/lib/conversation-state'
 import type {
   ConversationRecord,
@@ -68,6 +69,27 @@ describe('conversation state', () => {
     expect(shouldDisconnectConversationWorkspace('C:/other', conversation.workspacePath)).toBe(false)
   })
 
+  it('upserts authoritative records without dropping concurrent conversations', () => {
+    const olderConversation = {
+      ...conversation,
+      id: 'conversation-older',
+      updatedAt: '2026-07-19T00:00:00.000Z',
+    }
+    const updatedConversation = {
+      ...conversation,
+      title: 'Updated implementation review',
+      updatedAt: '2026-07-21T00:00:00.000Z',
+    }
+
+    expect(upsertConversationRecord({
+      version: 2,
+      conversations: [olderConversation, conversation],
+    }, updatedConversation)).toEqual({
+      version: 2,
+      conversations: [updatedConversation, olderConversation],
+    })
+  })
+
   it('accepts only current, non-user-authored title suggestions', () => {
     expect(resolveSuggestedConversationTitle(conversation, {
       agentSessionPath: conversation.agentSessionPath!,
@@ -109,7 +131,35 @@ describe('conversation controller ownership', () => {
     expect(appSource).not.toContain('setConversationState')
     expect(appSource).toContain('async function handleStartContextualConversation')
     expect(controllerSource).toContain('async function createConversationWorkspace')
+    expect(controllerSource).toContain('navigationCoordinator.runDurable(intent')
+    expect(controllerSource).toContain('upsertConversationRecord(currentConversationState, createdRecord)')
     expect(controllerSource).toContain('async function openConversation')
     expect(controllerSource).toContain('async function restoreInitialConversationContext')
+    expect(controllerSource).toContain('navigationCoordinator.begin(`conversation:${conversation.id}`)')
+    expect(controllerSource).toMatch(/setActiveWorkspaceContext\(\{ kind: 'conversation', conversationId: conversation\.id \}\)[\s\S]*?navigationCoordinator\.run\(intent/)
+    expect(controllerSource).toContain('connectWorkspace(targetWorkspacePath, { intent })')
+    expect(controllerSource).toContain('activeWorkspaceContextRef.current = activeWorkspaceContext')
+    const draftSource = controllerSource.slice(
+      controllerSource.indexOf('async function enterConversationDraft'),
+      controllerSource.indexOf('async function startStandaloneConversation'),
+    )
+    expect(draftSource.indexOf('navigationCoordinator.begin(')).toBeGreaterThan(
+      draftSource.indexOf("confirmDiscardDirtyTabs('switch-workspace')"),
+    )
+    const openConversationSource = controllerSource.slice(
+      controllerSource.indexOf('async function openConversation'),
+      controllerSource.indexOf('async function renameConversation'),
+    )
+    expect(openConversationSource.indexOf('navigationCoordinator.begin(')).toBeGreaterThan(
+      openConversationSource.indexOf("confirmDiscardDirtyTabs('switch-workspace')"),
+    )
+    const draftFailureSource = controllerSource.slice(
+      controllerSource.indexOf('async function conversationDraftFailed'),
+      controllerSource.indexOf('async function openConversation'),
+    )
+    expect(draftFailureSource).toContain('activeWorkspaceContextRef.current')
+    expect(draftFailureSource.indexOf('setConversationState(nextConversationState)')).toBeLessThan(
+      draftFailureSource.indexOf('if (navigationCoordinator.isCurrent(intent))'),
+    )
   })
 })

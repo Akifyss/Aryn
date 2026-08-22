@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { toast } from '@heroui/react'
 import {
   conversationDraftContext,
@@ -9,6 +9,7 @@ import {
   isConversationWorkspaceCurrent,
   resolveSuggestedConversationTitle,
   shouldDisconnectConversationWorkspace,
+  upsertConversationRecord,
 } from '@/features/conversations/lib/conversation-state'
 import type {
   ActiveWorkspaceContext,
@@ -17,6 +18,10 @@ import type {
   ConversationState,
   CreateConversationWorkspaceRequest,
 } from '@/features/conversations/types'
+import {
+  type WorkspaceNavigationCoordinator,
+  type WorkspaceNavigationIntent,
+} from '@/features/workspace/lib/workspace-navigation-coordinator'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
 
 type ConfirmationOptions = {
@@ -33,10 +38,12 @@ type ConversationTitleSuggestion = {
 }
 
 type DisconnectWorkspaceOptions = {
+  intent?: WorkspaceNavigationIntent
   unavailableMessage?: string | null
 }
 
 type RestoreInitialConversationOptions = {
+  intent?: WorkspaceNavigationIntent
   isCancelled?: () => boolean
 }
 
@@ -44,13 +51,21 @@ type UseConversationControllerOptions = {
   activeWorkspaceContext: ActiveWorkspaceContext
   clearPendingAgentProjectSessionRequest: () => void
   confirmDiscardDirtyTabs: (reason: 'close' | 'switch-workspace') => Promise<boolean>
-  connectWorkspace: (workspacePath: string) => Promise<void>
+  connectWorkspace: (
+    workspacePath: string,
+    options?: { intent?: WorkspaceNavigationIntent },
+  ) => Promise<boolean>
   currentPathRef: { current: string | null }
-  disconnectWorkspaceSurface: (options?: DisconnectWorkspaceOptions) => Promise<void>
+  disconnectWorkspaceSurface: (options?: DisconnectWorkspaceOptions) => Promise<boolean>
   flushDiffAutosave: () => Promise<boolean>
   flushWorkspaceAutosave: (filePath?: string) => Promise<boolean>
+  navigationCoordinator: WorkspaceNavigationCoordinator
   requestConfirmation: (options: ConfirmationOptions) => Promise<boolean>
-  restoreWorkspaceTabs: (workspacePath: string, fallbackFilePath?: string | null) => Promise<void>
+  restoreWorkspaceTabs: (
+    workspacePath: string,
+    fallbackFilePath?: string | null,
+    options?: { shouldApply?: () => boolean },
+  ) => Promise<void>
   setActiveWorkspaceContext: Dispatch<SetStateAction<ActiveWorkspaceContext>>
   setStatusMessage: (message: string) => void
 }
@@ -64,6 +79,7 @@ export function useConversationController({
   disconnectWorkspaceSurface,
   flushDiffAutosave,
   flushWorkspaceAutosave,
+  navigationCoordinator,
   requestConfirmation,
   restoreWorkspaceTabs,
   setActiveWorkspaceContext,
@@ -73,6 +89,8 @@ export function useConversationController({
   const [conversationState, setConversationState] = useState<ConversationState>(
     createEmptyConversationState,
   )
+  const activeWorkspaceContextRef = useRef(activeWorkspaceContext)
+  activeWorkspaceContextRef.current = activeWorkspaceContext
 
   const hydrateConversationState = useCallback((nextConversationState: ConversationState) => {
     setConversationState(nextConversationState)
@@ -89,13 +107,53 @@ export function useConversationController({
       return false
     }
 
-    await flushWorkspaceAutosave()
-    await flushDiffAutosave()
-    const nextContext = await window.appApi.setActiveWorkspaceContext(conversationDraftContext)
-    setActiveWorkspaceContext(nextContext)
-    await disconnectWorkspaceSurface()
+    const intent = navigationCoordinator.begin('conversation:draft')
+    const isCurrent = navigationCoordinator.guard(intent)
+    const previousWorkspaceContext = activeWorkspaceContextRef.current
+    let didPersistDraft = false
+
+    if (!isCurrent()) {
+      return false
+    }
+
+    clearPendingAgentProjectSessionRequest()
+    setActiveWorkspaceContext(conversationDraftContext)
     setStatusMessage('新对话')
-    return true
+
+    try {
+      const result = await navigationCoordinator.run(intent, async (stillCurrent) => {
+        await flushWorkspaceAutosave()
+
+        if (!stillCurrent()) {
+          return false
+        }
+
+        await flushDiffAutosave()
+
+        if (!stillCurrent()) {
+          return false
+        }
+
+        await window.appApi.setActiveWorkspaceContext(conversationDraftContext)
+        didPersistDraft = true
+
+        if (!stillCurrent()) {
+          return false
+        }
+
+        return disconnectWorkspaceSurface({ intent })
+      })
+      return result.status === 'completed' && result.value
+    } catch (error) {
+      if (!isCurrent()) {
+        return false
+      }
+
+      if (!didPersistDraft) {
+        setActiveWorkspaceContext(previousWorkspaceContext)
+      }
+      throw error
+    }
   }
 
   async function startStandaloneConversation() {
@@ -103,24 +161,52 @@ export function useConversationController({
   }
 
   async function createConversationWorkspace(request: CreateConversationWorkspaceRequest) {
+    const intent = navigationCoordinator.begin('conversation:create')
     let record: ConversationRecord | null = null
 
     try {
-      record = await window.appApi.createConversationWorkspace(request)
+      const result = await navigationCoordinator.runDurable(intent, async (stillCurrent) => {
+        const createdRecord = await window.appApi.createConversationWorkspace(request)
+        record = createdRecord
+        setConversationState((currentConversationState) => (
+          upsertConversationRecord(currentConversationState, createdRecord)
+        ))
 
-      if (!record.workspacePath) {
-        throw new Error('Conversation workspace was not created.')
+        if (!createdRecord.workspacePath) {
+          throw new Error('Conversation workspace was not created.')
+        }
+
+        if (!stillCurrent()) {
+          return createdRecord
+        }
+
+        const nextConversationState = await window.appApi.getConversationState()
+
+        if (!stillCurrent()) {
+          return createdRecord
+        }
+
+        setConversationState(nextConversationState)
+        setActiveWorkspaceContext({ kind: 'conversation', conversationId: createdRecord.id })
+        await connectWorkspace(createdRecord.workspacePath, { intent })
+        return createdRecord
+      })
+
+      if (result.value) {
+        return result.value
       }
 
-      await refreshConversationState()
-      setActiveWorkspaceContext({ kind: 'conversation', conversationId: record.id })
-      await connectWorkspace(record.workspacePath)
-      return record
+      throw new Error('Conversation creation was superseded by newer navigation.')
     } catch (error) {
-      if (record) {
-        setConversationState(await window.appApi.removeDraftConversation(record.id))
-        const nextContext = await window.appApi.setActiveWorkspaceContext(conversationDraftContext)
-        setActiveWorkspaceContext(nextContext)
+      const failedRecord = record as ConversationRecord | null
+
+      if (failedRecord) {
+        const nextConversationState = await window.appApi.removeDraftConversation(failedRecord.id)
+        setConversationState(nextConversationState)
+
+        if (navigationCoordinator.isCurrent(intent)) {
+          setActiveWorkspaceContext(conversationDraftContext)
+        }
       }
 
       throw error
@@ -172,8 +258,8 @@ export function useConversationController({
       await refreshConversationState()
 
       if (
-        activeWorkspaceContext.kind === 'conversation'
-        && activeWorkspaceContext.conversationId === conversationId
+        activeWorkspaceContextRef.current.kind === 'conversation'
+        && activeWorkspaceContextRef.current.conversationId === conversationId
       ) {
         setStatusMessage(updatedConversation.title)
       }
@@ -185,21 +271,32 @@ export function useConversationController({
   }
 
   async function conversationDraftFailed(conversationId: string) {
-    const activeContext = await window.appApi.getActiveWorkspaceContext()
+    const currentWorkspaceContext = activeWorkspaceContextRef.current
+    const wasActive = currentWorkspaceContext.kind === 'conversation'
+      && currentWorkspaceContext.conversationId === conversationId
+
+    if (!wasActive) {
+      setConversationState(await window.appApi.removeDraftConversation(conversationId))
+      return
+    }
+
+    const intent = navigationCoordinator.begin(`conversation-failed:${conversationId}`)
+    clearPendingAgentProjectSessionRequest()
+    setActiveWorkspaceContext(conversationDraftContext)
     const currentConversationState = await window.appApi.getConversationState()
     const failedConversation = getConversationById(currentConversationState, conversationId)
-    setConversationState(await window.appApi.removeDraftConversation(conversationId))
+    const nextConversationState = await window.appApi.removeDraftConversation(conversationId)
+    setConversationState(nextConversationState)
 
-    if (activeContext.kind === 'conversation' && activeContext.conversationId === conversationId) {
-      const nextContext = await window.appApi.setActiveWorkspaceContext(conversationDraftContext)
-      setActiveWorkspaceContext(nextContext)
-
-      if (shouldDisconnectConversationWorkspace(
-        currentPathRef.current,
-        failedConversation?.workspacePath ?? null,
-      )) {
-        await disconnectWorkspaceSurface()
-      }
+    if (navigationCoordinator.isCurrent(intent)) {
+      await navigationCoordinator.run(intent, async () => {
+        if (shouldDisconnectConversationWorkspace(
+          currentPathRef.current,
+          failedConversation?.workspacePath ?? null,
+        )) {
+          await disconnectWorkspaceSurface({ intent })
+        }
+      })
     }
   }
 
@@ -213,51 +310,97 @@ export function useConversationController({
       }
     }
 
+    const intent = navigationCoordinator.begin(`conversation:${conversation.id}`)
+    const isCurrent = navigationCoordinator.guard(intent)
+    const previousWorkspaceContext = activeWorkspaceContextRef.current
+    let didPersistConversation = false
+
+    if (!isCurrent()) {
+      return
+    }
+
+    clearPendingAgentProjectSessionRequest()
+    setActiveWorkspaceContext({ kind: 'conversation', conversationId: conversation.id })
+
     try {
-      await window.appApi.setActiveWorkspaceContext({
-        kind: 'conversation',
-        conversationId: conversation.id,
+      await navigationCoordinator.run(intent, async (stillCurrent) => {
+        await window.appApi.setActiveWorkspaceContext({
+          kind: 'conversation',
+          conversationId: conversation.id,
+        })
+        didPersistConversation = true
+
+        if (!stillCurrent()) {
+          return
+        }
+
+        const workspaceExists = targetWorkspacePath
+          ? (await window.appApi.workspacePathExists(targetWorkspacePath)).exists
+          : false
+
+        if (!stillCurrent()) {
+          return
+        }
+
+        if (!targetWorkspacePath || !workspaceExists) {
+          await disconnectWorkspaceSurface({
+            intent,
+            unavailableMessage: '这个对话的工作目录已被移动或删除。',
+          })
+
+          if (stillCurrent()) {
+            setStatusMessage(`${conversation.title}：工作目录不可用`)
+            toast.warning('对话工作目录不可用', { description: '这个对话的工作目录已被移动或删除。' })
+          }
+          return
+        }
+
+        const persistSessionSelection = conversation.agentSessionPath
+          ? window.appApi.updateWorkspaceState(targetWorkspacePath, {
+              lastAgentSessionPath: conversation.agentSessionPath,
+            })
+          : Promise.resolve()
+        const sessionExistsRequest = conversation.agentSessionPath
+          ? window.appApi.agentSessionExists({
+              agentId: conversation.agentId,
+              workspacePath: targetWorkspacePath,
+            }, conversation.agentSessionPath)
+          : Promise.resolve({ exists: false })
+        const [didConnect, , sessionExistsResult] = await Promise.all([
+          connectWorkspace(targetWorkspacePath, { intent }),
+          persistSessionSelection,
+          sessionExistsRequest,
+        ])
+
+        if (!didConnect || !stillCurrent()) {
+          return
+        }
+
+        await restoreWorkspaceTabs(targetWorkspacePath, undefined, {
+          shouldApply: stillCurrent,
+        })
+
+        if (!stillCurrent()) {
+          return
+        }
+
+        setStatusMessage(conversation.title)
+
+        if (!sessionExistsResult.exists) {
+          toast.warning('无法恢复对话内容', {
+            description: '对应的 Agent session 文件不存在或不可读。工作目录仍可继续浏览。',
+          })
+        }
       })
-      setActiveWorkspaceContext({ kind: 'conversation', conversationId: conversation.id })
-
-      const workspaceExists = targetWorkspacePath
-        ? (await window.appApi.workspacePathExists(targetWorkspacePath)).exists
-        : false
-
-      if (!targetWorkspacePath || !workspaceExists) {
-        await disconnectWorkspaceSurface({ unavailableMessage: '这个对话的工作目录已被移动或删除。' })
-        setStatusMessage(`${conversation.title}：工作目录不可用`)
-        toast.warning('对话工作目录不可用', { description: '这个对话的工作目录已被移动或删除。' })
+    } catch (error) {
+      if (!isCurrent()) {
         return
       }
 
-      const persistSessionSelection = conversation.agentSessionPath
-        ? window.appApi.updateWorkspaceState(targetWorkspacePath, {
-            lastAgentSessionPath: conversation.agentSessionPath,
-          })
-        : Promise.resolve()
-      const sessionExistsRequest = conversation.agentSessionPath
-        ? window.appApi.agentSessionExists({
-            agentId: conversation.agentId,
-            workspacePath: targetWorkspacePath,
-          }, conversation.agentSessionPath)
-        : Promise.resolve({ exists: false })
-      const [, , sessionExistsResult] = await Promise.all([
-        connectWorkspace(targetWorkspacePath),
-        persistSessionSelection,
-        sessionExistsRequest,
-      ])
-      await restoreWorkspaceTabs(targetWorkspacePath)
-      const sessionExists = sessionExistsResult.exists
-      clearPendingAgentProjectSessionRequest()
-      setStatusMessage(conversation.title)
-
-      if (!sessionExists) {
-        toast.warning('无法恢复对话内容', {
-          description: '对应的 Agent session 文件不存在或不可读。工作目录仍可继续浏览。',
-        })
+      if (!didPersistConversation) {
+        setActiveWorkspaceContext(previousWorkspaceContext)
       }
-    } catch (error) {
+
       const message = error instanceof Error ? error.message : 'Unable to open conversation.'
       toast.danger('打开对话失败', { description: message })
       setStatusMessage(message)
@@ -279,8 +422,8 @@ export function useConversationController({
       await refreshConversationState()
 
       if (
-        activeWorkspaceContext.kind === 'conversation'
-        && activeWorkspaceContext.conversationId === conversation.id
+        activeWorkspaceContextRef.current.kind === 'conversation'
+        && activeWorkspaceContextRef.current.conversationId === conversation.id
       ) {
         setStatusMessage(updatedConversation.title)
       }
@@ -304,8 +447,12 @@ export function useConversationController({
       return
     }
 
-    const wasActive = activeWorkspaceContext.kind === 'conversation'
-      && activeWorkspaceContext.conversationId === conversation.id
+    const currentWorkspaceContext = activeWorkspaceContextRef.current
+    const wasActive = currentWorkspaceContext.kind === 'conversation'
+      && currentWorkspaceContext.conversationId === conversation.id
+    const intent = wasActive
+      ? navigationCoordinator.begin(`conversation-remove:${conversation.id}`)
+      : null
 
     try {
       if (wasActive) {
@@ -316,19 +463,24 @@ export function useConversationController({
       const nextConversationState = await window.appApi.removeConversation(conversation.id)
       setConversationState(nextConversationState)
 
-      if (wasActive) {
+      if (intent && navigationCoordinator.isCurrent(intent)) {
+        clearPendingAgentProjectSessionRequest()
         setActiveWorkspaceContext(conversationDraftContext)
-
-        if (shouldDisconnectConversationWorkspace(
-          currentPathRef.current,
-          conversation.workspacePath,
-        )) {
-          await disconnectWorkspaceSurface()
-        }
-
         setStatusMessage('新对话')
+        await navigationCoordinator.run(intent, async () => {
+          if (shouldDisconnectConversationWorkspace(
+            currentPathRef.current,
+            conversation.workspacePath,
+          )) {
+            await disconnectWorkspaceSurface({ intent })
+          }
+        })
       }
     } catch (error) {
+      if (intent && !navigationCoordinator.isCurrent(intent)) {
+        return
+      }
+
       const message = error instanceof Error ? error.message : 'Unable to delete conversation.'
       toast.danger('删除对话失败', { description: message })
       setStatusMessage(message)
@@ -348,16 +500,36 @@ export function useConversationController({
     const activeConversation = getConversationForContext(initialConversationState, activeContext)
 
     if (!activeConversation) {
+      if (isCancelled()) {
+        return true
+      }
+
       const nextContext = await window.appApi.setActiveWorkspaceContext(conversationDraftContext)
+
+      if (isCancelled()) {
+        return true
+      }
+
       setActiveWorkspaceContext(nextContext)
-      await disconnectWorkspaceSurface()
+      await disconnectWorkspaceSurface({ intent: options.intent })
+
+      if (isCancelled()) {
+        return true
+      }
+
       setStatusMessage('新对话')
       return true
     }
 
     if (!activeConversation.workspacePath) {
-      await disconnectWorkspaceSurface({ unavailableMessage: '这个对话没有可恢复的工作目录。' })
-      setStatusMessage('对话工作目录不可用')
+      await disconnectWorkspaceSurface({
+        intent: options.intent,
+        unavailableMessage: '这个对话没有可恢复的工作目录。',
+      })
+
+      if (!isCancelled()) {
+        setStatusMessage('对话工作目录不可用')
+      }
       return true
     }
 
@@ -366,12 +538,22 @@ export function useConversationController({
         activeConversation.workspacePath,
       )).exists
 
+      if (isCancelled()) {
+        return true
+      }
+
       if (!workspaceExists) {
-        await disconnectWorkspaceSurface({ unavailableMessage: '这个对话的工作目录已被移动或删除。' })
-        setStatusMessage(`${activeConversation.title}：工作目录不可用`)
-        toast.warning('对话工作目录不可用', {
-          description: '上次打开的普通对话目录已被移动或删除。',
+        await disconnectWorkspaceSurface({
+          intent: options.intent,
+          unavailableMessage: '这个对话的工作目录已被移动或删除。',
         })
+
+        if (!isCancelled()) {
+          setStatusMessage(`${activeConversation.title}：工作目录不可用`)
+          toast.warning('对话工作目录不可用', {
+            description: '上次打开的普通对话目录已被移动或删除。',
+          })
+        }
         return true
       }
 
@@ -387,13 +569,15 @@ export function useConversationController({
           }, activeConversation.agentSessionPath)
         : Promise.resolve({ exists: false })
       const [, , sessionExistsResult] = await Promise.all([
-        connectWorkspace(activeConversation.workspacePath),
+        connectWorkspace(activeConversation.workspacePath, { intent: options.intent }),
         persistSessionSelection,
         sessionExistsRequest,
       ])
 
       if (!isCancelled()) {
-        await restoreWorkspaceTabs(activeConversation.workspacePath)
+        await restoreWorkspaceTabs(activeConversation.workspacePath, undefined, {
+          shouldApply: () => !isCancelled(),
+        })
       }
 
       if (!isCancelled()) {

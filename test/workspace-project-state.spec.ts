@@ -82,9 +82,10 @@ describe('workspace project state', () => {
 
 describe('workspace project controller ownership', () => {
   it('keeps project and workspace switching orchestration out of App', async () => {
-    const [appSource, controllerSource] = await Promise.all([
+    const [appSource, controllerSource, mainSource] = await Promise.all([
       readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/features/workspace/hooks/use-workspace-project-controller.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../electron/main/index.ts', import.meta.url), 'utf8'),
     ])
 
     expect(appSource).toContain('useWorkspaceProjectController({')
@@ -93,12 +94,49 @@ describe('workspace project controller ownership', () => {
     expect(appSource).not.toContain('pickWorkspace: handlePickWorkspace')
     expect(appSource).toContain('useConversationController({')
     expect(controllerSource).toContain('async function addExistingProject')
+    expect(controllerSource).toContain('navigationCoordinator.runDurable(intent')
     expect(controllerSource).not.toContain('async function pickWorkspace')
     expect(controllerSource).toContain('const queueCurrentProjectSession = useCallback')
     expect(controllerSource).toContain('sessionLabel: request.sessionLabel')
     expect(controllerSource).toContain('async function connectWorkspace')
     expect(controllerSource).toContain('async function requestAgentProjectSession')
+    expect(controllerSource).toMatch(/setActiveWorkspaceContext\(\{ kind: 'project', projectId: project\.id \}\)[\s\S]*?navigationCoordinator\.run\(intent/)
+    expect(controllerSource).toContain('loadTree(nextPath, { shouldApply })')
+    expect(controllerSource).toContain('watchedWorkspacePathRef.current = null')
+    expect(controllerSource).toContain('isWorkspaceSurfaceConnected(project.path)')
+    expect(controllerSource).not.toContain('setProjectState(await window.appApi.getProjectState())')
+    const switchWorkspaceSource = controllerSource.slice(
+      controllerSource.indexOf('async function switchActiveWorkspace'),
+      controllerSource.indexOf('function openProjectMenu'),
+    )
+    expect(switchWorkspaceSource.indexOf('navigationCoordinator.begin(')).toBeGreaterThan(
+      switchWorkspaceSource.indexOf("confirmDiscardDirtyTabs('switch-workspace')"),
+    )
+    expect(switchWorkspaceSource).toContain('isWorkspacePathCurrent(project.path)')
+    expect(switchWorkspaceSource.indexOf("setActiveWorkspaceContext({ kind: 'project', projectId: project.id })")).toBeLessThan(
+      switchWorkspaceSource.indexOf('options.onAccepted?.(intent)'),
+    )
+    const activateProjectSource = controllerSource.slice(
+      controllerSource.indexOf('async function activateProjectFromState'),
+      controllerSource.indexOf('async function createEmptyProject'),
+    )
+    expect(activateProjectSource.indexOf('setProjectState(nextProjectState)')).toBeLessThan(
+      activateProjectSource.indexOf('if (!nextActiveProject || !stillCurrent())'),
+    )
+    const projectSessionSource = controllerSource.slice(
+      controllerSource.indexOf('async function requestAgentProjectSession'),
+      controllerSource.indexOf('async function selectProject'),
+    )
+    expect(projectSessionSource).toContain('navigationTarget: `project-session:${project.id}`')
+    expect(projectSessionSource).toMatch(/onAccepted: \(acceptedIntent\) => \{[\s\S]*?setPendingAgentProjectSessionRequest\(nextRequest\)/)
     expect(appSource).toContain('const handleOpenSession = useCallback((sessionPath: string, sessionLabel: string) => {')
+    expect(appSource).toContain('navigationCoordinator: workspaceNavigationCoordinator')
     expect(appSource).toMatch(/queueCurrentProjectSession\(\s*sessionPath,[\s\S]*?sessionLabel,/)
+    const setActiveProjectHandler = mainSource.slice(
+      mainSource.indexOf("ipcMain.handle('project:set-active'"),
+      mainSource.indexOf("ipcMain.handle('project:remove'"),
+    )
+    expect(setActiveProjectHandler).toContain('workspacePathExists(currentProject.path)')
+    expect(setActiveProjectHandler).not.toContain('getVisibleProjectState')
   })
 })

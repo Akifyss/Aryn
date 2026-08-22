@@ -15,6 +15,7 @@ import type {
   GitRepositoryState,
 } from '../shared/contracts/git'
 import type {
+  ProjectRecord,
   ProjectState,
   WorkspaceChangeEvent,
   WorkspaceIconTheme,
@@ -57,7 +58,7 @@ contextBridge.exposeInMainWorld('appApi', {
   setActiveWorkspaceContext: (context: ActiveWorkspaceContext) => ipcRenderer.invoke('workspace:set-active-context', context) as Promise<ActiveWorkspaceContext>,
   createEmptyProject: (name: string) => ipcRenderer.invoke('project:create-empty', name) as Promise<ProjectState>,
   addExistingProject: () => ipcRenderer.invoke('project:add-existing') as Promise<ProjectState | null>,
-  setActiveProject: (projectId: string) => ipcRenderer.invoke('project:set-active', projectId) as Promise<ProjectState>,
+  setActiveProject: (projectId: string) => ipcRenderer.invoke('project:set-active', projectId) as Promise<ProjectRecord>,
   removeProject: (projectId: string) => ipcRenderer.invoke('project:remove', projectId) as Promise<ProjectState>,
   getConversationState: () => ipcRenderer.invoke('conversation:get-state') as Promise<ConversationState>,
   createConversationWorkspace: (request?: CreateConversationWorkspaceRequest) => (

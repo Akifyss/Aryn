@@ -32,6 +32,21 @@ export function getConversationForContext(
     : null
 }
 
+export function upsertConversationRecord(
+  conversationState: ConversationState,
+  conversation: ConversationRecord,
+): ConversationState {
+  return {
+    ...conversationState,
+    conversations: [
+      conversation,
+      ...conversationState.conversations.filter((currentConversation) => (
+        currentConversation.id !== conversation.id
+      )),
+    ].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt)),
+  }
+}
+
 export function isConversationWorkspaceCurrent(
   currentWorkspacePath: string | null,
   conversationWorkspacePath: string | null,

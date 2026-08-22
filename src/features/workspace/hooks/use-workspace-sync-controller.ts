@@ -9,6 +9,7 @@ import {
 
 type LoadWorkspaceTreeOptions = {
   onlyIfCurrent?: boolean
+  shouldApply?: () => boolean
 }
 
 export function useWorkspaceSyncController(currentPath: string | null) {
@@ -34,11 +35,15 @@ export function useWorkspaceSyncController(currentPath: string | null) {
   ) => {
     const nextTree = await window.appApi.loadWorkspaceTree(rootPath)
 
-    if (options.onlyIfCurrent && !isActiveWorkspacePath(rootPath)) {
-      return
+    if (
+      (options.onlyIfCurrent && !isActiveWorkspacePath(rootPath))
+      || (options.shouldApply && !options.shouldApply())
+    ) {
+      return false
     }
 
     setTree(nextTree)
+    return true
   }, [isActiveWorkspacePath, setTree])
 
   const reloadActiveWorkspaceTree = useCallback(async (rootPath: string) => {
