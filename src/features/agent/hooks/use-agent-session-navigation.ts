@@ -500,7 +500,7 @@ export function useAgentSessionNavigation({
   }, [isStandaloneConversationDraft])
 
   const isExplicitNewConversationPresentation = isAgentNewConversationPresentation(
-    activeSessionSelection,
+    sessionPresentation.selection,
     newConversationPresentationWorkspacePath,
     activeWorkspaceContext,
     projectState.projects,
@@ -593,6 +593,11 @@ export function useAgentSessionNavigation({
     } else {
       setIsSessionSnapshotLoading(true)
       setIsSessionSnapshotContentPending(true)
+      // Commit the accepted target before reading its snapshot. The message
+      // surface owns the loading state; it must never continue showing the
+      // previous session under the target session's controls.
+      setViewedSessionSnapshot(null)
+      syncSessionPresentation(targetPresentation)
     }
 
     try {
@@ -619,7 +624,6 @@ export function useAgentSessionNavigation({
         ? { ...nextSnapshot, interactionHistory: retainedInteractionHistory }
         : nextSnapshot
       cacheAgentSessionSnapshot(agentId, operationWorkspacePath, sessionPath, immediateSnapshot)
-      syncSessionPresentation(targetPresentation)
 
       const shouldRefreshActiveRuntime = isActiveRuntimeSession || (
         selectedAgentIdRef.current === agentId

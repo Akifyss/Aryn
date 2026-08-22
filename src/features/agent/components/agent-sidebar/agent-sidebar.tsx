@@ -353,26 +353,6 @@ function AgentProvider({
       selectedAgentId,
       targetWorkspacePath,
     })
-  const sessionControlTarget = useMemo(() => {
-    return resolveAgentSessionControlPresentation({
-      activeProject,
-      activeSelection: activeSessionSelection,
-      activeWorkspaceContext,
-      projectSessions,
-      request: externalSessionRequest,
-      runtime: agentState.runtime,
-      sessions: agentState.sessions,
-    })
-  }, [
-    activeProject,
-    activeSessionSelection,
-    activeWorkspaceContext,
-    agentState.runtime.agentId,
-    agentState.runtime.workspacePath,
-    agentState.sessions,
-    externalSessionRequest,
-    projectSessions,
-  ])
   const selectedAgentIdRef = useRef(selectedAgentId)
   const effectiveRunningPromptEnterBehavior = resolveSupportedRunningPromptBehavior(
     agentState.runtime.supportedRunningPromptBehaviors,
@@ -594,6 +574,30 @@ function AgentProvider({
     },
   })
 
+  // The visible session control follows the same accepted presentation as the
+  // message surface. The workspace/runtime selection can briefly lag during a
+  // project switch and must not leak its generic or source-session label.
+  const sessionControlTarget = useMemo(() => {
+    return resolveAgentSessionControlPresentation({
+      activeProject,
+      activeSelection: sessionPresentation.selection,
+      activeWorkspaceContext,
+      projectSessions,
+      request: externalSessionRequest,
+      runtime: agentState.runtime,
+      sessions: agentState.sessions,
+    })
+  }, [
+    activeProject,
+    activeWorkspaceContext,
+    agentState.runtime.agentId,
+    agentState.runtime.workspacePath,
+    agentState.sessions,
+    externalSessionRequest,
+    projectSessions,
+    sessionPresentation.selection,
+  ])
+
   const {
     activeSession,
     activeSessionPath,
@@ -751,10 +755,11 @@ function AgentProvider({
     || isConversationSessionAwaitingSnapshot
     || isConversationContextPending
   const isSessionLoading = !panelError && hasPendingSessionTransition
+  // Only the target presentation and its snapshot control the message-area
+  // loader. Workspace/runtime readiness remains a separate action gate.
   const isSessionContentLoading = !panelError && (
     isSessionPresentationPending
     || isSessionSnapshotContentPending
-    || isWorkspaceSessionLoading
     || isConversationSessionAwaitingSnapshot
     || isConversationContextPending
   )
@@ -767,11 +772,7 @@ function AgentProvider({
     || openCodeNativeSession
     || piWebNativeSession
     || renderedMessages.length > 0
-    || sessionStatus
-    || shouldShowAgentNewConversationPrompt(
-      activeWorkspaceContext,
-      sessionPresentation.selection,
-    ),
+    || shouldShowAgentNewConversationPrompt(activeWorkspaceContext, sessionPresentation.selection),
   )
   const showSessionLoadingIndicator = shouldShowAgentSessionLoadingIndicator({
     hasVisibleSessionContent,

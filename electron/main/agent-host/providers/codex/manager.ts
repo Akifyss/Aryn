@@ -63,6 +63,7 @@ import { CodexClientSupervisor } from './client-supervisor'
 import { CodexRolloutSnapshotReader } from './rollout-snapshot-reader'
 
 type JsonRecord = Record<string, unknown>
+type CodexSessionSnapshot = ReturnType<typeof createCodexSessionSnapshot>
 
 export {
   buildCodexApprovalResult,
@@ -106,6 +107,10 @@ export class CodexAgentManager {
   private readonly rolloutSnapshotReader = new CodexRolloutSnapshotReader()
   private readonly runtimeCoordinator: SessionRuntimeCoordinator<CodexBinding>
   private readonly sessionCatalog: CodexSessionCatalog
+  // Local rollout reads can run outside the runtime lifecycle lane. Keep a
+  // small per-thread revision so a concurrent rename/delete cannot let an
+  // older read restore stale metadata after the mutation commits.
+  private readonly sessionMutationRevisions = new Map<string, number>()
   private readonly snapshotTimers = new Map<string, NodeJS.Timeout>()
   private readonly sessionStore = new CodexSessionStore()
   private readonly unscopedNotificationTails = new WeakMap<CodexRpcClient, Promise<void>>()
@@ -224,6 +229,46 @@ export class CodexAgentManager {
   async readSession(cwd: string, threadId: string) {
     const workspaceOperation = this.captureWorkspaceOperation(cwd)
     this.requireWorkspaceOperationCurrent(workspaceOperation)
+
+    // A materialized Codex thread has an authoritative local rollout file.
+    // Reading it does not need an App Server or a live runtime, so start this
+    // fast path before entering the per-thread lifecycle lane. The lane is
+    // still used for its regular path (bindings, drafts, and App Server
+    // fallback), preserving serialization with runtime mutations.
+    if (!this.bindings.has(threadId)) {
+      const indexedRecord = (await this.sessionCatalog.listIndexed(cwd))
+        .find((record) => record.id === threadId)
+      const knownRecord = indexedRecord ?? this.listedRecord(cwd, threadId)
+      this.requireWorkspaceOperationCurrent(workspaceOperation)
+      // Runtime startup may have completed while the catalog was being read;
+      // in that case let the lifecycle lane provide the bound snapshot.
+      if (!this.bindings.has(threadId)) {
+        const mutationRevision = this.sessionMutationRevision(threadId)
+        if (knownRecord?.materialized) {
+          const localSnapshot = await this.readLocalRolloutSnapshot(
+            cwd,
+            threadId,
+            workspaceOperation,
+            knownRecord,
+            mutationRevision,
+          )
+          if (localSnapshot) return localSnapshot
+          const appServerSnapshot = await this.readInactiveSessionFromAppServer(
+            cwd,
+            threadId,
+            workspaceOperation,
+            mutationRevision,
+          )
+          if (appServerSnapshot) return appServerSnapshot
+        } else if (indexedRecord && !indexedRecord.materialized) {
+          const snapshot = this.sessionStore.get(threadId)
+          if (snapshot && this.isSessionMutationCurrent(threadId, mutationRevision)) {
+            return createCodexSessionSnapshot(indexedRecord, snapshot)
+          }
+        }
+      }
+    }
+
     return this.runtimeCoordinator.run(runtimeKey(cwd, threadId), async () => {
       this.requireWorkspaceOperationCurrent(workspaceOperation)
       const binding = this.bindings.get(threadId)
@@ -263,40 +308,97 @@ export class CodexAgentManager {
     indexedRecord?: CodexThreadRecord,
   ) {
     if (indexedRecord?.materialized) {
-      const startedAt = performance.now()
-      let localThread: Awaited<ReturnType<CodexRolloutSnapshotReader['read']>>
-      try {
-        localThread = await this.rolloutSnapshotReader.read(indexedRecord)
-      } catch (error) {
-        console.warn(`[codex rollout] Local snapshot unavailable for ${threadId}; falling back to App Server: ${error instanceof Error ? error.message : String(error)}`)
-        return this.readInactiveSessionFromAppServer(cwd, threadId, workspaceOperation)
-      }
-      this.requireWorkspaceOperationCurrent(workspaceOperation)
-      const native = this.sessionStore.install(localThread)
-      const elapsedMs = performance.now() - startedAt
-      if (elapsedMs >= CODEX_LOCAL_SNAPSHOT_SLOW_LOG_MS) {
-        console.info(`[agent-perf] Codex local snapshot ${threadId} loaded in ${Math.round(elapsedMs)}ms.`)
-      }
-      const localRecord = {
-        ...indexedRecord,
-        name: indexedRecord.name ?? localThread.name,
-        preview: indexedRecord.preview ?? localThread.preview,
-        rolloutPath: localThread.path,
-      }
-      this.rememberListedRecord(localRecord)
-      return createCodexSessionSnapshot(localRecord, native)
+      const localSnapshot = await this.readLocalRolloutSnapshot(
+        cwd,
+        threadId,
+        workspaceOperation,
+        indexedRecord,
+      )
+      if (localSnapshot) return localSnapshot
+      return this.readInactiveSessionFromAppServer(cwd, threadId, workspaceOperation)
     }
 
     return this.readInactiveSessionFromAppServer(cwd, threadId, workspaceOperation)
   }
 
+  private async readLocalRolloutSnapshot(
+    cwd: string,
+    threadId: string,
+    workspaceOperation: WorkspaceOperation,
+    indexedRecord: CodexThreadRecord,
+    expectedMutationRevision?: number,
+    options: { logFailure?: boolean } = {},
+  ) {
+    if (!indexedRecord.materialized) return null
+    const startedAt = performance.now()
+    let localThread: Awaited<ReturnType<CodexRolloutSnapshotReader['read']>>
+    try {
+      localThread = await this.rolloutSnapshotReader.read(indexedRecord)
+    } catch (error) {
+      if (options.logFailure !== false) {
+        console.warn(`[codex rollout] Local snapshot unavailable for ${threadId}; falling back to App Server: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      return null
+    }
+    this.requireWorkspaceOperationCurrent(workspaceOperation)
+    if (
+      expectedMutationRevision !== undefined
+      && !this.isSessionMutationCurrent(threadId, expectedMutationRevision)
+    ) {
+      return null
+    }
+    const native = this.sessionStore.install(localThread)
+    const elapsedMs = performance.now() - startedAt
+    if (elapsedMs >= CODEX_LOCAL_SNAPSHOT_SLOW_LOG_MS) {
+      console.info(`[agent-perf] Codex local snapshot ${threadId} loaded in ${Math.round(elapsedMs)}ms.`)
+    }
+    const localRecord = {
+      ...indexedRecord,
+      name: indexedRecord.name ?? localThread.name,
+      preview: indexedRecord.preview ?? localThread.preview,
+      rolloutPath: localThread.path,
+    }
+    this.rememberListedRecord(localRecord)
+    return createCodexSessionSnapshot(localRecord, native)
+  }
+
+  private sessionMutationRevision(threadId: string) {
+    return this.sessionMutationRevisions.get(threadId) ?? 0
+  }
+
+  private isSessionMutationCurrent(threadId: string, revision: number) {
+    return this.sessionMutationRevision(threadId) === revision
+  }
+
+  private bumpSessionMutationRevision(threadId: string) {
+    this.sessionMutationRevisions.set(threadId, this.sessionMutationRevision(threadId) + 1)
+  }
+
+  private readInactiveSessionFromAppServer(
+    cwd: string,
+    threadId: string,
+    workspaceOperation: WorkspaceOperation,
+  ): Promise<CodexSessionSnapshot>
+  private readInactiveSessionFromAppServer(
+    cwd: string,
+    threadId: string,
+    workspaceOperation: WorkspaceOperation,
+    expectedMutationRevision: number,
+  ): Promise<CodexSessionSnapshot | null>
   private async readInactiveSessionFromAppServer(
     cwd: string,
     threadId: string,
     workspaceOperation: WorkspaceOperation,
+    expectedMutationRevision?: number,
   ) {
     const client = await this.clientSupervisor.ensureInitializedClient()
     this.requireWorkspaceOperationCurrent(workspaceOperation)
+    if (
+      expectedMutationRevision !== undefined
+      && !this.isSessionMutationCurrent(threadId, expectedMutationRevision)
+    ) {
+      return null
+    }
     const checkpoint = this.sessionStore.beginHydration(threadId)
     try {
       const response = await client.request('thread/read', {
@@ -312,6 +414,13 @@ export class CodexAgentManager {
       }
       const record = await this.sessionCatalog.recordForNativeThread(cwd, response.thread)
       this.requireWorkspaceOperationCurrent(workspaceOperation)
+      if (
+        expectedMutationRevision !== undefined
+        && !this.isSessionMutationCurrent(threadId, expectedMutationRevision)
+      ) {
+        this.sessionStore.cancelHydration(checkpoint)
+        return null
+      }
       const native = this.sessionStore.hydrate(response.thread, checkpoint)
       this.rememberListedRecord(record)
       return createCodexSessionSnapshot(record, native)
@@ -323,6 +432,12 @@ export class CodexAgentManager {
       this.requireWorkspaceOperationCurrent(workspaceOperation)
       const current = this.sessionStore.get(threadId)
       const message = error instanceof Error ? error.message : String(error)
+      if (
+        expectedMutationRevision !== undefined
+        && !this.isSessionMutationCurrent(threadId, expectedMutationRevision)
+      ) {
+        return null
+      }
       if (current && isTransientThreadReadError(message)) {
         const record = await this.sessionCatalog.recordForNativeThread(cwd, current.thread)
         return createCodexSessionSnapshot(record, current)
@@ -496,6 +611,7 @@ export class CodexAgentManager {
   }
 
   async deleteSession(cwd: string, threadId: string) {
+    this.bumpSessionMutationRevision(threadId)
     const workspaceOperation = this.captureWorkspaceOperation(cwd)
     this.requireWorkspaceOperationCurrent(workspaceOperation)
     const originalThreadId = threadId
@@ -532,6 +648,7 @@ export class CodexAgentManager {
   }
 
   async renameSession(cwd: string, threadId: string, name: string) {
+    this.bumpSessionMutationRevision(threadId)
     const workspaceOperation = this.captureWorkspaceOperation(cwd)
     this.requireWorkspaceOperationCurrent(workspaceOperation)
     const replacement = this.recordReplacements.get(threadId)
@@ -792,6 +909,7 @@ export class CodexAgentManager {
     this.listedRecordsByWorkspace.clear()
     this.pendingInteractions.clear()
     this.recordReplacements.clear()
+    this.sessionMutationRevisions.clear()
     this.sessionStore.clear()
     this.workspaceIntent.clear()
     this.workspaceCreationCounts.clear()
@@ -1524,6 +1642,7 @@ export class CodexAgentManager {
   }
 
   private async updateRecord(record: CodexThreadRecord) {
+    this.bumpSessionMutationRevision(record.id)
     record.updatedAt = new Date().toISOString()
     await this.sessionCatalog.update(record)
     this.rememberListedRecord(record)
@@ -1534,6 +1653,7 @@ export class CodexAgentManager {
   }
 
   private async removeRecord(threadId: string) {
+    this.bumpSessionMutationRevision(threadId)
     await this.sessionCatalog.remove(threadId)
     for (const records of this.listedRecordsByWorkspace.values()) records.delete(threadId)
   }

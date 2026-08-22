@@ -79,11 +79,9 @@ export function resolvePendingAgentNewSessionProject(
 }
 
 /**
- * The session control follows the accepted navigation intent immediately,
- * while the conversation body may keep its last committed snapshot until the
- * target snapshot is paintable. Keeping these identities separate prevents
- * transient source titles and generic fallbacks from leaking into the target
- * project's chrome.
+ * The session control follows the accepted navigation intent immediately.
+ * The message surface owns target-snapshot loading, so navigation never has
+ * to expose the source session beneath the target project's chrome.
  */
 export function resolveAgentSessionControlTarget(
   request: AgentProjectSessionRequest | null | undefined,

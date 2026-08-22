@@ -174,6 +174,7 @@ vi.mock('../electron/main/agent-host/providers/codex/rpc-client', () => ({
 }))
 
 import { CodexAgentManager } from '../electron/main/agent-host/providers/codex/manager'
+import { createSessionRuntimeKey } from '../electron/main/agent-host/runtime/runtime-keys'
 
 function deferred() {
   let resolve!: () => void
@@ -240,9 +241,45 @@ describe('Codex thread binding coordination', () => {
       agentDir: path.join(tempRoot, 'agent-data'),
       emitEvent: () => undefined,
     })
-    const internals = manager as unknown as { bindings: Map<string, unknown> }
+    const internals = manager as unknown as {
+      bindings: Map<string, unknown>
+      runtimeCoordinator: {
+        run: (key: string, operation: () => Promise<void>) => Promise<void>
+      }
+    }
+    const runtimeStarted = deferred()
+    const releaseRuntime = deferred()
+    let blockedRuntime: Promise<void> | null = null
 
     try {
+      await expect(manager.listSessionItems(workspace)).resolves.toEqual([
+        expect.objectContaining({ id: 'thread-a' }),
+      ])
+      blockedRuntime = internals.runtimeCoordinator.run(
+        createSessionRuntimeKey(workspace, 'thread-a'),
+        async () => {
+          runtimeStarted.resolve()
+          await releaseRuntime.promise
+        },
+      )
+      await runtimeStarted.promise
+      const snapshotPromise = manager.readSession(workspace, 'thread-a')
+      const readResult = await new Promise<'snapshot' | 'timeout'>((resolve) => {
+        const timeout = setTimeout(() => resolve('timeout'), 100)
+        void snapshotPromise.then(
+          () => {
+            clearTimeout(timeout)
+            resolve('snapshot')
+          },
+          () => {
+            clearTimeout(timeout)
+            resolve('timeout')
+          },
+        )
+      })
+      expect(readResult).toBe('snapshot')
+      releaseRuntime.resolve()
+      await blockedRuntime
       await expect(manager.readSession(workspace, 'thread-a')).resolves.toMatchObject({
         sessionId: 'thread-a',
       })
@@ -266,12 +303,14 @@ describe('Codex thread binding coordination', () => {
         request.method === 'thread/read'
       ))).toHaveLength(threadReadCount)
     } finally {
+      releaseRuntime.resolve()
+      await blockedRuntime?.catch(() => undefined)
       manager.dispose()
       await rm(tempRoot, { force: true, recursive: true })
     }
   })
 
-  it('returns a local rollout snapshot while Codex App Server cold start is still blocked', async () => {
+  it('returns a local rollout snapshot while runtime and Codex App Server cold starts are blocked', async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-codex-local-read-'))
     const workspace = path.join(tempRoot, 'workspace')
     const agentDir = path.join(tempRoot, 'agent-data')
@@ -323,9 +362,39 @@ describe('Codex thread binding coordination', () => {
     )
     process.env.CODEX_HOME = codexHome
     const manager = new CodexAgentManager({ agentDir, emitEvent: () => undefined })
+    const internals = manager as unknown as {
+      runtimeCoordinator: {
+        run: (key: string, operation: () => Promise<void>) => Promise<void>
+      }
+    }
+    const runtimeStarted = deferred()
+    const releaseRuntime = deferred()
+    const blockedRuntime = internals.runtimeCoordinator.run(
+      createSessionRuntimeKey(workspace, threadId),
+      async () => {
+        runtimeStarted.resolve()
+        await releaseRuntime.promise
+      },
+    )
 
     try {
       void manager.prewarm()
+      await runtimeStarted.promise
+      const snapshotPromise = manager.readSession(workspace, threadId)
+      const readResult = await new Promise<'snapshot' | 'timeout'>((resolve) => {
+        const timeout = setTimeout(() => resolve('timeout'), 100)
+        void snapshotPromise.then(
+          () => {
+            clearTimeout(timeout)
+            resolve('snapshot')
+          },
+          () => {
+            clearTimeout(timeout)
+            resolve('timeout')
+          },
+        )
+      })
+      expect(readResult).toBe('snapshot')
       await expect(manager.readSession(workspace, threadId)).resolves.toMatchObject({
         native: {
           thread: {
@@ -355,6 +424,8 @@ describe('Codex thread binding coordination', () => {
         method: 'thread/read',
       }))
     } finally {
+      releaseRuntime.resolve()
+      await blockedRuntime.catch(() => undefined)
       allowInitialize.resolve()
       manager.dispose()
       if (originalCodexHome === undefined) delete process.env.CODEX_HOME

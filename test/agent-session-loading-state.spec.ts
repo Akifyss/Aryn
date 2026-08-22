@@ -6,7 +6,7 @@ async function readSource(relativePath: string) {
 }
 
 describe('agent session loading state', () => {
-  it('retains the committed surface during the 200ms grace period and commits the snapshot immediately', async () => {
+  it('commits the target chrome immediately and keeps runtime loading out of the message gate', async () => {
     const [
       composerSource,
       navigationSource,
@@ -35,7 +35,10 @@ describe('agent session loading state', () => {
     const surfacePreload = navigationSource.indexOf('void preloadBbSessionSurface().catch(() => undefined)')
     const sessionRead = navigationSource.indexOf('await loadAgentSessionSnapshot({')
     const surfaceReady = navigationSource.indexOf('await preloadBbSessionSurface()', sessionRead)
-    const presentationCommit = navigationSource.indexOf('syncSessionPresentation(targetPresentation)', sessionRead)
+    const targetPresentationCommit = navigationSource.indexOf(
+      'setViewedSessionSnapshot(null)\n      syncSessionPresentation(targetPresentation)',
+      loadingStart,
+    )
     const snapshotCommit = navigationSource.indexOf('setViewedSessionSnapshot(immediateSnapshot)')
     const historyRead = navigationSource.indexOf('window.appApi.readAgentSessionInteractionHistory(')
     const loadingEnd = navigationSource.indexOf('setIsSessionSnapshotLoading(false)', snapshotCommit)
@@ -48,12 +51,12 @@ describe('agent session loading state', () => {
     expect(surfacePreload).toBeLessThan(sessionRead)
     expect(sessionRead).toBeGreaterThan(loadingStart)
     expect(surfaceReady).toBeGreaterThan(sessionRead)
-    expect(surfaceReady).toBeLessThan(presentationCommit)
-    expect(presentationCommit).toBeGreaterThan(sessionRead)
-    expect(snapshotCommit).toBeGreaterThan(presentationCommit)
+    expect(targetPresentationCommit).toBeGreaterThan(loadingStart)
+    expect(targetPresentationCommit).toBeLessThan(sessionRead)
     expect(historyRead).toBeGreaterThan(snapshotCommit)
     expect(loadingEnd).toBeGreaterThan(snapshotCommit)
     expect(navigationSource).toMatch(/if \(options\.rollbackOnError === false\) \{\s*setViewedSessionSnapshot\(null\)\s*syncSessionPresentation\(targetPresentation\)\s*\} else \{\s*syncActiveSessionSelection\(fallbackPresentation\.selection\)/)
+    expect(navigationSource).toMatch(/const isExplicitNewConversationPresentation = isAgentNewConversationPresentation\(\s*sessionPresentation\.selection,/)
     expect(navigationSource).toMatch(/finally \{\s*if \(requestId === openSessionRequestIdRef\.current\) \{\s*setIsSessionSnapshotLoading\(false\)\s*setIsSessionSnapshotContentPending\(false\)/)
     expect(sidebarSource).toContain('activeSessionSelection: sessionPresentation.selection')
     expect(sidebarSource).toContain('selectedAgentId: sessionPresentation.agentId')
@@ -65,14 +68,17 @@ describe('agent session loading state', () => {
     expect(sidebarSource).toMatch(/const isConversationContextPending = activeWorkspaceContext\.kind === 'conversation'\s*&& !activeConversation/)
     expect(sidebarSource).toMatch(/const hasPendingSessionTransition = isSessionPresentationPending\s*\|\| isSessionSnapshotLoading\s*\|\| isWorkspaceSessionLoading\s*\|\| isConversationSessionAwaitingSnapshot\s*\|\| isConversationContextPending/)
     expect(sidebarSource).toContain('const isSessionLoading = !panelError && hasPendingSessionTransition')
-    expect(sidebarSource).toMatch(/const isSessionContentLoading = !panelError && \(\s*isSessionPresentationPending\s*\|\| isSessionSnapshotContentPending\s*\|\| isWorkspaceSessionLoading\s*\|\| isConversationSessionAwaitingSnapshot\s*\|\| isConversationContextPending/)
+    expect(sidebarSource).toMatch(/const isSessionContentLoading = !panelError && \(\s*isSessionPresentationPending\s*\|\| isSessionSnapshotContentPending\s*\|\| isConversationSessionAwaitingSnapshot\s*\|\| isConversationContextPending/)
+    expect(sidebarSource).not.toMatch(/const isSessionContentLoading[\s\S]{0,240}isWorkspaceSessionLoading/)
     expect(sidebarSource).toContain('useDelayedLoadingVisibility(')
     expect(sidebarSource).toContain('sessionTransitionKey,')
     expect(sidebarSource).toMatch(/const showSessionTransitionLoadingIndicator = useDelayedLoadingVisibility\(\s*isSessionContentLoading,\s*sessionTransitionKey,/)
-    expect(sidebarSource).toMatch(/const hasVisibleSessionContent = Boolean\([\s\S]*?renderedMessages\.length > 0[\s\S]*?sessionStatus[\s\S]*?shouldShowAgentNewConversationPrompt\(\s*activeWorkspaceContext,\s*sessionPresentation\.selection,/)
+    expect(sidebarSource).toMatch(/const hasVisibleSessionContent = Boolean\([\s\S]*?renderedMessages\.length > 0[\s\S]*?shouldShowAgentNewConversationPrompt\(\s*activeWorkspaceContext,\s*sessionPresentation\.selection\),/)
+    expect(sidebarSource).not.toMatch(/const hasVisibleSessionContent[\s\S]{0,300}sessionStatus/)
     expect(sidebarSource).toContain('shouldShowAgentSessionLoadingIndicator({')
     expect(sidebarSource).toContain('isSessionContentLoading,')
     expect(sidebarSource).toContain('showDelayedLoadingIndicator: showSessionTransitionLoadingIndicator,')
+    expect(sidebarSource).toMatch(/resolveAgentSessionControlPresentation\(\{[\s\S]*?activeSelection: sessionPresentation\.selection,/)
     expect(delayedVisibilitySource).toContain('useLayoutEffect(() => {')
     expect(delayedVisibilitySource).toContain('[active, indicator, transitionKey]')
     expect(delayedVisibilitySource).not.toContain('useEffect(')
