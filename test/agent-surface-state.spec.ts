@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isAgentVisibleWorkspaceOperational,
+  resolveAgentComposerWorkspacePresentation,
   resolveAgentSessionControlPresentation,
   shouldRetainNewConversationSurfaceDuringSubmission,
   shouldShowAgentNewConversationPrompt,
@@ -31,6 +33,71 @@ const targetSession = {
   path: 'target-session',
   preview: 'Target preview',
 }
+
+describe('resolveAgentComposerWorkspacePresentation', () => {
+  it('keeps workspace-aware copy stable while same-workspace session operations are gated', () => {
+    expect(resolveAgentComposerWorkspacePresentation({
+      isWorkspaceContextPreparing: true,
+      operationalWorkspacePath: project.path,
+      visibleWorkspacePath: project.path,
+    })).toEqual({
+      canUseOperationalWorkspace: false,
+      mentionWorkspacePath: null,
+      placeholder: '发送消息，输入 @ 来提及文件…',
+    })
+  })
+
+  it('presents the target workspace without exposing the source workspace to mentions', () => {
+    expect(resolveAgentComposerWorkspacePresentation({
+      isWorkspaceContextPreparing: true,
+      operationalWorkspacePath: 'C:/work/source',
+      visibleWorkspacePath: 'C:/work/target',
+    })).toEqual({
+      canUseOperationalWorkspace: false,
+      mentionWorkspacePath: null,
+      placeholder: '发送消息，输入 @ 来提及文件…',
+    })
+  })
+
+  it('enables mentions only after the operational workspace is ready', () => {
+    expect(resolveAgentComposerWorkspacePresentation({
+      isWorkspaceContextPreparing: false,
+      operationalWorkspacePath: project.path,
+      visibleWorkspacePath: project.path,
+    })).toEqual({
+      canUseOperationalWorkspace: true,
+      mentionWorkspacePath: project.path,
+      placeholder: '发送消息，输入 @ 来提及文件…',
+    })
+  })
+
+  it('uses generic copy when the visible conversation has no workspace', () => {
+    expect(resolveAgentComposerWorkspacePresentation({
+      isWorkspaceContextPreparing: false,
+      operationalWorkspacePath: project.path,
+      visibleWorkspacePath: null,
+    })).toEqual({
+      canUseOperationalWorkspace: false,
+      mentionWorkspacePath: null,
+      placeholder: '发送消息…',
+    })
+  })
+
+  it('never exposes a stale operational workspace for a different visible target', () => {
+    const state = {
+      isWorkspaceContextPreparing: false,
+      operationalWorkspacePath: 'C:/work/source',
+      visibleWorkspacePath: 'C:/work/target',
+    }
+
+    expect(isAgentVisibleWorkspaceOperational(state)).toBe(false)
+    expect(resolveAgentComposerWorkspacePresentation(state)).toEqual({
+      canUseOperationalWorkspace: false,
+      mentionWorkspacePath: null,
+      placeholder: '发送消息，输入 @ 来提及文件…',
+    })
+  })
+})
 
 describe('shouldShowAgentNewConversationPrompt', () => {
   it('shows the prompt for true new-session entry points', () => {

@@ -22,16 +22,14 @@ import {
 } from '@/features/agent/components/agent-session-tree/agent-session-tree'
 import { useAgentContext } from '@/features/agent/components/agent-sidebar/agent-sidebar-context'
 import {
+  isAgentVisibleWorkspaceOperational,
   shouldShowAgentNewConversationPrompt,
   shouldShowAgentProjectSessionMenu,
   shouldShowAgentThreadbarSessionControl,
 } from '@/features/agent/lib/agent-surface-state'
 import { buildBbSessionRuntimeState } from '@/features/agent/lib/bb-session-runtime-state'
 import { toBbCodexOptimisticMessages } from '@/features/agent/lib/optimistic-user-messages'
-import {
-  formatAgentSessionLabel,
-  normalizeAgentProjectPath,
-} from '@/features/agent/lib/session-tree'
+import { formatAgentSessionLabel } from '@/features/agent/lib/session-tree'
 import './styles.css'
 
 const AGENT_SESSION_MENU_POSITIONER_PROPS = {
@@ -135,12 +133,11 @@ export function AgentChatSurface() {
       ? '新对话'
       : activeConversationTitle
         || (activeSession ? formatAgentSessionLabel(activeSession) : '未命名会话')
-  const canOpenVisibleWorkspaceFiles = Boolean(
-    !isWorkspaceContextPreparing
-    && workspacePath
-    && visibleWorkspacePath
-    && normalizeAgentProjectPath(workspacePath) === normalizeAgentProjectPath(visibleWorkspacePath),
-  )
+  const canOpenVisibleWorkspaceFiles = isAgentVisibleWorkspaceOperational({
+    isWorkspaceContextPreparing,
+    operationalWorkspacePath: workspacePath,
+    visibleWorkspacePath,
+  })
   const visibleMessageFileHandler = canOpenVisibleWorkspaceFiles ? onOpenMessageFile : undefined
   const handleOpenWorkspaceFileFromMessage = useCallback((filePath: string) => {
     if (!canOpenVisibleWorkspaceFiles) return

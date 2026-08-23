@@ -20,6 +20,7 @@ import {
   AgentProjectSwitchTrigger,
 } from '@/features/agent/components/agent-session-tree/agent-session-tree'
 import { useAgentContext } from '@/features/agent/components/agent-sidebar/agent-sidebar-context'
+import { resolveAgentComposerWorkspacePresentation } from '@/features/agent/lib/agent-surface-state'
 import type { AgentWorkspaceState } from '@/features/agent/types'
 import type { ProjectRecord } from '@/features/workspace/types'
 import {
@@ -120,6 +121,7 @@ export function AgentComposerSurface({
     thinkingLevelLabel,
     visibleAgentId,
     visibleSessionPath,
+    visibleWorkspacePath,
     workspacePath,
     workspaceTree,
   } = useAgentContext()
@@ -229,7 +231,15 @@ export function AgentComposerSurface({
       />
     </div>
   ) : null
-  const mentionWorkspacePath = isWorkspaceContextPreparing ? null : workspacePath
+  const {
+    canUseOperationalWorkspace,
+    mentionWorkspacePath,
+    placeholder: composerPlaceholder,
+  } = resolveAgentComposerWorkspacePresentation({
+    isWorkspaceContextPreparing,
+    operationalWorkspacePath: workspacePath,
+    visibleWorkspacePath,
+  })
 
   const composerFooter = (
     <div ref={modelFieldRef} className='agent-composer-meta'>
@@ -245,7 +255,7 @@ export function AgentComposerSurface({
           currentThinkingLevelLabel={thinkingLevelLabel}
           disabled={
             isOpenCodeChildSession
-            || (!workspacePath && !canUseDraftRuntimeWithoutWorkspace)
+            || (!canUseOperationalWorkspace && !canUseDraftRuntimeWithoutWorkspace)
             || !agentState.runtime.hasConfiguredModels
             || isSessionLoading
             || isWorkspaceContextPreparing
@@ -271,7 +281,7 @@ export function AgentComposerSurface({
             aria-label='附加文件'
             disabled={
               isOpenCodeChildSession
-              || (!workspacePath && !canUseComposerWithoutWorkspace)
+              || (!canUseOperationalWorkspace && !canUseComposerWithoutWorkspace)
               || isLoading
               || isSessionLoading
               || isWorkspaceContextPreparing
@@ -320,8 +330,7 @@ export function AgentComposerSurface({
             || (
               !isNewConversationSurfaceImmediate
               && (
-                isWorkspaceContextPreparing
-                || (!workspacePath && !canUseComposerWithoutWorkspace)
+                (!canUseOperationalWorkspace && !canUseComposerWithoutWorkspace)
                 || isLoading
                 || isSessionLoading
               )
@@ -331,13 +340,14 @@ export function AgentComposerSurface({
           mentions={composerState.mentions}
           onChange={setComposerState}
           onFilesPastedOrDropped={isWorkspaceContextPreparing
+            || (!canUseOperationalWorkspace && !canUseComposerWithoutWorkspace)
             ? undefined
             : (files) => {
                 void addComposerFiles(files)
               }}
           onSubmitShortcut={handleComposerKeyDown}
           portalContainer={surfaceMode === 'drawer' ? localOverlayRoot : undefined}
-          placeholder={mentionWorkspacePath ? '发送消息，输入 @ 来提及文件…' : '发送消息…'}
+          placeholder={composerPlaceholder}
           value={composerState.value}
           workspaceNodes={workspaceTree}
           workspacePath={mentionWorkspacePath}

@@ -19,6 +19,50 @@ import type {
 } from '@/features/conversations/types'
 import type { ProjectRecord } from '@/features/workspace/types'
 
+// Navigation can advance the visible target before the workspace runtime catches
+// up. Runtime-dependent actions are safe only when both identities agree.
+export function isAgentVisibleWorkspaceOperational({
+  isWorkspaceContextPreparing,
+  operationalWorkspacePath,
+  visibleWorkspacePath,
+}: {
+  isWorkspaceContextPreparing: boolean
+  operationalWorkspacePath: string | null
+  visibleWorkspacePath: string | null
+}) {
+  return Boolean(
+    !isWorkspaceContextPreparing
+    && operationalWorkspacePath
+    && visibleWorkspacePath
+    && normalizeAgentProjectPath(operationalWorkspacePath)
+      === normalizeAgentProjectPath(visibleWorkspacePath),
+  )
+}
+
+export function resolveAgentComposerWorkspacePresentation({
+  isWorkspaceContextPreparing,
+  operationalWorkspacePath,
+  visibleWorkspacePath,
+}: {
+  isWorkspaceContextPreparing: boolean
+  operationalWorkspacePath: string | null
+  visibleWorkspacePath: string | null
+}) {
+  const canUseOperationalWorkspace = isAgentVisibleWorkspaceOperational({
+    isWorkspaceContextPreparing,
+    operationalWorkspacePath,
+    visibleWorkspacePath,
+  })
+
+  return {
+    canUseOperationalWorkspace,
+    mentionWorkspacePath: canUseOperationalWorkspace ? operationalWorkspacePath : null,
+    placeholder: visibleWorkspacePath
+      ? '发送消息，输入 @ 来提及文件…'
+      : '发送消息…',
+  }
+}
+
 export function shouldShowAgentNewConversationPrompt(
   activeWorkspaceContext: ActiveWorkspaceContext,
   selection: AgentSessionSelection,

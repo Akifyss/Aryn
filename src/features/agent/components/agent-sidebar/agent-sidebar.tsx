@@ -56,6 +56,7 @@ import {
   resolveInitialAgentDraftPresentationState,
 } from '@/features/agent/lib/agent-draft-presentation-cache'
 import {
+  isAgentVisibleWorkspaceOperational,
   resolveAgentSessionControlPresentation,
   shouldRetainNewConversationSurfaceDuringSubmission,
   shouldShowAgentNewConversationPrompt,
@@ -600,6 +601,11 @@ function AgentProvider({
       setViewedSessionSnapshot,
     },
   })
+  const canUseVisibleWorkspace = isAgentVisibleWorkspaceOperational({
+    isWorkspaceContextPreparing,
+    operationalWorkspacePath: workspacePath,
+    visibleWorkspacePath: sessionPresentation.workspacePath,
+  })
 
   // The visible session control follows the same accepted presentation as the
   // message surface. The workspace/runtime selection can briefly lag during a
@@ -901,12 +907,12 @@ function AgentProvider({
     && !isSessionLoading
     && !isWorkspaceContextPreparing
     && (
-      (workspacePath && agentState.runtime.hasConfiguredModels)
+      (canUseVisibleWorkspace && agentState.runtime.hasConfiguredModels)
       || (canUseComposerWithoutWorkspace && agentState.runtime.hasConfiguredModels)
     ),
   )
   const canStopActivePrompt = Boolean(
-    workspacePath
+    canUseVisibleWorkspace
     && !isOpenCodeChildSession
     && isViewingActiveRuntime
     && agentState.runtime.isStreaming
@@ -1017,7 +1023,9 @@ function AgentProvider({
     },
   })
   const hasImageComposerAttachments = composerAttachments.some((attachment) => attachment.kind === 'image')
-  const attachmentCapabilityMessage = !isWorkspaceContextPreparing
+  const canPresentComposerCapabilities = !isWorkspaceContextPreparing
+    && (canUseVisibleWorkspace || canUseComposerWithoutWorkspace)
+  const attachmentCapabilityMessage = canPresentComposerCapabilities
     && hasImageComposerAttachments
     && !selectedModelSupportsImages
     ? '当前模型不支持图片输入，图片不会作为视觉内容发送。'
@@ -1026,10 +1034,10 @@ function AgentProvider({
     ? null
     : isOpenCodeChildSession
     ? 'OpenCode 子会话由父会话中的子 Agent 管理，请返回父会话继续输入。'
+    : !sessionPresentation.workspacePath && activeWorkspaceContext.kind === 'conversation'
+    ? '该对话的工作目录不可用。'
     : hasLoadedWorkspaceState && !agentState.runtime.hasConfiguredModels
     ? (agentState.runtime.setupHint ?? '请先配置可用模型。')
-    : !workspacePath && activeWorkspaceContext.kind === 'conversation'
-    ? '该对话的工作目录不可用。'
     : null
   const {
     messagesScrollElement,
