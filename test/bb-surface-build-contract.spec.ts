@@ -26,6 +26,8 @@ describe('bb unified session surface build contract', () => {
       'UPSTREAM.md',
       'vendor-manifest.json',
     ]))
+    expect(surfacePackage.dependencies['@tanstack/react-virtual']).toBe('^3.14.2')
+    expect(surfacePackage.devDependencies['@types/mdast']).toBe('^4.0.4')
   })
 
   it('keeps the bb runtime isolated while sharing one React identity internally', () => {
@@ -192,6 +194,10 @@ describe('bb unified session surface build contract', () => {
     expect(scopeBbSelector('.timeline-row')).toEqual([
       ':is(.aryn-bb-session-surface,[data-bb-plugin-root]) .timeline-row',
       '[data-bb-plugin-root].timeline-row',
+    ])
+    expect(scopeBbSelector('button')).toEqual([
+      ':is(.aryn-bb-session-surface,[data-bb-plugin-root]) button',
+      '[data-bb-plugin-root]:is(button)',
     ])
     expect(scopeBbSelector('.dark .timeline-row')).toEqual([
       ':is(.aryn-bb-session-surface,[data-bb-plugin-root])[data-bb-theme="dark"] .timeline-row',

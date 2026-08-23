@@ -51,10 +51,15 @@ function isInsideKeyframes(rule: PostCssRule) {
 }
 
 function portalRootSelector(value: string, theme = '') {
+  // The portaled content itself owns the scope attribute. Preserve the
+  // original selector when matching that root; dropping an element selector
+  // such as `button` would apply its declarations to every portal container.
   const canMatchPortalRoot = value.startsWith(':')
     || value.startsWith('.')
     || value.startsWith('[')
-  return `${PORTAL}${theme}${canMatchPortalRoot ? value : ''}`
+  return canMatchPortalRoot
+    ? `${PORTAL}${theme}${value}`
+    : `${PORTAL}${theme}:is(${value})`
 }
 
 export function scopeBbSelector(selector: string) {
