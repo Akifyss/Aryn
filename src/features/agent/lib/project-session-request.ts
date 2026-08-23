@@ -72,7 +72,7 @@ type AgentWorkspaceTargetPreparation = {
   targetWorkspacePath: string | null | undefined
 }
 
-type AgentProjectSessionRuntimeReuse = {
+type AgentWorkspaceSessionRuntimeReuse = {
   activeWorkspaceContext: ActiveWorkspaceContext
   readiness: AgentSessionRuntimeReadiness
   selection: AgentSessionSelection
@@ -359,19 +359,27 @@ export function shouldAcknowledgeAgentProjectSessionRequest(
 }
 
 /**
- * Removing a fulfilled project-session request changes its target marker to
- * `undefined`. Reuse the runtime that already owns the accepted selection
- * instead of interpreting that metadata change as a fresh restore command.
+ * Reuse a runtime that already owns the accepted session target. Project
+ * requests lose their transient target marker after acknowledgement, while a
+ * conversation keeps its persisted session path as the authoritative target.
  */
-export function shouldReuseAgentProjectSessionRuntime({
+export function shouldReuseAgentWorkspaceSessionRuntime({
   activeWorkspaceContext,
   readiness,
   selection,
   targetAgentSessionPath,
-}: AgentProjectSessionRuntimeReuse) {
-  return activeWorkspaceContext.kind === 'project'
-    && targetAgentSessionPath === undefined
-    && isAgentSessionSelectionRuntimeReady(selection, readiness)
+}: AgentWorkspaceSessionRuntimeReuse) {
+  if (!isAgentSessionSelectionRuntimeReady(selection, readiness)) return false
+
+  if (activeWorkspaceContext.kind === 'project') {
+    return targetAgentSessionPath === undefined
+  }
+
+  return activeWorkspaceContext.kind === 'conversation'
+    && targetAgentSessionPath !== null
+    && targetAgentSessionPath !== undefined
+    && selection.kind === 'session'
+    && selection.sessionPath === targetAgentSessionPath
 }
 
 /**
@@ -396,8 +404,9 @@ export function shouldApplyAgentSessionOperationResult(
 export function resolveAgentWorkspaceSessionRestore(
   request: AgentProjectSessionRequest | null | undefined,
   workspaceState: AgentWorkspaceRestoreState,
+  options: { forceNewSession?: boolean } = {},
 ): AgentWorkspaceSessionRestore {
-  if (request?.kind === 'new') {
+  if (options.forceNewSession || request?.kind === 'new') {
     return {
       options: { restoreSession: false },
       preferredSessionPath: null,

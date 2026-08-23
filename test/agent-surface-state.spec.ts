@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   resolveAgentSessionControlPresentation,
+  shouldRetainNewConversationSurfaceDuringSubmission,
   shouldShowAgentNewConversationPrompt,
   shouldShowAgentProjectSessionMenu,
   shouldShowAgentSessionLoadingIndicator,
@@ -70,6 +71,59 @@ describe('shouldShowAgentNewConversationPrompt', () => {
     expect(shouldShowAgentProjectSessionMenu({
       kind: 'conversation',
       conversationId: 'conversation-1',
+    })).toBe(false)
+  })
+})
+
+describe('shouldRetainNewConversationSurfaceDuringSubmission', () => {
+  it('retains the draft surface throughout first-session materialization', () => {
+    expect(shouldRetainNewConversationSurfaceDuringSubmission({
+      activeWorkspaceContext: { kind: 'conversationDraft' },
+      conversationStatus: null,
+      hasVisibleNativeSession: false,
+      isSubmitting: true,
+    })).toBe(true)
+    expect(shouldRetainNewConversationSurfaceDuringSubmission({
+      activeWorkspaceContext: { kind: 'conversation', conversationId: 'conversation-1' },
+      conversationStatus: null,
+      hasVisibleNativeSession: false,
+      isSubmitting: true,
+    })).toBe(true)
+    expect(shouldRetainNewConversationSurfaceDuringSubmission({
+      activeWorkspaceContext: { kind: 'conversation', conversationId: 'conversation-1' },
+      conversationStatus: 'draft',
+      hasVisibleNativeSession: false,
+      isSubmitting: true,
+    })).toBe(true)
+    expect(shouldRetainNewConversationSurfaceDuringSubmission({
+      activeWorkspaceContext: { kind: 'conversation', conversationId: 'conversation-1' },
+      conversationStatus: 'active',
+      hasVisibleNativeSession: false,
+      isSubmitting: true,
+    })).toBe(true)
+  })
+
+  it('hands off only to a real active conversation session', () => {
+    expect(shouldRetainNewConversationSurfaceDuringSubmission({
+      activeWorkspaceContext: { kind: 'conversation', conversationId: 'conversation-1' },
+      conversationStatus: 'active',
+      hasVisibleNativeSession: true,
+      isSubmitting: true,
+    })).toBe(false)
+  })
+
+  it('does not affect project submissions or completed submission state', () => {
+    expect(shouldRetainNewConversationSurfaceDuringSubmission({
+      activeWorkspaceContext: { kind: 'project', projectId: 'project-1' },
+      conversationStatus: null,
+      hasVisibleNativeSession: false,
+      isSubmitting: true,
+    })).toBe(false)
+    expect(shouldRetainNewConversationSurfaceDuringSubmission({
+      activeWorkspaceContext: { kind: 'conversationDraft' },
+      conversationStatus: null,
+      hasVisibleNativeSession: false,
+      isSubmitting: false,
     })).toBe(false)
   })
 })

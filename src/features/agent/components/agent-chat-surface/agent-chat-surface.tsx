@@ -65,6 +65,7 @@ export function AgentChatSurface() {
     handleStartNewSession,
     iconTheme,
     isAgentLayout,
+    isConversationMaterializing,
     isSessionLoading,
     isWorkspaceContextPreparing,
     showSessionLoadingIndicator,
@@ -98,10 +99,11 @@ export function AgentChatSurface() {
     visibleWorkspacePath,
     workspacePath,
   } = useAgentContext()
-  const isNewConversation = shouldShowAgentNewConversationPrompt(
-    activeWorkspaceContext,
-    visibleSessionSelection,
-  )
+  const isNewConversation = isConversationMaterializing
+    || shouldShowAgentNewConversationPrompt(
+      activeWorkspaceContext,
+      visibleSessionSelection,
+    )
   const sessionControlSelection = activeWorkspaceContext.kind === 'project'
     ? sessionControlTarget.selection
     : visibleSessionSelection
@@ -342,7 +344,7 @@ export function AgentChatSurface() {
       </div>
       <div ref={handleLocalOverlayRootRef} className='agent-local-overlay-root' />
 
-      {showSessionLoadingIndicator ? (
+      {!isConversationMaterializing && showSessionLoadingIndicator ? (
         <AppLoadingState
           className='agent-session-loading-state'
           label='正在加载会话…'

@@ -13,7 +13,10 @@ import type {
   AgentRuntimeState,
   AgentSessionListItem,
 } from '@/features/agent/types'
-import type { ActiveWorkspaceContext } from '@/features/conversations/types'
+import type {
+  ActiveWorkspaceContext,
+  ConversationStatus,
+} from '@/features/conversations/types'
 import type { ProjectRecord } from '@/features/workspace/types'
 
 export function shouldShowAgentNewConversationPrompt(
@@ -21,6 +24,24 @@ export function shouldShowAgentNewConversationPrompt(
   selection: AgentSessionSelection,
 ) {
   return selection.kind === 'new' && activeWorkspaceContext.kind !== 'conversation'
+}
+
+export function shouldRetainNewConversationSurfaceDuringSubmission({
+  activeWorkspaceContext,
+  conversationStatus,
+  hasVisibleNativeSession,
+  isSubmitting,
+}: {
+  activeWorkspaceContext: ActiveWorkspaceContext
+  conversationStatus: ConversationStatus | null
+  hasVisibleNativeSession: boolean
+  isSubmitting: boolean
+}) {
+  if (!isSubmitting) return false
+  if (activeWorkspaceContext.kind === 'conversationDraft') return true
+  if (activeWorkspaceContext.kind !== 'conversation') return false
+
+  return conversationStatus !== 'active' || !hasVisibleNativeSession
 }
 
 export function shouldShowAgentThreadbarSessionControl(

@@ -107,6 +107,7 @@ export type AgentContextValue = {
   isViewingActiveRuntime: boolean
   isProjectAddMenuOpen: boolean
   isLoading: boolean
+  isConversationMaterializing: boolean
   isWorkspaceContextPreparing: boolean
   isNewConversationSurfaceImmediate: boolean
   isSessionLoading: boolean

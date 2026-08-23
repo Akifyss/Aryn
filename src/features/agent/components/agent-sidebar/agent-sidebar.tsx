@@ -50,6 +50,7 @@ import type { OptimisticAgentUserMessage } from '@/features/agent/lib/optimistic
 import { findVisiblePendingInteraction } from '@/features/agent/lib/interaction-visibility'
 import {
   resolveAgentSessionControlPresentation,
+  shouldRetainNewConversationSurfaceDuringSubmission,
   shouldShowAgentNewConversationPrompt,
   shouldShowAgentSessionLoadingIndicator,
 } from '@/features/agent/lib/agent-surface-state'
@@ -434,7 +435,7 @@ function AgentProvider({
     workspacePath,
     workspacePathRef,
   })
-  useAgentWorkspaceLifecycle({
+  const { loadAgentWorkspaceState } = useAgentWorkspaceLifecycle({
     catalog: {
       markAgentUnavailable,
     },
@@ -832,6 +833,7 @@ function AgentProvider({
       activeRuntimeSessionRef,
       activeSessionSelectionRef,
       ensureSelectedAgentSessionActive,
+      loadAgentWorkspaceState,
       openSessionRequestIdRef,
       selectedAgentId,
       selectedAgentIdRef,
@@ -851,6 +853,17 @@ function AgentProvider({
       syncModelDraft,
       syncNewSessionModelDraft,
     },
+  })
+  const hasVisibleNativeSession = Boolean(
+    codexNativeSession
+    || openCodeNativeSession
+    || piWebNativeSession,
+  )
+  const isConversationMaterializing = shouldRetainNewConversationSurfaceDuringSubmission({
+    activeWorkspaceContext,
+    conversationStatus: activeConversation?.status ?? null,
+    hasVisibleNativeSession,
+    isSubmitting: isSubmittingComposerPrompt,
   })
   const hasComposerPayload = hasAgentComposerPayload(composerState, composerAttachments)
   const isConversationDraftContext = activeWorkspaceContext.kind === 'conversationDraft'
@@ -1042,6 +1055,7 @@ function AgentProvider({
     isViewingActiveRuntime,
     isProjectAddMenuOpen,
     isLoading,
+    isConversationMaterializing,
     isWorkspaceContextPreparing,
     isNewConversationSurfaceImmediate: isImmediateNewConversationSurface,
     isSessionLoading,
@@ -1156,6 +1170,7 @@ function AgentProvider({
     isViewingActiveRuntime,
     isProjectAddMenuOpen,
     isLoading,
+    isConversationMaterializing,
     isWorkspaceContextPreparing,
     isImmediateNewConversationSurface,
     isSessionLoading,

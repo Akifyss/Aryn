@@ -14,7 +14,7 @@ import {
   shouldApplyAgentWorkspaceState,
   shouldAcknowledgeAgentProjectSessionRequest,
   shouldPersistAgentWorkspaceSelection,
-  shouldReuseAgentProjectSessionRuntime,
+  shouldReuseAgentWorkspaceSessionRuntime,
   type AgentProjectSessionRequest,
 } from '../src/features/agent/lib/project-session-request'
 
@@ -383,6 +383,17 @@ describe('resolveAgentWorkspaceSessionRestore', () => {
     })
   })
 
+  it('forces a new session when a newly materialized conversation has stale restore state', () => {
+    expect(resolveAgentWorkspaceSessionRestore(
+      null,
+      { lastAgentSessionPath: 'C:/sessions/first.jsonl' },
+      { forceNewSession: true },
+    )).toEqual({
+      options: { restoreSession: false },
+      preferredSessionPath: null,
+    })
+  })
+
   it('falls back to workspace state when no explicit project session is requested', () => {
     expect(resolveAgentWorkspaceSessionRestore(null, { lastAgentSessionPath: 'C:/sessions/first.jsonl' })).toEqual({
       preferredSessionPath: 'C:/sessions/first.jsonl',
@@ -545,19 +556,19 @@ describe('project session runtime readiness', () => {
   })
 
   it('reuses the ready draft after its transient request is removed', () => {
-    expect(shouldReuseAgentProjectSessionRuntime({
+    expect(shouldReuseAgentWorkspaceSessionRuntime({
       activeWorkspaceContext: { kind: 'project', projectId: 'project-1' },
       readiness: readyDraft,
       selection: { kind: 'new' },
       targetAgentSessionPath: undefined,
     })).toBe(true)
-    expect(shouldReuseAgentProjectSessionRuntime({
+    expect(shouldReuseAgentWorkspaceSessionRuntime({
       activeWorkspaceContext: { kind: 'project', projectId: 'project-1' },
       readiness: readyDraft,
       selection: { kind: 'new' },
       targetAgentSessionPath: null,
     })).toBe(false)
-    expect(shouldReuseAgentProjectSessionRuntime({
+    expect(shouldReuseAgentWorkspaceSessionRuntime({
       activeWorkspaceContext: { kind: 'project', projectId: 'project-1' },
       readiness: {
         ...readyDraft,
@@ -570,7 +581,7 @@ describe('project session runtime readiness', () => {
       },
       targetAgentSessionPath: undefined,
     })).toBe(true)
-    expect(shouldReuseAgentProjectSessionRuntime({
+    expect(shouldReuseAgentWorkspaceSessionRuntime({
       activeWorkspaceContext: { kind: 'project', projectId: 'project-1' },
       readiness: readyDraft,
       selection: {
@@ -579,6 +590,38 @@ describe('project session runtime readiness', () => {
         sessionPath: 'C:/sessions/previous.jsonl',
       },
       targetAgentSessionPath: undefined,
+    })).toBe(false)
+  })
+
+  it('reuses a newly bound conversation session already owned by the runtime', () => {
+    const sessionPath = 'C:/sessions/conversation.jsonl'
+    const selection = {
+      agentId: 'codex' as const,
+      kind: 'session' as const,
+      sessionPath,
+    }
+    const readiness = {
+      ...readyDraft,
+      activeSessionPath: sessionPath,
+    }
+
+    expect(shouldReuseAgentWorkspaceSessionRuntime({
+      activeWorkspaceContext: { kind: 'conversation', conversationId: 'conversation-1' },
+      readiness,
+      selection,
+      targetAgentSessionPath: sessionPath,
+    })).toBe(true)
+    expect(shouldReuseAgentWorkspaceSessionRuntime({
+      activeWorkspaceContext: { kind: 'conversation', conversationId: 'conversation-1' },
+      readiness,
+      selection,
+      targetAgentSessionPath: 'C:/sessions/other.jsonl',
+    })).toBe(false)
+    expect(shouldReuseAgentWorkspaceSessionRuntime({
+      activeWorkspaceContext: { kind: 'conversationDraft' },
+      readiness,
+      selection,
+      targetAgentSessionPath: sessionPath,
     })).toBe(false)
   })
 })

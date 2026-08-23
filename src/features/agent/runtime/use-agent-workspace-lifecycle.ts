@@ -2,10 +2,15 @@ import {
   type Dispatch,
   type RefObject,
   type SetStateAction,
+  useCallback,
   useEffect,
   useRef,
 } from 'react'
 import type { AgentId } from '@/features/agent/agent-definition'
+import {
+  AgentWorkspaceLoadCoordinator,
+  type LoadAgentWorkspaceState,
+} from '@/features/agent/lib/agent-workspace-load-coordinator'
 import {
   getRuntimeDefaultModelDraft,
   getRuntimeSelectedModelDraft,
@@ -18,9 +23,10 @@ import {
   resolveAgentWorkspaceSessionRestore,
   shouldApplyAgentWorkspaceState,
   shouldPersistAgentWorkspaceSelection,
-  shouldReuseAgentProjectSessionRuntime,
+  shouldReuseAgentWorkspaceSessionRuntime,
   type AgentProjectSessionRequest,
   type AgentSessionSelection,
+  type AgentWorkspaceSessionRestore,
 } from '@/features/agent/lib/project-session-request'
 import { normalizeAgentProjectPath } from '@/features/agent/lib/session-tree'
 import type {
@@ -142,6 +148,25 @@ export function useAgentWorkspaceLifecycle({
   const handledRuntimeRefreshRevisionRef = useRef(0)
   const locallyEmittedWorkspaceStatesRef = useRef<WeakSet<AgentWorkspaceState>>(new WeakSet())
   const pendingExternalWorkspaceStateRef = useRef<AgentWorkspaceState | null>(null)
+  const workspaceLoadCoordinatorRef = useRef<AgentWorkspaceLoadCoordinator | null>(null)
+  if (!workspaceLoadCoordinatorRef.current) {
+    workspaceLoadCoordinatorRef.current = new AgentWorkspaceLoadCoordinator()
+  }
+  const loadAgentWorkspaceState = useCallback<LoadAgentWorkspaceState>((request, options) => (
+    workspaceLoadCoordinatorRef.current!.load(
+      request,
+      () => window.appApi.loadAgentWorkspace(
+        { agentId: request.agentId, workspacePath: request.workspacePath },
+        request.preferredSessionPath,
+        { restoreSession: request.restoreSession },
+      ),
+      options,
+    )
+  ), [])
+
+  useEffect(() => () => {
+    workspaceLoadCoordinatorRef.current?.invalidate()
+  }, [])
 
   useEffect(() => {
     if (
@@ -265,7 +290,7 @@ export function useAgentWorkspaceLifecycle({
     }
 
     const currentSelection = activeSessionSelectionRef.current
-    const canReuseCurrentProjectRuntime = shouldReuseAgentProjectSessionRuntime({
+    const canReuseCurrentWorkspaceRuntime = shouldReuseAgentWorkspaceSessionRuntime({
       activeWorkspaceContext,
       readiness: {
         activeSessionPath: agentState.activeSession?.sessionPath ?? null,
@@ -278,10 +303,9 @@ export function useAgentWorkspaceLifecycle({
       selection: currentSelection,
       targetAgentSessionPath,
     })
-    if (canReuseCurrentProjectRuntime) {
-      // Clearing the transient navigation request changes its target metadata
-      // to undefined. The runtime already owns the accepted selection, so a
-      // second load would only repeat work and risk restoring stale state.
+    if (canReuseCurrentWorkspaceRuntime) {
+      // The runtime already owns the accepted project or conversation target.
+      // A second load would only repeat work and risk restoring stale state.
       primaryLoadPendingRef.current = false
       return
     }
@@ -309,31 +333,53 @@ export function useAgentWorkspaceLifecycle({
       syncActiveSessionSelection({ kind: 'new' })
     }
 
-    void window.appApi.getWorkspaceState(workspacePath)
-      .then((workspaceState) => {
-        const currentSelection = activeSessionSelectionRef.current
-        const selectedSessionPath = currentSelection.kind === 'session'
-          && currentSelection.agentId === selectedAgentId
-          ? currentSelection.sessionPath
-          : null
-        const matchingRequestForAgent = matchingExternalRequest?.kind === 'session'
-          && matchingExternalRequest.agentId !== selectedAgentId
-          ? null
-          : matchingExternalRequest
-        const sessionRestore = selectedSessionPath
-          ? { preferredSessionPath: selectedSessionPath }
-          : resolveAgentWorkspaceSessionRestore(matchingRequestForAgent, workspaceState)
+    const selectedSessionPath = !shouldStartNewSession
+      && currentSelection.kind === 'session'
+      && currentSelection.agentId === selectedAgentId
+      ? currentSelection.sessionPath
+      : null
+    const matchingRequestForAgent = matchingExternalRequest?.kind === 'session'
+      && matchingExternalRequest.agentId !== selectedAgentId
+      ? null
+      : matchingExternalRequest
+    const sessionRestoreRequest: Promise<AgentWorkspaceSessionRestore> = shouldStartNewSession
+      ? Promise.resolve(resolveAgentWorkspaceSessionRestore(
+          matchingRequestForAgent,
+          { lastAgentSessionPath: null },
+          { forceNewSession: true },
+        ))
+      : selectedSessionPath
+        ? Promise.resolve({ preferredSessionPath: selectedSessionPath })
+        : window.appApi.getWorkspaceState(workspacePath)
+            .then((workspaceState) => resolveAgentWorkspaceSessionRestore(
+              matchingRequestForAgent,
+              workspaceState,
+            ))
 
-        return window.appApi.loadAgentWorkspace(
-          { agentId: selectedAgentId, workspacePath },
-          sessionRestore.preferredSessionPath,
-          sessionRestore.options,
-        )
-      })
-      .then(async (nextState) => {
+    void sessionRestoreRequest
+      .then((sessionRestore) => {
         if (loadAgentStateRequestIdRef.current !== requestId) {
+          return null
+        }
+        return loadAgentWorkspaceState({
+          agentId: selectedAgentId,
+          preferredSessionPath: sessionRestore.preferredSessionPath,
+          restoreSession: sessionRestore.options?.restoreSession !== false,
+          workspacePath,
+        }, {
+          reuseSettled: shouldStartNewSession
+            && activeWorkspaceContext.kind === 'conversation',
+        })
+      })
+      .then(async (loadResult) => {
+        if (
+          loadAgentStateRequestIdRef.current !== requestId
+          || !loadResult
+          || loadResult.status === 'superseded'
+        ) {
           return
         }
+        const nextState = loadResult.state
 
         const currentSelection = activeSessionSelectionRef.current
         const nativeRestoredSessionPath = nextState.activeSession?.sessionPath ?? null
@@ -397,7 +443,7 @@ export function useAgentWorkspaceLifecycle({
           setIsLoading(false)
         }
       })
-  }, [markAgentUnavailable, selectedAgentId, targetAgentSessionPath, targetWorkspacePath, workspacePath])
+  }, [loadAgentWorkspaceState, markAgentUnavailable, selectedAgentId, targetAgentSessionPath, targetWorkspacePath, workspacePath])
 
   // Opening the Agent selector refreshes discovery in the background. Revalidate
   // the current new-session runtime without replacing the surface with a loader
@@ -426,18 +472,20 @@ export function useAgentWorkspaceLifecycle({
     const requestId = backgroundRefreshRequestIdRef.current + 1
     backgroundRefreshRequestIdRef.current = requestId
     setPanelError(null)
-    const refreshRequest = workspacePath
-      ? window.appApi.loadAgentWorkspace(
-          { agentId: selectedAgentId, workspacePath },
-          null,
-          { restoreSession: false },
-        )
+    const refreshRequest: Promise<AgentWorkspaceState | null> = workspacePath
+      ? loadAgentWorkspaceState({
+          agentId: selectedAgentId,
+          preferredSessionPath: null,
+          restoreSession: false,
+          workspacePath,
+        }).then((result) => result.status === 'completed' ? result.state : null)
       : window.appApi.loadAgentDraftState(selectedAgentId)
 
     void refreshRequest
       .then((nextState) => {
         if (
-          backgroundRefreshRequestIdRef.current !== requestId
+          !nextState
+          || backgroundRefreshRequestIdRef.current !== requestId
           || activeSessionSelectionRef.current.kind !== 'new'
         ) {
           return
@@ -471,6 +519,7 @@ export function useAgentWorkspaceLifecycle({
     agentState.runtime,
     hasLoadedWorkspaceState,
     isLoading,
+    loadAgentWorkspaceState,
     markAgentUnavailable,
     newSessionModelDraftRef,
     runtimeRefreshRevision,
@@ -528,4 +577,6 @@ export function useAgentWorkspaceLifecycle({
     locallyEmittedWorkspaceStatesRef.current.add(agentState)
     onWorkspaceStateChange?.(agentState)
   }, [agentState, onWorkspaceStateChange])
+
+  return { loadAgentWorkspaceState }
 }

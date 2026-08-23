@@ -24,6 +24,7 @@ import {
   getPersistedAgentUserMessages,
   type OptimisticAgentUserMessage,
 } from '@/features/agent/lib/optimistic-user-messages'
+import type { LoadAgentWorkspaceState } from '@/features/agent/lib/agent-workspace-load-coordinator'
 import type { AgentSessionSelection } from '@/features/agent/lib/project-session-request'
 import { normalizeAgentProjectPath } from '@/features/agent/lib/session-tree'
 import type { AgentId } from '@/features/agent/agent-definition'
@@ -70,6 +71,7 @@ type AgentPromptSubmissionNavigation = {
   activeRuntimeSessionRef: RefObject<AgentWorkspaceState['activeSession']>
   activeSessionSelectionRef: RefObject<AgentSessionSelection>
   ensureSelectedAgentSessionActive: (selection?: AgentSessionSelection) => Promise<AgentWorkspaceState | null>
+  loadAgentWorkspaceState: LoadAgentWorkspaceState
   openSessionRequestIdRef: RefObject<number>
   selectedAgentId: AgentId
   selectedAgentIdRef: RefObject<AgentId>
@@ -129,6 +131,7 @@ export function useAgentPromptSubmission({
     activeRuntimeSessionRef,
     activeSessionSelectionRef,
     ensureSelectedAgentSessionActive,
+    loadAgentWorkspaceState,
     openSessionRequestIdRef,
     selectedAgentId,
     selectedAgentIdRef,
@@ -206,6 +209,25 @@ export function useAgentPromptSubmission({
       state: submittedComposerState,
     }
     const optimisticClearId = clearComposerOptimistically()
+    const isOpenCodePrompt = requestAgentId === 'opencode'
+    const supportsClientMessageId = isOpenCodePrompt || requestAgentId === 'codex'
+    const nextOptimisticUserMessageId = isOpenCodePrompt
+      ? createOpenCodeMessageId()
+      : `optimistic-user-${crypto.randomUUID()}`
+    const nativePartIds = isOpenCodePrompt
+      ? Array.from({ length: submittedComposerAttachments.length + 1 }, createOpenCodePartId)
+      : undefined
+    const optimisticAttachments: AgentMessageAttachment[] = submittedComposerAttachments.map(({ id: _id, ...attachment }) => ({
+      ...attachment,
+      status: attachment.kind === 'image' ? 'sent' : 'referenced',
+    }))
+    const optimisticUserMessage = {
+      ...(optimisticAttachments.length > 0 ? { attachments: optimisticAttachments } : {}),
+      id: nextOptimisticUserMessageId,
+      kind: 'user',
+      text: trimmedPrompt,
+      timestamp: Date.now(),
+    } as const
     let didSendPromptToAgent = false
     let didPersistConversationBinding = false
     let optimisticUserMessageId: string | null = null
@@ -272,10 +294,17 @@ export function useAgentPromptSubmission({
             throw new Error('Conversation workspace was not created.')
           }
 
-          const nextState = await window.appApi.loadAgentWorkspace({
+          const loadResult = await loadAgentWorkspaceState({
             agentId: requestAgentId,
+            preferredSessionPath: null,
+            restoreSession: false,
             workspacePath: targetWorkspacePath,
-          }, null, { restoreSession: false })
+          }, { reuseSettled: true })
+          if (loadResult.status === 'superseded') {
+            await onConversationDraftFailed?.(createdConversation.id)
+            return
+          }
+          const nextState = loadResult.state
           runtimeForSubmit = nextState.runtime
           const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
           const nextNewSessionDraft = normalizeAgentModelDraft(
@@ -344,6 +373,21 @@ export function useAgentPromptSubmission({
         throw new Error('Agent session did not return a native session identifier.')
       }
       const promptSessionPath = nextSessionPath
+      const baselineUserMessageIds = agentState.activeSession?.sessionPath === promptSessionPath
+        ? getPersistedAgentUserMessages(agentState.activeSession).map((message) => message.id)
+        : []
+      optimisticUserMessageId = nextOptimisticUserMessageId
+      setOptimisticUserMessages((current) => [...current, {
+        agentId: requestAgentId,
+        baselineUserMessageIds,
+        message: {
+          ...optimisticUserMessage,
+          optimisticBaselineUserMessageIds: baselineUserMessageIds,
+        },
+        ...(nativePartIds ? { nativePartIds } : {}),
+        sessionPath: promptSessionPath,
+      }])
+
       const conversationId = createdConversation?.id
         ?? (activeWorkspaceContext.kind === 'conversation' ? activeWorkspaceContext.conversationId : null)
       const persistedSessionPath = createdConversation?.agentSessionPath ?? activeConversation?.agentSessionPath ?? null
@@ -363,36 +407,6 @@ export function useAgentPromptSubmission({
 
       fallbackErrorMessage = 'Unable to send your prompt.'
       const promptAttachments = submittedComposerAttachments.map(({ id: _id, ...attachment }) => attachment)
-      const isOpenCodePrompt = requestAgentId === 'opencode'
-      const supportsClientMessageId = isOpenCodePrompt || requestAgentId === 'codex'
-      const nextOptimisticUserMessageId = isOpenCodePrompt
-        ? createOpenCodeMessageId()
-        : `optimistic-user-${crypto.randomUUID()}`
-      const nativePartIds = isOpenCodePrompt
-        ? Array.from({ length: submittedComposerAttachments.length + 1 }, createOpenCodePartId)
-        : undefined
-      optimisticUserMessageId = nextOptimisticUserMessageId
-      const optimisticAttachments: AgentMessageAttachment[] = submittedComposerAttachments.map(({ id: _id, ...attachment }) => ({
-        ...attachment,
-        status: attachment.kind === 'image' ? 'sent' : 'referenced',
-      }))
-      const baselineUserMessageIds = agentState.activeSession?.sessionPath === promptSessionPath
-        ? getPersistedAgentUserMessages(agentState.activeSession).map((message) => message.id)
-        : []
-      setOptimisticUserMessages((current) => [...current, {
-        agentId: requestAgentId,
-        baselineUserMessageIds,
-        message: {
-          ...(optimisticAttachments.length > 0 ? { attachments: optimisticAttachments } : {}),
-          id: nextOptimisticUserMessageId,
-          kind: 'user',
-          text: trimmedPrompt,
-          timestamp: Date.now(),
-          optimisticBaselineUserMessageIds: baselineUserMessageIds,
-        },
-        ...(nativePartIds ? { nativePartIds } : {}),
-        sessionPath: promptSessionPath,
-      }])
       await window.appApi.sendAgentPrompt({
         agentId: requestAgentId,
         sessionPath: promptSessionPath,

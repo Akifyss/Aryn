@@ -294,7 +294,7 @@ describe('agent sidebar structure', () => {
     expect(refreshEffect).toContain("activeWorkspaceContext.kind === 'conversation'")
     expect(refreshEffect).toContain('hasLoadedWorkspaceState && !isCurrentRuntime')
     expect(refreshEffect).toContain('window.appApi.loadAgentDraftState(selectedAgentId)')
-    expect(refreshEffect).toContain('{ restoreSession: false }')
+    expect(refreshEffect).toMatch(/loadAgentWorkspaceState\(\{[\s\S]*?restoreSession: false,/)
     expect(refreshEffect).toContain('newSessionModelDraftRef.current')
     expect(refreshEffect).not.toContain('setIsLoading(')
     expect(refreshEffect).not.toContain('resetComposer(')
