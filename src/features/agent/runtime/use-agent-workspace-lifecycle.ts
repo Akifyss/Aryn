@@ -12,10 +12,14 @@ import {
   type LoadAgentWorkspaceState,
 } from '@/features/agent/lib/agent-workspace-load-coordinator'
 import {
+  cacheAgentDraftPresentationState,
+  isAgentDraftWorkspaceState,
+  resolveAgentDraftPresentationState,
+} from '@/features/agent/lib/agent-draft-presentation-cache'
+import {
   getRuntimeDefaultModelDraft,
   getRuntimeSelectedModelDraft,
   normalizeAgentModelDraft,
-  parseModelSelection,
   type AgentModelDraft,
 } from '@/features/agent/lib/model-selection'
 import {
@@ -39,8 +43,6 @@ import type {
   ConversationSessionStartedPatch,
 } from '@/features/conversations/types'
 import type { ProjectState } from '@/features/workspace/types'
-
-const INITIAL_MODEL_SELECTION = parseModelSelection(null)
 
 type UseAgentWorkspaceLifecycleOptions = {
   catalog: {
@@ -73,8 +75,8 @@ type UseAgentWorkspaceLifecycleOptions = {
   }
   state: {
     agentState: AgentWorkspaceState
+    emptyAgentState: AgentWorkspaceState
     hasLoadedWorkspaceState: boolean
-    initialAgentState: AgentWorkspaceState
     isLoading: boolean
     resetComposer: () => void
     resetRunDrafts: () => void
@@ -122,8 +124,8 @@ export function useAgentWorkspaceLifecycle({
   },
   state: {
     agentState,
+    emptyAgentState,
     hasLoadedWorkspaceState,
-    initialAgentState,
     isLoading,
     resetComposer,
     resetRunDrafts,
@@ -169,10 +171,42 @@ export function useAgentWorkspaceLifecycle({
   }, [])
 
   useEffect(() => {
+    if (!workspaceState) return
+
+    if (!workspacePath) {
+      if (
+        activeWorkspaceContext.kind !== 'conversationDraft'
+        || locallyEmittedWorkspaceStatesRef.current.has(workspaceState)
+        || !isAgentDraftWorkspaceState(workspaceState, selectedAgentId)
+      ) {
+        return
+      }
+
+      loadAgentStateRequestIdRef.current += 1
+      backgroundRefreshRequestIdRef.current += 1
+      primaryLoadPendingRef.current = false
+      pendingExternalWorkspaceStateRef.current = workspaceState
+      cacheAgentDraftPresentationState(workspaceState)
+      setAgentState(workspaceState)
+      const defaultDraft = getRuntimeDefaultModelDraft(workspaceState.runtime)
+      const nextDraft = normalizeAgentModelDraft(
+        newSessionModelDraftRef.current.provider || newSessionModelDraftRef.current.modelId
+          ? newSessionModelDraftRef.current
+          : defaultDraft,
+        workspaceState.runtime,
+        defaultDraft,
+      )
+      syncNewSessionModelDraft(nextDraft)
+      syncModelDraft(nextDraft)
+      setModelDrafts(nextDraft.provider ? { [nextDraft.provider]: nextDraft.modelId } : {})
+      setHasLoadedWorkspaceState(true)
+      setIsLoading(false)
+      setPanelError(null)
+      return
+    }
+
     if (
-      !workspacePath
-      || !workspaceState
-      || !isAgentWorkspacePathReadyForTarget(workspacePath, targetWorkspacePath)
+      !isAgentWorkspacePathReadyForTarget(workspacePath, targetWorkspacePath)
       || !shouldPersistAgentWorkspaceSelection(workspaceState.runtime, selectedAgentId, workspacePath)
     ) {
       return
@@ -211,6 +245,7 @@ export function useAgentWorkspaceLifecycle({
       ? newSessionModelDraftRef.current
       : defaultDraft, workspaceState.runtime, defaultDraft)
     syncNewSessionModelDraft(nextDraft)
+    cacheAgentDraftPresentationState(workspaceState)
     if (
       currentSelection.kind === 'session'
       && currentSelection.agentId === workspaceState.runtime.agentId
@@ -221,7 +256,7 @@ export function useAgentWorkspaceLifecycle({
       syncModelDraft(nextDraft)
     }
     setHasLoadedWorkspaceState(true)
-  }, [selectedAgentId, targetWorkspacePath, workspacePath, workspaceState])
+  }, [activeWorkspaceContext.kind, selectedAgentId, targetWorkspacePath, workspacePath, workspaceState])
 
   useEffect(() => {
     const requestId = loadAgentStateRequestIdRef.current + 1
@@ -237,18 +272,32 @@ export function useAgentWorkspaceLifecycle({
     }
 
     if (!workspacePath) {
-      setAgentState(initialAgentState)
+      const presentationState = resolveAgentDraftPresentationState({
+        currentState: agentState,
+        initialState: emptyAgentState,
+        hasLoadedCurrentState: hasLoadedWorkspaceState,
+        selectedAgentId,
+      })
+      const presentationDefaultDraft = getRuntimeDefaultModelDraft(presentationState.runtime)
+      const presentationDraft = normalizeAgentModelDraft(
+        newSessionModelDraftRef.current.provider || newSessionModelDraftRef.current.modelId
+          ? newSessionModelDraftRef.current
+          : presentationDefaultDraft,
+        presentationState.runtime,
+        presentationDefaultDraft,
+      )
+      setAgentState(presentationState)
       setViewedSessionSnapshot(null)
       // Navigation already committed and cleared a standalone draft before
       // paint. A later runtime response must not erase text entered meanwhile.
       if (activeWorkspaceContext.kind !== 'conversationDraft') {
         resetComposer()
       }
-      syncNewSessionModelDraft(getRuntimeDefaultModelDraft(initialAgentState.runtime))
-      syncModelDraft(getRuntimeDefaultModelDraft(initialAgentState.runtime))
-      setModelDrafts({
-        [INITIAL_MODEL_SELECTION.provider]: INITIAL_MODEL_SELECTION.modelId,
-      })
+      syncNewSessionModelDraft(presentationDraft)
+      syncModelDraft(presentationDraft)
+      setModelDrafts(presentationDraft.provider
+        ? { [presentationDraft.provider]: presentationDraft.modelId }
+        : {})
       resetRunDrafts()
       setPanelError(null)
       setHasLoadedWorkspaceState(false)
@@ -264,6 +313,7 @@ export function useAgentWorkspaceLifecycle({
           if (!nextState.runtime.hasConfiguredModels) {
             markAgentUnavailable(selectedAgentId, nextState.runtime.setupHint ?? '当前 Agent 没有可用模型。')
           }
+          cacheAgentDraftPresentationState(nextState)
           setAgentState(nextState)
           const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
           const nextDraft = normalizeAgentModelDraft(defaultDraft, nextState.runtime, defaultDraft)
@@ -403,6 +453,7 @@ export function useAgentWorkspaceLifecycle({
         if (!nextState.runtime.hasConfiguredModels) {
           markAgentUnavailable(selectedAgentId, nextState.runtime.setupHint ?? '当前 Agent 没有可用模型。')
         }
+        cacheAgentDraftPresentationState(nextState)
         setAgentState(nextState)
         const nextActiveSessionPath = nextState.activeSession?.sessionPath
         const hasRestoredSession = Boolean(
@@ -494,6 +545,7 @@ export function useAgentWorkspaceLifecycle({
         if (!nextState.runtime.hasConfiguredModels) {
           markAgentUnavailable(selectedAgentId, nextState.runtime.setupHint ?? '当前 Agent 没有可用模型。')
         }
+        cacheAgentDraftPresentationState(nextState)
         setAgentState(nextState)
         const defaultDraft = getRuntimeDefaultModelDraft(nextState.runtime)
         const nextDraft = normalizeAgentModelDraft(

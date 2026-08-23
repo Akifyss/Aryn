@@ -102,6 +102,7 @@ export type AgentContextValue = {
   handleSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
   hasComposerPayload: boolean
   hasConfiguredProviders: boolean
+  hasProviderStatePresentation: boolean
   iconTheme?: WorkspaceIconTheme | null
   isAgentLayout: boolean
   isViewingActiveRuntime: boolean
@@ -120,6 +121,7 @@ export type AgentContextValue = {
   messagesScrollViewportRef: (element: HTMLDivElement | null) => void
   modelFieldRef: RefObject<HTMLDivElement | null>
   modelInputValue: string
+  modelPresentationRuntime: AgentWorkspaceState['runtime']
   onConversationDraftFailed?: (conversationId: string) => Promise<void> | void
   onConversationSessionStarted?: (
     conversationId: string,

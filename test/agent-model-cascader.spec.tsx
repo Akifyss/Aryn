@@ -15,6 +15,7 @@ describe('AgentModelCascader', () => {
         currentThinkingLevel='low'
         currentThinkingLevelLabel='Low'
         disabled={false}
+        hasProviderStatePresentation
         isOpen={false}
         onOpenChange={vi.fn()}
         onSelectModel={vi.fn()}
@@ -40,6 +41,7 @@ describe('AgentModelCascader', () => {
         currentThinkingLevel='off'
         currentThinkingLevelLabel='Off'
         disabled={false}
+        hasProviderStatePresentation
         isOpen={false}
         onOpenChange={vi.fn()}
         onOpenProviderSettings={vi.fn()}
@@ -49,6 +51,34 @@ describe('AgentModelCascader', () => {
     )
 
     expect(markup).toContain('agent-provider-setup-button')
+    expect(markup).not.toContain('agent-model-cascader-trigger')
+  })
+
+  it('does not present provider setup before provider state or a cached presentation is available', () => {
+    const markup = renderToStaticMarkup(
+      <AgentModelCascader
+        availableModels={[]}
+        availableThinkingLevels={['off']}
+        availableThinkingLevelsByModel={{}}
+        configuredProviders={[]}
+        currentModelId=''
+        currentProvider=''
+        currentThinkingLevel='off'
+        currentThinkingLevelLabel='Off'
+        disabled
+        hasProviderStatePresentation={false}
+        isOpen={false}
+        onOpenChange={vi.fn()}
+        onOpenProviderSettings={vi.fn()}
+        onSelectModel={vi.fn()}
+        onSelectThinkingLevel={vi.fn()}
+      />,
+    )
+
+    expect(markup).toContain('agent-model-field')
+    expect(markup).not.toContain('agent-model-loading-placeholder')
+    expect(markup).not.toContain('正在加载模型')
+    expect(markup).not.toContain('agent-provider-setup-button')
     expect(markup).not.toContain('agent-model-cascader-trigger')
   })
 })

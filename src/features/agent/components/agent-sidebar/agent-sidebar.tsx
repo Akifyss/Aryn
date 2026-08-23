@@ -11,7 +11,10 @@ import type { BbTheme } from '@aryn/bb-session-surface'
 import {
   type AgentId,
 } from '@/features/agent/agent-definition'
-import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog'
+import {
+  readLastNewConversationAgentId,
+  useAgentCatalog,
+} from '@/features/agent/hooks/use-agent-catalog'
 import {
   EMPTY_AGENT_COMPOSER_STATE,
   hasAgentComposerPayload,
@@ -48,6 +51,10 @@ import {
 } from '@/features/agent/lib/project-session-request'
 import type { OptimisticAgentUserMessage } from '@/features/agent/lib/optimistic-user-messages'
 import { findVisiblePendingInteraction } from '@/features/agent/lib/interaction-visibility'
+import {
+  resolveAgentModelPresentation,
+  resolveInitialAgentDraftPresentationState,
+} from '@/features/agent/lib/agent-draft-presentation-cache'
 import {
   resolveAgentSessionControlPresentation,
   shouldRetainNewConversationSurfaceDuringSubmission,
@@ -253,7 +260,25 @@ function AgentProvider({
 }: AgentProviderProps) {
   const runningPromptEnterBehavior = useSettingsStore((state) => state.agent.runningPromptEnterBehavior)
   const workspaceTree = useWorkspaceStore((state) => state.tree)
-  const [agentState, setAgentState] = useState<AgentWorkspaceState>(emptyAgentState)
+  const initialActiveConversation = activeWorkspaceContext.kind === 'conversation'
+    ? conversationState.conversations.find((conversation) => (
+        conversation.id === activeWorkspaceContext.conversationId
+      )) ?? null
+    : null
+  const initialRequestedAgentId = externalSessionRequest?.kind === 'session'
+    && activeWorkspaceContext.kind === 'project'
+    && externalSessionRequest.projectId === activeWorkspaceContext.projectId
+    ? externalSessionRequest.agentId
+    : null
+  const initialAgentStateRef = useRef<AgentWorkspaceState | null>(null)
+  initialAgentStateRef.current ??= resolveInitialAgentDraftPresentationState(
+    initialActiveConversation?.agentId
+      ?? initialRequestedAgentId
+      ?? readLastNewConversationAgentId(),
+    emptyAgentState,
+  )
+  const initialAgentState = initialAgentStateRef.current
+  const [agentState, setAgentState] = useState<AgentWorkspaceState>(initialAgentState)
   const [viewedSessionSnapshot, setViewedSessionSnapshot] = useState<AgentSessionSnapshot | null>(null)
   const {
     modelDrafts,
@@ -266,7 +291,7 @@ function AgentProvider({
     setSelectedProviderValue,
     syncModelDraft,
     syncNewSessionModelDraft,
-  } = useAgentModelDraftState(emptyAgentState.runtime)
+  } = useAgentModelDraftState(initialAgentState.runtime)
   const [activeComposerMenu, setActiveComposerMenu] = useState<AgentComposerMenu>(null)
   const closeComposerMenu = useCallback(() => setActiveComposerMenu(null), [])
   const [activeOverlayPanel, setActiveOverlayPanel] = useState<'sessions' | null>(null)
@@ -463,8 +488,8 @@ function AgentProvider({
     },
     state: {
       agentState,
+      emptyAgentState,
       hasLoadedWorkspaceState,
-      initialAgentState: emptyAgentState,
       isLoading,
       resetComposer: () => {
         setComposerState(EMPTY_AGENT_COMPOSER_STATE)
@@ -924,19 +949,45 @@ function AgentProvider({
   })
 
   const {
-    configuredProviders,
-    hasConfiguredProviders,
+    hasConfiguredProviders: runtimeHasConfiguredProviders,
     providerModelIds,
-    resolvedSelectedProviderValue,
+    resolvedSelectedProviderValue: runtimeResolvedSelectedProviderValue,
     selectedModelSupportsImages,
-    thinkingLevel,
-    thinkingLevelLabel,
   } = useAgentModelSelectionState({
     modelInputValue,
     runtime: agentState.runtime,
     selectedProviderValue,
     selectedThinkingLevel,
   })
+  const modelPresentation = resolveAgentModelPresentation({
+    currentDraft: {
+      modelId: modelInputValue,
+      provider: selectedProviderValue,
+      thinkingLevel: selectedThinkingLevel,
+    },
+    currentState: agentState,
+    hasLoadedCurrentState: hasLoadedWorkspaceState,
+    selectedAgentId,
+  })
+  const modelPresentationRuntime = modelPresentation?.state.runtime ?? agentState.runtime
+  const presentedModelDraft = modelPresentation?.draft ?? {
+    modelId: modelInputValue,
+    provider: selectedProviderValue,
+    thinkingLevel: selectedThinkingLevel,
+  }
+  const {
+    configuredProviders,
+    hasConfiguredProviders,
+    resolvedSelectedProviderValue,
+    thinkingLevel,
+    thinkingLevelLabel,
+  } = useAgentModelSelectionState({
+    modelInputValue: presentedModelDraft.modelId,
+    runtime: modelPresentationRuntime,
+    selectedProviderValue: presentedModelDraft.provider,
+    selectedThinkingLevel: presentedModelDraft.thinkingLevel,
+  })
+  const hasProviderStatePresentation = modelPresentation !== null
   const {
     handleSelectModel,
     handleThinkingLevelSelection,
@@ -945,7 +996,7 @@ function AgentProvider({
   } = useAgentModelMutations({
     model: {
       modelInputValue,
-      resolvedSelectedProviderValue,
+      resolvedSelectedProviderValue: runtimeResolvedSelectedProviderValue,
       selectedThinkingLevel,
       syncModelDraft,
       syncNewSessionModelDraft,
@@ -990,12 +1041,12 @@ function AgentProvider({
 
   useAgentModelSelectionSync({
     closeModelMenu: closeComposerMenu,
-    hasConfiguredProviders,
+    hasConfiguredProviders: runtimeHasConfiguredProviders,
     isModelMenuOpen: activeComposerMenu === 'model-cascader',
     modelDrafts,
     preferredModelByProvider: agentState.runtime.preferredModelByProvider,
     providerModelIds,
-    resolvedSelectedProviderValue,
+    resolvedSelectedProviderValue: runtimeResolvedSelectedProviderValue,
     selectedProviderValue,
     setModelInputValue,
     setSelectedProviderValue,
@@ -1050,6 +1101,7 @@ function AgentProvider({
     handleSubmit,
     hasComposerPayload,
     hasConfiguredProviders,
+    hasProviderStatePresentation,
     iconTheme,
     isAgentLayout,
     isViewingActiveRuntime,
@@ -1069,7 +1121,8 @@ function AgentProvider({
     messagesScrollElement,
     messagesScrollViewportRef,
     modelFieldRef,
-    modelInputValue,
+    modelInputValue: presentedModelDraft.modelId,
+    modelPresentationRuntime,
     onConversationDraftFailed,
     onConversationSessionStarted,
     onConversationTitleSuggested,
@@ -1165,6 +1218,7 @@ function AgentProvider({
     handleSubmit,
     hasComposerPayload,
     hasConfiguredProviders,
+    hasProviderStatePresentation,
     iconTheme,
     isAgentLayout,
     isViewingActiveRuntime,
@@ -1183,7 +1237,8 @@ function AgentProvider({
     loadProjectSessions,
     messagesScrollElement,
     messagesScrollViewportRef,
-    modelInputValue,
+    presentedModelDraft.modelId,
+    modelPresentationRuntime,
     onConversationDraftFailed,
     onConversationSessionStarted,
     onConversationTitleSuggested,

@@ -18,18 +18,17 @@ import {
 } from '@/features/agent/lib/model-selection'
 import type { AgentThinkingLevel, AgentWorkspaceState } from '@/features/agent/types'
 
-const INITIAL_MODEL_SELECTION = parseModelSelection(null)
-
 export function useAgentModelDraftState(initialRuntime: AgentWorkspaceState['runtime']) {
-  const [modelInputValue, setModelInputValue] = useState(INITIAL_MODEL_SELECTION.modelId)
-  const [selectedProviderValue, setSelectedProviderValue] = useState(INITIAL_MODEL_SELECTION.provider)
+  const initialModelDraft = getRuntimeDefaultModelDraft(initialRuntime)
+  const [modelInputValue, setModelInputValue] = useState(initialModelDraft.modelId)
+  const [selectedProviderValue, setSelectedProviderValue] = useState(initialModelDraft.provider)
   const [selectedThinkingLevel, setSelectedThinkingLevel] = useState<AgentThinkingLevel>(
-    initialRuntime.defaultThinkingLevel,
+    initialModelDraft.thinkingLevel,
   )
-  const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({
-    [INITIAL_MODEL_SELECTION.provider]: INITIAL_MODEL_SELECTION.modelId,
-  })
-  const newSessionModelDraftRef = useRef<AgentModelDraft>(getRuntimeDefaultModelDraft(initialRuntime))
+  const [modelDrafts, setModelDrafts] = useState<Record<string, string>>(
+    initialModelDraft.provider ? { [initialModelDraft.provider]: initialModelDraft.modelId } : {},
+  )
+  const newSessionModelDraftRef = useRef<AgentModelDraft>(initialModelDraft)
 
   function syncModelDraft(draft: AgentModelDraft) {
     setSelectedProviderValue(draft.provider)

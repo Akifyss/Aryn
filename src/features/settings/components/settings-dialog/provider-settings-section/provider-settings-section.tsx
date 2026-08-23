@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Input, Tabs } from '@heroui/react'
 import { EmptyBoxLine, SearchLine } from '@mingcute/react'
 import { AppScrollArea } from '@/components/app-scroll-area'
+import { cacheAgentDraftPresentationState } from '@/features/agent/lib/agent-draft-presentation-cache'
 import type { AgentProviderCategory } from '@/features/agent/provider-auth'
 import type { AgentWorkspaceState } from '@/features/agent/types'
 import { ProviderAuthFlowPanel } from './provider-auth-flow-panel'
@@ -43,6 +44,10 @@ export function ProviderSettingsSection({
   const activeAuthProviderRef = useRef<string | null>(null)
   const isAuthCancelingRef = useRef(false)
   const pendingAuthPromptIdRef = useRef<string | null>(null)
+  const publishAgentState = useCallback((nextState: AgentWorkspaceState) => {
+    cacheAgentDraftPresentationState(nextState)
+    onAgentStateChange(nextState)
+  }, [onAgentStateChange])
 
   useEffect(() => {
     if (!isActive || workspacePath) {
@@ -54,7 +59,7 @@ export function ProviderSettingsSection({
     void window.appApi.loadAgentDraftState('builtin-pi')
       .then((nextState) => {
         if (!isDisposed) {
-          onAgentStateChange(nextState)
+          publishAgentState(nextState)
         }
       })
       .catch((error) => {
@@ -68,7 +73,7 @@ export function ProviderSettingsSection({
     return () => {
       isDisposed = true
     }
-  }, [isActive, onAgentStateChange, workspacePath])
+  }, [isActive, publishAgentState, workspacePath])
 
   const authProviders = useMemo(
     () => buildAuthProviderViewModels(agentState),
@@ -191,7 +196,7 @@ export function ProviderSettingsSection({
         provider,
         apiKey,
       )
-      onAgentStateChange(nextState)
+      publishAgentState(nextState)
       setAuthDrafts((currentValue) => ({
         ...currentValue,
         [provider]: '',
@@ -227,7 +232,7 @@ export function ProviderSettingsSection({
         workspacePath,
         provider,
       )
-      onAgentStateChange(nextState)
+      publishAgentState(nextState)
       setAuthFlow(null)
       onStatusMessage(`${providerLabel} 登录已完成`)
     } catch (error) {
@@ -255,7 +260,7 @@ export function ProviderSettingsSection({
         workspacePath,
         provider,
       )
-      onAgentStateChange(nextState)
+      publishAgentState(nextState)
       onStatusMessage(`${providerLabel} 登录已退出`)
     } catch (error) {
       setPanelError(error instanceof Error

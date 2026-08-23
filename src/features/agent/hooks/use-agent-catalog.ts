@@ -31,6 +31,17 @@ function resolveAvailableAgentId(catalog: readonly AgentAvailability[], agentId:
     : DEFAULT_AGENT_ID
 }
 
+export function readLastNewConversationAgentId() {
+  try {
+    const storedAgentId = typeof localStorage === 'undefined'
+      ? null
+      : localStorage.getItem('aryn:last-new-conversation-agent')
+    return isAgentId(storedAgentId) ? storedAgentId : DEFAULT_AGENT_ID
+  } catch {
+    return DEFAULT_AGENT_ID
+  }
+}
+
 export function useAgentCatalog({
   onCatalogRefreshed,
 }: UseAgentCatalogOptions): UseAgentCatalogResult {
@@ -39,7 +50,9 @@ export function useAgentCatalog({
     Partial<Record<AgentId, AgentAvailabilityFailure>>
   >({})
   const [agentCatalogRefreshError, setAgentCatalogRefreshError] = useState<string | null>(null)
-  const [selectedAgentIdValue, setSelectedAgentIdValue] = useState<AgentId>(DEFAULT_AGENT_ID)
+  const [selectedAgentIdValue, setSelectedAgentIdValue] = useState<AgentId>(
+    readLastNewConversationAgentId,
+  )
   const catalogRequestIdRef = useRef(0)
   const catalogRefreshRef = useRef<Promise<void> | null>(null)
   const isMountedRef = useRef(false)
@@ -107,15 +120,6 @@ export function useAgentCatalog({
     let cancelled = false
     const requestId = catalogRequestIdRef.current + 1
     catalogRequestIdRef.current = requestId
-
-    try {
-      const storedAgentId = window.localStorage.getItem('aryn:last-new-conversation-agent')
-      if (isAgentId(storedAgentId)) {
-        setSelectedAgentIdValue(storedAgentId)
-      }
-    } catch {
-      // The default remains usable when localStorage is unavailable.
-    }
 
     void window.appApi.getAgentCatalog()
       .then((catalog) => {

@@ -78,6 +78,7 @@ type AgentModelCascaderProps = {
   currentThinkingLevel: AgentThinkingLevel
   currentThinkingLevelLabel: string
   disabled: boolean
+  hasProviderStatePresentation: boolean
   isOpen: boolean
   onOpenChange: (isOpen: boolean) => void
   onOpenProviderSettings?: () => void
@@ -340,6 +341,7 @@ export function AgentModelCascader({
   currentThinkingLevel,
   currentThinkingLevelLabel,
   disabled,
+  hasProviderStatePresentation,
   isOpen,
   onOpenChange,
   onOpenProviderSettings,
@@ -1000,7 +1002,7 @@ export function AgentModelCascader({
 
   return (
     <div className='agent-model-field'>
-      {hasConfiguredProviders ? (
+      {!hasProviderStatePresentation ? null : hasConfiguredProviders ? (
         <Menu.TriggerSurface
           ref={triggerRef}
           type='button'
@@ -1042,7 +1044,7 @@ export function AgentModelCascader({
         </AppButton>
       )}
 
-      {isOpen && hasConfiguredProviders && typeof document !== 'undefined' ? createPortal(
+      {hasProviderStatePresentation && isOpen && hasConfiguredProviders && typeof document !== 'undefined' ? createPortal(
         <Menu.Surface
           id='agent-model-cascader'
           className='agent-model-cascader'

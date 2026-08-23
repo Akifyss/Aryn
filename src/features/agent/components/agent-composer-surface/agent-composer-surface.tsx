@@ -91,6 +91,7 @@ export function AgentComposerSurface({
     handleSubmit,
     handleThinkingLevelSelection,
     hasComposerPayload,
+    hasProviderStatePresentation,
     iconTheme,
     isLoading,
     isWorkspaceContextPreparing,
@@ -101,6 +102,7 @@ export function AgentComposerSurface({
     isSwitchingThinkingLevel,
     modelFieldRef,
     modelInputValue,
+    modelPresentationRuntime,
     onOpenProjectSwitchMenu,
     onOpenProviderSettings,
     openCodeNativeSession,
@@ -233,9 +235,9 @@ export function AgentComposerSurface({
     <div ref={modelFieldRef} className='agent-composer-meta'>
       <div className='agent-composer-actions'>
         <AgentModelCascader
-          availableModels={agentState.runtime.availableModels}
-          availableThinkingLevels={agentState.runtime.availableThinkingLevels}
-          availableThinkingLevelsByModel={agentState.runtime.availableThinkingLevelsByModel}
+          availableModels={modelPresentationRuntime.availableModels}
+          availableThinkingLevels={modelPresentationRuntime.availableThinkingLevels}
+          availableThinkingLevelsByModel={modelPresentationRuntime.availableThinkingLevelsByModel}
           configuredProviders={configuredProviders}
           currentModelId={modelInputValue}
           currentProvider={resolvedSelectedProviderValue}
@@ -250,6 +252,7 @@ export function AgentComposerSurface({
             || isSwitchingModel
             || isSwitchingThinkingLevel
           }
+          hasProviderStatePresentation={hasProviderStatePresentation}
           isOpen={activeComposerMenu === 'model-cascader'}
           onOpenChange={(isOpen) => {
             if (isOpen) {
