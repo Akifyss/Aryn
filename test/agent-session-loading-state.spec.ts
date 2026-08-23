@@ -118,6 +118,7 @@ describe('agent session loading state', () => {
     expect(navigationSource).toMatch(/useLayoutEffect\(\(\) => \{[\s\S]*?if \(sessionNavigationTargetRef\.current\) return[\s\S]*?const runtimeWorkspacePath = agentState\.runtime\.workspacePath[\s\S]*?syncSessionPresentation/)
     expect(navigationSource).toMatch(/selectedAgentId,\s*sessionNavigationTargetKey,\s*workspacePath,/)
     expect(navigationSource).toMatch(/if \(externalSessionRequest\.kind === 'session'\) \{\s*onExternalSessionRequestHandled\?\.\(externalSessionRequest\.requestId\)\s*return/)
+    expect(navigationSource).toContain('shouldAcknowledgeAgentProjectSessionRequest(')
     expect(promptSource).toContain("visibleSessionSelection.kind === 'session'")
     expect(promptSource).toContain('selectedAgentId={visibleAgentId}')
   })
@@ -154,6 +155,9 @@ describe('agent session loading state', () => {
     expect(workspaceLifecycleSource).toMatch(/if \(!isAgentWorkspacePathReadyForTarget\(workspacePath, targetWorkspacePath\)\) \{[\s\S]*?setIsLoading\(false\)\s*return/)
     expect(workspaceLifecycleSource).not.toContain('setViewedSessionSnapshot(null)\n    setHasLoadedWorkspaceState(false)')
     expect(workspaceLifecycleSource).toContain('targetAgentSessionPath === currentSelection.sessionPath')
+    expect(workspaceLifecycleSource).toContain(
+      'const canReuseCurrentProjectRuntime = shouldReuseAgentProjectSessionRuntime({',
+    )
     expect(workspaceLifecycleSource).toMatch(/if \(nextSelection\.kind === 'new' \|\| runtimeOwnsNextSelection\) \{\s*setViewedSessionSnapshot\(null\)/)
   })
 

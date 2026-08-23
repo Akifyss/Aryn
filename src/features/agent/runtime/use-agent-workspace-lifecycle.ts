@@ -18,6 +18,7 @@ import {
   resolveAgentWorkspaceSessionRestore,
   shouldApplyAgentWorkspaceState,
   shouldPersistAgentWorkspaceSelection,
+  shouldReuseAgentProjectSessionRuntime,
   type AgentProjectSessionRequest,
   type AgentSessionSelection,
 } from '@/features/agent/lib/project-session-request'
@@ -260,6 +261,28 @@ export function useAgentWorkspaceLifecycle({
           }
         })
 
+      return
+    }
+
+    const currentSelection = activeSessionSelectionRef.current
+    const canReuseCurrentProjectRuntime = shouldReuseAgentProjectSessionRuntime({
+      activeWorkspaceContext,
+      readiness: {
+        activeSessionPath: agentState.activeSession?.sessionPath ?? null,
+        hasLoadedWorkspaceState,
+        isLoading,
+        runtime: agentState.runtime,
+        selectedAgentId,
+        workspacePath,
+      },
+      selection: currentSelection,
+      targetAgentSessionPath,
+    })
+    if (canReuseCurrentProjectRuntime) {
+      // Clearing the transient navigation request changes its target metadata
+      // to undefined. The runtime already owns the accepted selection, so a
+      // second load would only repeat work and risk restoring stale state.
+      primaryLoadPendingRef.current = false
       return
     }
 

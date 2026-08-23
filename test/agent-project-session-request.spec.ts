@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   agentSessionNavigationTargetsMatch,
+  isAgentSessionSelectionRuntimeReady,
   isAgentWorkspaceTargetPreparing,
   isAgentWorkspacePathReadyForTarget,
   isAgentNewConversationPresentation,
@@ -11,7 +12,9 @@ import {
   shouldApplyAgentSessionNavigationResult,
   shouldApplyAgentSessionOperationResult,
   shouldApplyAgentWorkspaceState,
+  shouldAcknowledgeAgentProjectSessionRequest,
   shouldPersistAgentWorkspaceSelection,
+  shouldReuseAgentProjectSessionRuntime,
   type AgentProjectSessionRequest,
 } from '../src/features/agent/lib/project-session-request'
 
@@ -452,6 +455,131 @@ describe('shouldPersistAgentWorkspaceSelection', () => {
       agentId: 'pi',
       workspacePath: 'C:/work/current',
     }, 'opencode', 'C:/work/current')).toBe(false)
+  })
+})
+
+describe('project session runtime readiness', () => {
+  const readyRuntime = {
+    agentId: 'codex' as const,
+    workspacePath: 'C:/work/career',
+  }
+  const readyDraft = {
+    activeSessionPath: null,
+    hasLoadedWorkspaceState: true,
+    isLoading: false,
+    runtime: readyRuntime,
+    selectedAgentId: 'codex' as const,
+    workspacePath: 'C:/work/career',
+  }
+  const newSessionRequest: AgentProjectSessionRequest = {
+    kind: 'new',
+    projectId: 'project-1',
+    requestId: 9,
+  }
+
+  it('does not acknowledge a new-session request from the previous loaded session', () => {
+    const staleReadiness = {
+      ...readyDraft,
+      activeSessionPath: 'C:/sessions/previous.jsonl',
+    }
+
+    expect(isAgentSessionSelectionRuntimeReady({ kind: 'new' }, staleReadiness)).toBe(false)
+    expect(shouldAcknowledgeAgentProjectSessionRequest(
+      newSessionRequest,
+      staleReadiness,
+    )).toBe(false)
+  })
+
+  it('acknowledges a new-session request only after the matching runtime enters draft state', () => {
+    expect(isAgentSessionSelectionRuntimeReady({ kind: 'new' }, {
+      ...readyDraft,
+      workspacePath: 'c:\\work\\career\\',
+    })).toBe(true)
+    expect(shouldAcknowledgeAgentProjectSessionRequest(
+      newSessionRequest,
+      readyDraft,
+    )).toBe(true)
+  })
+
+  it('rejects loading, unloaded, wrong-agent, and wrong-workspace draft states', () => {
+    expect(isAgentSessionSelectionRuntimeReady(
+      { kind: 'new' },
+      { ...readyDraft, isLoading: true },
+    )).toBe(false)
+    expect(isAgentSessionSelectionRuntimeReady({ kind: 'new' }, {
+      ...readyDraft,
+      hasLoadedWorkspaceState: false,
+    })).toBe(false)
+    expect(isAgentSessionSelectionRuntimeReady({ kind: 'new' }, {
+      ...readyDraft,
+      runtime: { ...readyRuntime, agentId: 'pi' },
+    })).toBe(false)
+    expect(isAgentSessionSelectionRuntimeReady({ kind: 'new' }, {
+      ...readyDraft,
+      runtime: { ...readyRuntime, workspacePath: 'C:/work/other' },
+    })).toBe(false)
+  })
+
+  it('acknowledges an existing-session request only after its runtime target is active', () => {
+    const existingSessionRequest: AgentProjectSessionRequest = {
+      agentId: 'codex',
+      kind: 'session',
+      projectId: 'project-1',
+      requestId: 10,
+      sessionLabel: 'Target',
+      sessionPath: 'C:/sessions/target.jsonl',
+    }
+
+    expect(shouldAcknowledgeAgentProjectSessionRequest(existingSessionRequest, {
+      ...readyDraft,
+      activeSessionPath: 'C:/sessions/previous.jsonl',
+    })).toBe(false)
+    expect(shouldAcknowledgeAgentProjectSessionRequest(existingSessionRequest, {
+      ...readyDraft,
+      activeSessionPath: 'C:/sessions/target.jsonl',
+    })).toBe(true)
+    expect(shouldAcknowledgeAgentProjectSessionRequest(existingSessionRequest, {
+      ...readyDraft,
+      isLoading: true,
+    })).toBe(false)
+  })
+
+  it('reuses the ready draft after its transient request is removed', () => {
+    expect(shouldReuseAgentProjectSessionRuntime({
+      activeWorkspaceContext: { kind: 'project', projectId: 'project-1' },
+      readiness: readyDraft,
+      selection: { kind: 'new' },
+      targetAgentSessionPath: undefined,
+    })).toBe(true)
+    expect(shouldReuseAgentProjectSessionRuntime({
+      activeWorkspaceContext: { kind: 'project', projectId: 'project-1' },
+      readiness: readyDraft,
+      selection: { kind: 'new' },
+      targetAgentSessionPath: null,
+    })).toBe(false)
+    expect(shouldReuseAgentProjectSessionRuntime({
+      activeWorkspaceContext: { kind: 'project', projectId: 'project-1' },
+      readiness: {
+        ...readyDraft,
+        activeSessionPath: 'C:/sessions/previous.jsonl',
+      },
+      selection: {
+        agentId: 'codex',
+        kind: 'session',
+        sessionPath: 'C:/sessions/previous.jsonl',
+      },
+      targetAgentSessionPath: undefined,
+    })).toBe(true)
+    expect(shouldReuseAgentProjectSessionRuntime({
+      activeWorkspaceContext: { kind: 'project', projectId: 'project-1' },
+      readiness: readyDraft,
+      selection: {
+        agentId: 'codex',
+        kind: 'session',
+        sessionPath: 'C:/sessions/previous.jsonl',
+      },
+      targetAgentSessionPath: undefined,
+    })).toBe(false)
   })
 })
 

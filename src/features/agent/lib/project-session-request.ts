@@ -33,6 +33,15 @@ export type AgentWorkspaceRuntimeIdentity = {
   workspacePath: string | null
 }
 
+export type AgentSessionRuntimeReadiness = {
+  activeSessionPath: string | null
+  hasLoadedWorkspaceState: boolean
+  isLoading: boolean
+  runtime: AgentWorkspaceRuntimeIdentity
+  selectedAgentId: AgentId
+  workspacePath: string | null
+}
+
 export type AgentSessionSelection = { kind: 'new' } | {
   agentId: AgentId
   kind: 'session'
@@ -61,6 +70,13 @@ type AgentWorkspaceTargetPreparation = {
   runtime: AgentWorkspaceRuntimeIdentity
   selectedAgentId: AgentId
   targetWorkspacePath: string | null | undefined
+}
+
+type AgentProjectSessionRuntimeReuse = {
+  activeWorkspaceContext: ActiveWorkspaceContext
+  readiness: AgentSessionRuntimeReadiness
+  selection: AgentSessionSelection
+  targetAgentSessionPath: string | null | undefined
 }
 
 export function resolvePendingAgentNewSessionProject(
@@ -290,6 +306,72 @@ export function shouldPersistAgentWorkspaceSelection(
   if (!runtime.workspacePath) return false
   return runtime.agentId === selectedAgentId
     && agentWorkspacePathsMatch(runtime.workspacePath, workspacePath)
+}
+
+/**
+ * A session selection is ready only when the loaded runtime owns the target
+ * Agent, workspace, and native session identity. Generic "loaded" state is
+ * insufficient during navigation because it can still describe the source.
+ */
+export function isAgentSessionSelectionRuntimeReady(
+  selection: AgentSessionSelection,
+  {
+    activeSessionPath,
+    hasLoadedWorkspaceState,
+    isLoading,
+    runtime,
+    selectedAgentId,
+    workspacePath,
+  }: AgentSessionRuntimeReadiness,
+) {
+  if (
+    !workspacePath
+    || isLoading
+    || !hasLoadedWorkspaceState
+    || !shouldPersistAgentWorkspaceSelection(runtime, selectedAgentId, workspacePath)
+  ) {
+    return false
+  }
+
+  return selection.kind === 'new'
+    ? activeSessionPath === null
+    : selection.agentId === selectedAgentId
+      && activeSessionPath === selection.sessionPath
+}
+
+/**
+ * Message snapshots remain independent and may paint first, but the transient
+ * navigation request is acknowledged only after the native runtime owns its
+ * exact target. Clearing it earlier can trigger a duplicate or stale restore.
+ */
+export function shouldAcknowledgeAgentProjectSessionRequest(
+  request: AgentProjectSessionRequest,
+  readiness: AgentSessionRuntimeReadiness,
+) {
+  const selection: AgentSessionSelection = request.kind === 'new'
+    ? { kind: 'new' }
+    : {
+        agentId: request.agentId,
+        kind: 'session',
+        sessionPath: request.sessionPath,
+      }
+  return isAgentSessionSelectionRuntimeReady(selection, readiness)
+}
+
+/**
+ * Removing a fulfilled project-session request changes its target marker to
+ * `undefined`. Reuse the runtime that already owns the accepted selection
+ * instead of interpreting that metadata change as a fresh restore command.
+ */
+export function shouldReuseAgentProjectSessionRuntime({
+  activeWorkspaceContext,
+  readiness,
+  selection,
+  targetAgentSessionPath,
+}: AgentProjectSessionRuntimeReuse) {
+  return activeWorkspaceContext.kind === 'project'
+    && targetAgentSessionPath === undefined
+    && isAgentSessionSelectionRuntimeReady(selection, readiness)
 }
 
 /**

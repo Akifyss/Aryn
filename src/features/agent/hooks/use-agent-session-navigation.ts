@@ -30,6 +30,7 @@ import {
   isAgentNewConversationPresentation,
   resolvePendingAgentNewSessionProject,
   resolveAgentSessionNavigationTarget,
+  shouldAcknowledgeAgentProjectSessionRequest,
   shouldApplyAgentSessionNavigationResult,
   shouldApplyAgentSessionOperationResult,
   type AgentProjectSessionRequest,
@@ -763,11 +764,22 @@ export function useAgentSessionNavigation({
       !externalSessionRequest
       || handledExternalSessionRequestRef.current === externalSessionRequest.requestId
       || !isRequestForCurrentWorkspace
-      || isLoading
-      || !hasLoadedWorkspaceState
     ) {
       return
     }
+
+    const shouldAcknowledgeRequest = shouldAcknowledgeAgentProjectSessionRequest(
+      externalSessionRequest,
+      {
+        activeSessionPath: agentState.activeSession?.sessionPath ?? null,
+        hasLoadedWorkspaceState,
+        isLoading,
+        runtime: agentState.runtime,
+        selectedAgentId,
+        workspacePath,
+      },
+    )
+    if (!shouldAcknowledgeRequest) return
 
     handledExternalSessionRequestRef.current = externalSessionRequest.requestId
 
@@ -781,11 +793,15 @@ export function useAgentSessionNavigation({
       handleStartNewSession(requestedProject?.path ?? workspacePath)
     }
   }, [
+    agentState.activeSession?.sessionPath,
+    agentState.runtime.agentId,
+    agentState.runtime.workspacePath,
     externalSessionRequest,
     hasLoadedWorkspaceState,
     isLoading,
     onExternalSessionRequestHandled,
     projectState.projects,
+    selectedAgentId,
     workspacePath,
   ])
 
