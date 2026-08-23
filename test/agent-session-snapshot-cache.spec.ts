@@ -58,6 +58,48 @@ describe('agent session snapshot cache', () => {
       .toMatchObject({ sessionId: 'session-1' })
   })
 
+  it('defers persisted LRU metadata writes off the session-click path', async () => {
+    const values = new Map<string, string>()
+    const setItem = vi.fn((key: string, value: string) => values.set(key, value))
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      removeItem: (key: string) => values.delete(key),
+      setItem,
+    })
+    vi.useFakeTimers()
+
+    cacheAgentSessionSnapshot('codex', 'C:/workspace', 'session-1', snapshot(1))
+    await vi.advanceTimersByTimeAsync(750)
+    clearAgentSessionSnapshotCache()
+    const writesBeforeRead = setItem.mock.calls.length
+
+    expect(getCachedAgentSessionSnapshot('codex', 'C:/workspace', 'session-1'))
+      .toMatchObject({ sessionId: 'session-1' })
+    expect(setItem).toHaveBeenCalledTimes(writesBeforeRead)
+
+    await vi.advanceTimersByTimeAsync(750)
+    expect(setItem).toHaveBeenCalledTimes(writesBeforeRead + 1)
+  })
+
+  it('does not recreate persistent metadata after the cache is cleared', async () => {
+    const values = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      removeItem: (key: string) => values.delete(key),
+      setItem: (key: string, value: string) => values.set(key, value),
+    })
+    vi.useFakeTimers()
+
+    cacheAgentSessionSnapshot('codex', 'C:/workspace', 'session-1', snapshot(1))
+    await vi.advanceTimersByTimeAsync(750)
+    clearAgentSessionSnapshotCache()
+    expect(getCachedAgentSessionSnapshot('codex', 'C:/workspace', 'session-1')).not.toBeNull()
+
+    clearPersistedAgentSessionSnapshotCache()
+    await vi.advanceTimersByTimeAsync(750)
+    expect(values.size).toBe(0)
+  })
+
   it('warms persisted snapshots incrementally before the first session click', async () => {
     const values = new Map<string, string>()
     vi.stubGlobal('localStorage', {

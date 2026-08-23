@@ -138,6 +138,39 @@ describe('PI CLI official session lifecycle', () => {
     else process.env.PI_CODING_AGENT_SESSION_DIR = originalSessionDir
   })
 
+  it('reuses the session catalog already loaded for the sidebar when reading a snapshot', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-pi-catalog-reuse-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    const officialDir = path.join(tempRoot, 'official-sessions')
+    const agentDir = path.join(tempRoot, 'aryn-data')
+    process.env.PI_CODING_AGENT_SESSION_DIR = officialDir
+    await mkdir(workspace, { recursive: true })
+
+    const officialSession = SessionManager.create(workspace, officialDir)
+    officialSession.appendSessionInfo('Catalog reuse')
+    appendConversation(officialSession)
+    const sessionID = officialSession.getSessionId()
+    const manager = new PiCliAgentManager({ agentDir, emitEvent: () => undefined })
+    const listSpy = vi.spyOn(SessionManager, 'list')
+
+    try {
+      await manager.listSessionItems(workspace)
+      const catalogReads = listSpy.mock.calls.length
+      officialSession.appendSessionInfo('Updated outside Aryn')
+
+      await expect(manager.readSession(workspace, sessionID)).resolves.toMatchObject({
+        name: 'Updated outside Aryn',
+        sessionId: sessionID,
+      })
+      expect(listSpy).toHaveBeenCalledTimes(catalogReads)
+      expect(rpcState.processStarts).toBe(0)
+    } finally {
+      listSpy.mockRestore()
+      manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
   it('opens, renames, restarts, and explicitly deletes an external official session', async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-pi-lifecycle-'))
     const workspace = path.join(tempRoot, 'workspace')

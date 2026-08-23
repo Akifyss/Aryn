@@ -23,6 +23,8 @@ type PiCliSessionCatalogOptions = {
   isRuntimeLive: (record: PiCliSessionRecord) => boolean
 }
 
+const MAX_KNOWN_WORKSPACES = 8
+
 /**
  * Merges PI's official session catalog with Aryn's narrow ownership index.
  *
@@ -32,6 +34,7 @@ type PiCliSessionCatalogOptions = {
  */
 export class PiCliSessionCatalog {
   private readonly index: AtomicJsonStore<PiCliSessionIndex>
+  private readonly knownRecordsByWorkspace = new Map<string, Map<string, PiCliSessionRecord>>()
   private readonly legacyMigrations = new Map<string, Promise<void>>()
 
   constructor(private readonly options: PiCliSessionCatalogOptions) {
@@ -52,8 +55,10 @@ export class PiCliSessionCatalog {
       !officialIds.has(record.id)
       && (!record.materialized || this.options.isRuntimeLive(record))
     ))
-    return [...officialRecords, ...liveOrUnmaterializedDrafts]
+    const records = [...officialRecords, ...liveOrUnmaterializedDrafts]
       .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+    this.rememberWorkspaceRecords(cwd, records)
+    return records
   }
 
   async listOwned(cwd: string) {
@@ -69,8 +74,15 @@ export class PiCliSessionCatalog {
     return record
   }
 
+  findKnown(cwd: string, sessionId: string) {
+    return this.knownRecordsByWorkspace
+      .get(workspaceIdentity(cwd))
+      ?.get(sessionId)
+  }
+
   async insert(record: PiCliSessionRecord) {
     await this.index.update((state) => ({ ...state, sessions: [record, ...state.sessions] }))
+    this.knownRecordsByWorkspace.delete(workspaceIdentity(record.cwd))
   }
 
   async remove(cwd: string, sessionId: string) {
@@ -81,6 +93,7 @@ export class PiCliSessionCatalog {
         record.id !== sessionId || workspaceIdentity(record.cwd) !== identity
       )),
     }))
+    this.knownRecordsByWorkspace.delete(identity)
   }
 
   async removeWorkspace(cwd: string) {
@@ -89,6 +102,7 @@ export class PiCliSessionCatalog {
       ...state,
       sessions: state.sessions.filter((record) => workspaceIdentity(record.cwd) !== identity),
     }))
+    this.knownRecordsByWorkspace.delete(identity)
   }
 
   async rename(cwd: string, sessionId: string, name: string) {
@@ -102,6 +116,7 @@ export class PiCliSessionCatalog {
           : record
       )),
     }))
+    this.knownRecordsByWorkspace.delete(identity)
     return updatedAt
   }
 
@@ -125,10 +140,30 @@ export class PiCliSessionCatalog {
           : candidate
       )),
     }))
+    this.knownRecordsByWorkspace.delete(identity)
   }
 
   dispose() {
+    this.knownRecordsByWorkspace.clear()
     this.legacyMigrations.clear()
+  }
+
+  private rememberWorkspaceRecords(cwd: string, records: PiCliSessionRecord[]) {
+    const identity = workspaceIdentity(cwd)
+    this.knownRecordsByWorkspace.delete(identity)
+    this.knownRecordsByWorkspace.set(
+      identity,
+      new Map(records.map((record) => [record.id, record])),
+    )
+    this.trimKnownWorkspaces()
+  }
+
+  private trimKnownWorkspaces() {
+    while (this.knownRecordsByWorkspace.size > MAX_KNOWN_WORKSPACES) {
+      const oldestIdentity = this.knownRecordsByWorkspace.keys().next().value
+      if (typeof oldestIdentity !== 'string') break
+      this.knownRecordsByWorkspace.delete(oldestIdentity)
+    }
   }
 
   private async listOfficial(

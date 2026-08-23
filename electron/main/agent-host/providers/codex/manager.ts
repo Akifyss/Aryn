@@ -236,9 +236,8 @@ export class CodexAgentManager {
     // still used for its regular path (bindings, drafts, and App Server
     // fallback), preserving serialization with runtime mutations.
     if (!this.bindings.has(threadId)) {
-      const indexedRecord = (await this.sessionCatalog.listIndexed(cwd))
-        .find((record) => record.id === threadId)
-      const knownRecord = indexedRecord ?? this.listedRecord(cwd, threadId)
+      const knownRecord = this.listedRecord(cwd, threadId)
+        ?? await this.sessionCatalog.findIndexed(cwd, threadId)
       this.requireWorkspaceOperationCurrent(workspaceOperation)
       // Runtime startup may have completed while the catalog was being read;
       // in that case let the lifecycle lane provide the bound snapshot.
@@ -260,10 +259,10 @@ export class CodexAgentManager {
             mutationRevision,
           )
           if (appServerSnapshot) return appServerSnapshot
-        } else if (indexedRecord && !indexedRecord.materialized) {
+        } else if (knownRecord && !knownRecord.materialized) {
           const snapshot = this.sessionStore.get(threadId)
           if (snapshot && this.isSessionMutationCurrent(threadId, mutationRevision)) {
-            return createCodexSessionSnapshot(indexedRecord, snapshot)
+            return createCodexSessionSnapshot(knownRecord, snapshot)
           }
         }
       }
@@ -287,14 +286,13 @@ export class CodexAgentManager {
         )
       }
 
-      const indexedRecord = (await this.sessionCatalog.listIndexed(cwd))
-        .find((record) => record.id === threadId)
-      const knownRecord = indexedRecord ?? this.listedRecord(cwd, threadId)
+      const knownRecord = this.listedRecord(cwd, threadId)
+        ?? await this.sessionCatalog.findIndexed(cwd, threadId)
       this.requireWorkspaceOperationCurrent(workspaceOperation)
-      if (indexedRecord && !indexedRecord.materialized) {
+      if (knownRecord && !knownRecord.materialized) {
         const snapshot = this.sessionStore.get(threadId)
         if (!snapshot) throw new Error('Codex thread is not materialized and has no in-memory state.')
-        return createCodexSessionSnapshot(indexedRecord, snapshot)
+        return createCodexSessionSnapshot(knownRecord, snapshot)
       }
 
       return this.readInactiveSession(cwd, threadId, workspaceOperation, knownRecord)

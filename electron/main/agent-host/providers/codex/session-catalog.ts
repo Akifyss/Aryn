@@ -115,6 +115,13 @@ export class CodexSessionCatalog {
       .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
   }
 
+  async findIndexed(cwd: string, threadId: string) {
+    const identity = workspaceIdentity(cwd)
+    return (await this.index.read()).threads.find((record) => (
+      record.id === threadId && workspaceIdentity(record.cwd) === identity
+    ))
+  }
+
   async listAllIndexed() {
     return (await this.index.read()).threads
       .slice()

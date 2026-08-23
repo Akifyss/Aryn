@@ -16,6 +16,7 @@ const pendingPersistence = new Map<string, {
   workspacePath: string
 }>()
 let persistenceScheduled = false
+let persistedTouchGeneration = 0
 let warmupGeneration = 0
 let warmupScheduled = false
 
@@ -116,6 +117,30 @@ function touchPersistedEntry(storage: Storage, storageKey: string, characters: n
   writeManifest(storage, manifest)
 }
 
+function schedulePersistedTouch(storageKey: string, characters: number) {
+  const generation = persistedTouchGeneration
+  const touch = () => {
+    if (generation !== persistedTouchGeneration) return
+    const storage = browserStorage()
+    try {
+      if (storage && storage.getItem(storageKey) !== null) {
+        touchPersistedEntry(storage, storageKey, characters)
+      }
+    } catch {
+      // LRU metadata is best-effort and must never delay or fail navigation.
+    }
+  }
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(touch, { timeout: 2_000 })
+  } else {
+    setTimeout(touch, 750)
+  }
+}
+
+function clearPendingPersistedTouches() {
+  persistedTouchGeneration += 1
+}
+
 function readPersistedSnapshot(
   agentId: AgentId,
   workspacePath: string,
@@ -142,12 +167,7 @@ function readPersistedSnapshot(
       writeManifest(storage, manifest)
       return null
     }
-    try {
-      touchPersistedEntry(storage, storageKey, serialized.length)
-    } catch {
-      // The snapshot is still valid when only the best-effort LRU metadata
-      // cannot be updated (for example, a temporarily full browser store).
-    }
+    schedulePersistedTouch(storageKey, serialized.length)
     return snapshot
   } catch {
     const manifest = readManifest(storage)
@@ -357,9 +377,11 @@ export function clearAgentSessionSnapshotCache() {
   snapshots.clear()
   pendingPersistence.clear()
   persistenceScheduled = false
+  clearPendingPersistedTouches()
 }
 
 export function clearPersistedAgentSessionSnapshotCache() {
+  clearPendingPersistedTouches()
   const storage = browserStorage()
   if (!storage) return
   const manifest = readManifest(storage)

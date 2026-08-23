@@ -107,13 +107,24 @@ function App() {
   const [isActiveEditorComposing, setIsActiveEditorComposing] = useState(false)
   const {
     currentPathRef,
+    ensureFullyLoadedWorkspaceTree,
     isActiveWorkspacePath,
     loadTree,
     reconcileWorkspaceFileAfterGitDiscard,
     reloadActiveWorkspaceTree,
     syncOpenDiffTabs,
-  } = useWorkspaceSyncController(currentPath)
+  } = useWorkspaceSyncController(currentPath, isAgentLayout)
   useDevToolsFocusSettlement()
+
+  useEffect(() => {
+    if (isAgentLayout || !currentPath) return
+    void ensureFullyLoadedWorkspaceTree(currentPath)
+  }, [currentPath, ensureFullyLoadedWorkspaceTree, isAgentLayout])
+  const reloadVisibleWorkspaceTree = useCallback((rootPath: string) => (
+    reloadActiveWorkspaceTree(rootPath, {
+      scope: isAgentLayout ? 'root' : 'recursive',
+    })
+  ), [isAgentLayout, reloadActiveWorkspaceTree])
 
   // Persistence needs a refresh callback before the Git controller is created.
   // This stable delegate is connected to the current Git controller below.
@@ -129,7 +140,7 @@ function App() {
   } = useWorkspaceRefreshController({
     isActiveWorkspacePath,
     refreshGitState: refreshGitWorkspace,
-    reloadActiveWorkspaceTree,
+    reloadActiveWorkspaceTree: reloadVisibleWorkspaceTree,
   })
   const captureActiveMeoViewPosition = useCallback(() => {
     if (!isActiveMeoEditorMountedRef.current) {
@@ -172,7 +183,7 @@ function App() {
 
   const gitWorkspace = useGitWorkspaceController({
     ensureWorkspaceTabsSaved: ensureWorkspaceTabsSavedBeforeGitAction,
-    loadWorkspaceTree: reloadActiveWorkspaceTree,
+    loadWorkspaceTree: reloadVisibleWorkspaceTree,
     reconcileDiscardedFile: reconcileWorkspaceFileAfterGitDiscard,
     requestConfirmation,
     setStatusMessage,

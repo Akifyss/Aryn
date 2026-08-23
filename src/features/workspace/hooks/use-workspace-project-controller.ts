@@ -55,7 +55,10 @@ type UseWorkspaceProjectControllerOptions = {
   isAgentLayout: boolean
   loadTree: (
     rootPath: string,
-    options?: { shouldApply?: () => boolean },
+    options?: {
+      scope?: 'recursive' | 'root'
+      shouldApply?: () => boolean
+    },
   ) => Promise<boolean | undefined>
   navigationCoordinator: WorkspaceNavigationCoordinator
   prepareGitWorkspace: (workspacePath: string) => void
@@ -217,7 +220,10 @@ export function useWorkspaceProjectController({
     }
 
     try {
-      const didLoadTree = await loadTree(nextPath, { shouldApply })
+      const didLoadTree = await loadTree(nextPath, {
+        scope: isAgentLayout ? 'root' : 'recursive',
+        shouldApply,
+      })
 
       if (didLoadTree === false || !shouldApply()) {
         return false

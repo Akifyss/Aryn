@@ -465,11 +465,15 @@ describe('Codex thread binding coordination', () => {
       agentDir: path.join(tempRoot, 'agent-data'),
       emitEvent: () => undefined,
     })
+    const sessionCatalog = (manager as unknown as {
+      sessionCatalog: { findIndexed: (cwd: string, threadId: string) => Promise<unknown> }
+    }).sessionCatalog
 
     try {
       await expect(manager.listSessionItems(workspace)).resolves.toEqual([
         expect.objectContaining({ id: threadId }),
       ])
+      const findIndexedSpy = vi.spyOn(sessionCatalog, 'findIndexed')
       await expect(manager.readSession(workspace, threadId)).resolves.toMatchObject({
         native: {
           thread: {
@@ -483,6 +487,7 @@ describe('Codex thread binding coordination', () => {
       expect(rpcState.instances[0]?.requests).not.toContainEqual(expect.objectContaining({
         method: 'thread/read',
       }))
+      expect(findIndexedSpy).not.toHaveBeenCalled()
     } finally {
       manager.dispose()
       if (originalCodexHome === undefined) delete process.env.CODEX_HOME

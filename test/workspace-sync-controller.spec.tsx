@@ -13,20 +13,23 @@ type WorkspaceSyncController = ReturnType<typeof useWorkspaceSyncController>
 
 function ControllerProbe({
   currentPath,
+  isAgentLayout,
   onController,
 }: {
   currentPath: string | null
+  isAgentLayout: boolean
   onController: (controller: WorkspaceSyncController) => void
 }) {
-  onController(useWorkspaceSyncController(currentPath))
+  onController(useWorkspaceSyncController(currentPath, isAgentLayout))
   return null
 }
 
-function renderController(currentPath: string | null) {
+function renderController(currentPath: string | null, isAgentLayout = true) {
   let controller: WorkspaceSyncController | null = null
   renderToStaticMarkup(
     <ControllerProbe
       currentPath={currentPath}
+      isAgentLayout={isAgentLayout}
       onController={(nextController) => {
         controller = nextController
       }}
@@ -43,6 +46,7 @@ function renderController(currentPath: string | null) {
 function stubWorkspaceApi() {
   const appApi = {
     getGitFileDiff: vi.fn(),
+    loadWorkspaceDirectory: vi.fn(),
     loadWorkspaceTree: vi.fn(),
     readWorkspaceFile: vi.fn(),
   }
@@ -100,6 +104,94 @@ afterEach(() => {
 })
 
 describe('useWorkspaceSyncController', () => {
+  it('loads only root nodes for the agent surface and hydrates descendants on demand', async () => {
+    const appApi = stubWorkspaceApi()
+    const rootTree: WorkspaceNode[] = [{
+      hasChildren: true,
+      kind: 'directory',
+      name: 'src',
+      path: 'C:\\workspace\\src',
+    }]
+    const recursiveTree: WorkspaceNode[] = [{
+      children: [{
+        kind: 'file',
+        name: 'App.tsx',
+        path: 'C:\\workspace\\src\\App.tsx',
+      }],
+      kind: 'directory',
+      name: 'src',
+      path: 'C:\\workspace\\src',
+    }]
+    appApi.loadWorkspaceDirectory.mockResolvedValue(rootTree)
+    appApi.loadWorkspaceTree.mockResolvedValue(recursiveTree)
+    const controller = renderController('C:\\workspace')
+
+    await controller.loadTree('C:\\workspace', { scope: 'root' })
+    expect(appApi.loadWorkspaceDirectory).toHaveBeenCalledWith('C:\\workspace')
+    expect(appApi.loadWorkspaceTree).not.toHaveBeenCalled()
+    expect(useWorkspaceStore.getState().tree).toEqual(rootTree)
+
+    await controller.ensureFullyLoadedWorkspaceTree('c:/workspace')
+    await controller.ensureFullyLoadedWorkspaceTree('C:\\workspace')
+    expect(appApi.loadWorkspaceTree).toHaveBeenCalledOnce()
+    expect(useWorkspaceStore.getState().tree).toEqual(recursiveTree)
+
+    await controller.reloadActiveWorkspaceTree('C:\\workspace', { scope: 'root' })
+    expect(appApi.loadWorkspaceDirectory).toHaveBeenCalledTimes(2)
+    expect(useWorkspaceStore.getState().tree).toEqual(rootTree)
+  })
+
+  it('upgrades a root-only request before publishing it to the editor surface', async () => {
+    const appApi = stubWorkspaceApi()
+    const rootTree: WorkspaceNode[] = [{
+      hasChildren: true,
+      kind: 'directory',
+      name: 'src',
+      path: 'C:\\workspace\\src',
+    }]
+    const recursiveTree: WorkspaceNode[] = [{
+      children: [{
+        kind: 'file',
+        name: 'App.tsx',
+        path: 'C:\\workspace\\src\\App.tsx',
+      }],
+      kind: 'directory',
+      name: 'src',
+      path: 'C:\\workspace\\src',
+    }]
+    appApi.loadWorkspaceDirectory.mockResolvedValue(rootTree)
+    appApi.loadWorkspaceTree.mockResolvedValue(recursiveTree)
+    const controller = renderController('C:\\workspace', false)
+
+    await controller.loadTree('C:\\workspace', { scope: 'root' })
+
+    expect(appApi.loadWorkspaceDirectory).toHaveBeenCalledOnce()
+    expect(appApi.loadWorkspaceTree).toHaveBeenCalledOnce()
+    expect(useWorkspaceStore.getState().tree).toEqual(recursiveTree)
+  })
+
+  it('deduplicates concurrent recursive workspace tree loads', async () => {
+    const appApi = stubWorkspaceApi()
+    const recursiveTree: WorkspaceNode[] = [{
+      kind: 'file',
+      name: 'App.tsx',
+      path: 'C:\\workspace\\App.tsx',
+    }]
+    let resolveTree: ((tree: WorkspaceNode[]) => void) | null = null
+    appApi.loadWorkspaceTree.mockImplementation(() => new Promise<WorkspaceNode[]>((resolve) => {
+      resolveTree = resolve
+    }))
+    const controller = renderController('C:\\workspace', false)
+
+    const firstLoad = controller.ensureFullyLoadedWorkspaceTree('C:\\workspace')
+    const secondLoad = controller.ensureFullyLoadedWorkspaceTree('c:/workspace')
+    expect(appApi.loadWorkspaceTree).toHaveBeenCalledOnce()
+
+    resolveTree?.(recursiveTree)
+    await Promise.all([firstLoad, secondLoad])
+    expect(useWorkspaceStore.getState().tree).toEqual(recursiveTree)
+  })
+
   it('publishes tree results only for the active workspace when requested', async () => {
     const appApi = stubWorkspaceApi()
     const initialTree: WorkspaceNode[] = [{

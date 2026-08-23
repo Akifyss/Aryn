@@ -101,7 +101,7 @@ describe('workspace project controller ownership', () => {
     expect(controllerSource).toContain('async function connectWorkspace')
     expect(controllerSource).toContain('async function requestAgentProjectSession')
     expect(controllerSource).toMatch(/setActiveWorkspaceContext\(\{ kind: 'project', projectId: project\.id \}\)[\s\S]*?navigationCoordinator\.run\(intent/)
-    expect(controllerSource).toContain('loadTree(nextPath, { shouldApply })')
+    expect(controllerSource).toContain("scope: isAgentLayout ? 'root' : 'recursive'")
     expect(controllerSource).toContain('watchedWorkspacePathRef.current = null')
     expect(controllerSource).toContain('isWorkspaceSurfaceConnected(project.path)')
     expect(controllerSource).not.toContain('setProjectState(await window.appApi.getProjectState())')

@@ -160,7 +160,8 @@ export class PiCliAgentManager {
   async readSession(cwd: string, sessionID: string) {
     const current = this.runtimeCoordinator.current(runtimeKey(cwd, sessionID))
     if (!current) {
-      const record = await this.sessionCatalog.require(cwd, sessionID)
+      const record = this.sessionCatalog.findKnown(cwd, sessionID)
+        ?? await this.sessionCatalog.require(cwd, sessionID)
       if (record.materialized && record.sessionPath) {
         const sessionFile = await this.sessionFileReader.read(record.sessionPath)
         if (
@@ -169,7 +170,7 @@ export class PiCliAgentManager {
         ) {
           throw new Error('PI CLI session not found for this workspace.')
         }
-        return serializePiCliSessionFile(record, sessionFile)
+        return serializePiCliSessionFile({ ...record, name: sessionFile.name }, sessionFile)
       }
     }
     return this.withRuntime(cwd, sessionID, serializePiCliSession)
