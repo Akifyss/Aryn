@@ -158,7 +158,7 @@ const DropdownMenuContent = React.forwardRef<
   ) => {
     const { isCompactViewport, open, onOpenChange } = useResponsiveMenu();
     // Unconditional (rules of hooks — the compact branch returns early); the
-    // compact drawer path is covered by DrawerContent's own stamp.
+    // compact drawer path is covered by the persistent drawer shell.
     const scopeProps = usePortalScopeProps();
 
     if (isCompactViewport) {
@@ -168,7 +168,6 @@ const DropdownMenuContent = React.forwardRef<
           open={open}
           onOpenChange={onOpenChange}
           srLabel={mobileTitle ?? "Menu"}
-          repositionInputs={false}
         >
           <div
             ref={ref}
@@ -244,6 +243,8 @@ const DropdownMenuItem = React.forwardRef<
       variant = "default",
       onSelect,
       disabled,
+      role = "menuitem",
+      "aria-checked": ariaChecked,
       textValue: _textValue,
       children,
       onPointerEnter: callerPointerEnter,
@@ -263,9 +264,10 @@ const DropdownMenuItem = React.forwardRef<
         <button
           ref={ref as React.RefCallback<HTMLButtonElement> | null}
           type="button"
-          role="menuitem"
+          role={role}
           disabled={disabled}
           aria-disabled={disabled || undefined}
+          aria-checked={ariaChecked}
           className={cn(
             "relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-2 text-left text-xs outline-none transition-colors focus:bg-state-hover focus:text-foreground active:bg-state-active active:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
             inset && "pl-8",
@@ -300,6 +302,8 @@ const DropdownMenuItem = React.forwardRef<
           className,
         )}
         disabled={disabled}
+        role={role}
+        aria-checked={ariaChecked}
         onSelect={onSelect}
         textValue={_textValue}
         {...domProps}

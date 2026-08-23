@@ -5,6 +5,7 @@ const EMPTY_ROWS: TimelineRow[] = []
 
 export function useThreadTimelineTurnSummaryDetails(
   _identity: ThreadTimelineTurnSummaryDetailsQueryIdentity,
+  _options?: { enabled?: boolean; refetchOnMount?: boolean },
 ) {
   return {
     data: { rows: EMPTY_ROWS },

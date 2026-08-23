@@ -1,12 +1,12 @@
 # bb session surface vendoring
 
 This package vendors the conversation timeline renderer from
-[`ymichael/bb`](https://github.com/ymichael/bb) under its MIT license.
+[`get-bb/bb`](https://github.com/get-bb/bb) under its MIT license.
 
 ## Pinned upstream
 
-- Repository: `https://github.com/ymichael/bb.git`
-- Commit: `74d25d1ab6a4dd431f225a67ec9c53f0d8b714d7`
+- Repository: `https://github.com/get-bb/bb.git`
+- Commit: `5205d98a74ed5a22469e521cf1f86b00b8232827`
 - License: MIT; the upstream license is retained as `LICENSE`
 - Integrity manifest: `vendor-manifest.json`
 
@@ -14,12 +14,15 @@ The files below `src/upstream/bb/` are mechanical copies and must not be edited
 by hand. `scripts/verify-bb-session-surface-upstream.mjs` verifies every copied
 file against the recorded SHA-256 digest.
 
-The pinned slice currently contains 232 exact upstream files. This includes
-all 57 TypeScript files in `packages/thread-view/src`; that package is vendored
-as a unit so uncommon event types, buffering rules, grouping, and lifecycle
-transitions cannot disappear through an import-closure optimization. It also
-includes bb's exact bottom-scroll anchor store, scroll-to-latest control, and
-mark asset used by that surface.
+The pinned slice currently contains 274 exact upstream files: an upstream
+dependency surface rather than an entire bb application checkout. It keeps all 57 TypeScript files in
+`packages/thread-view/src` as one event-to-timeline unit, plus the complete
+local dependency closure of the `packages/client-core/src` timeline, diff, and
+prompt modules consumed by the embedded view. Unrelated client-core composer,
+sidebar, panel, terminal, and desktop-transport modules are intentionally out
+of scope. The slice also keeps bb's exact bottom-scroll anchor,
+scroll-to-latest control, windowed timeline, streaming Markdown, math, and lazy
+diff-rendering dependencies.
 
 ## Aryn boundary
 
@@ -51,7 +54,10 @@ unified projection reached parity.
 - `src/upstream/bb/**`: exact upstream source and styles.
 - `src/compat/**`: Aryn host adapters for bb application services that are not
   part of the timeline itself (routing, clipboard, theme, plugin slots, and
-  query placeholders).
+  query placeholders). `compat/client-core.ts` deliberately exposes only the
+  exact upstream modules reached by the embedded timeline; the vendor script
+  preserves their complete local dependency closure without pulling bb's
+  unrelated composer, sidebar, panel, terminal, and transport code into Aryn.
 - `src/projectors/**`: Aryn provider snapshot to bb canonical event adapters.
 - `src/index.tsx`: the isolated mount boundary used by the Electron renderer.
 - `vite.config.ts`: build isolation, import aliases, and CSS scoping.
@@ -62,8 +68,8 @@ is scoped to `.aryn-bb-session-surface` or the package's portal root.
 
 ## Refresh procedure
 
-1. Clone or fetch `ymichael/bb` and check out the intended commit.
-2. Deliberately update `BB_COMMIT` in
+1. Clone or fetch `get-bb/bb` and check out the intended commit.
+2. Deliberately update `PINNED_COMMIT` in
    `scripts/vendor-bb-session-surface.mjs` after reviewing the upstream diff.
 3. Run `node scripts/vendor-bb-session-surface.mjs <path-to-bb-clone>`.
 4. Run `node scripts/verify-bb-session-surface-upstream.mjs`.

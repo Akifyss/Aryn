@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Pill } from "@bb/shared-ui/pill";
+import { usePluginCss } from "@/lib/plugin-css";
 import {
   PluginContext,
   PluginSlotOwnershipContext,
@@ -51,12 +52,19 @@ function releaseSlotInstanceOwnedState(instanceKey: string): void {
   for (const release of releases) release();
 }
 
-export function pluginSlotInstanceKey(
+function pluginSlotInstanceKey(
   pluginId: string,
   slotKind: string,
   slotId: string,
+  /**
+   * Discriminates concurrent mounts of ONE slot — the thread header renders a
+   * control per split pane. Without it a crash in one pane would disable the
+   * control in every pane and release their owned state too.
+   */
+  instanceId?: string,
 ): string {
-  return `${pluginId}/${slotKind}/${slotId}`;
+  const base = `${pluginId}/${slotKind}/${slotId}`;
+  return instanceId === undefined ? base : `${base}/${instanceId}`;
 }
 
 /**
@@ -90,6 +98,7 @@ interface PluginSlotBoundaryProps {
   instanceKey: string;
   children: ReactNode;
   fallback?: ReactNode;
+  onCrash?: (pluginId: string) => void;
 }
 
 interface PluginSlotBoundaryState {
@@ -130,6 +139,16 @@ class PluginSlotBoundary extends Component<
       `[plugin:${this.props.pluginId}] slot "${this.props.instanceKey}" crashed and is disabled for this session: ${error.message}`,
       info.componentStack,
     );
+    // Contained like the render itself: a throwing notifier must not turn a
+    // recovered slot into an unrecoverable one.
+    try {
+      this.props.onCrash?.(this.props.pluginId);
+    } catch (notifyError) {
+      console.warn(
+        `[plugin:${this.props.pluginId}] slot crash notifier failed`,
+        notifyError,
+      );
+    }
   }
 
   override componentWillUnmount(): void {
@@ -164,13 +183,25 @@ class PluginSlotBoundary extends Component<
   }
 }
 
-export interface PluginSlotMountProps {
+interface PluginSlotMountProps {
   pluginId: string;
   /** e.g. "homepageSection", "navPanel" — combined with slotId per instance. */
   slotKind: string;
   slotId: string;
   children: ReactNode;
   crashFallback?: ReactNode;
+  /**
+   * Discriminates concurrent mounts of one slot so their crash state stays
+   * independent (see {@link pluginSlotInstanceKey}). Omit for slots that mount
+   * once, where a crash should disable the slot everywhere.
+   */
+  instanceId?: string;
+  /**
+   * Called once when this instance crashes. For slots whose fallback is
+   * silent host UI (the sidebar's built-in thread list), where the user would
+   * otherwise see the plugin simply vanish.
+   */
+  onCrash?: (pluginId: string) => void;
 }
 
 /**
@@ -178,8 +209,8 @@ export interface PluginSlotMountProps {
  * plugin id to the SDK hooks and contains crashes to this instance.
  *
  * The `data-bb-plugin={pluginId}` element is the scoping root for the
- * plugin's compiled stylesheet — `bb plugin build` wraps every utility rule
- * in `@scope ([data-bb-plugin="<id>"], …)`, so plugin CSS can never leak
+ * plugin's compiled stylesheet — `bb plugin build` prefixes every utility
+ * selector with `:where([data-bb-plugin="<id>"], …)`, so plugin CSS can never leak
  * onto host elements or another plugin's pane (`data-bb-plugin-root` stays
  * for stylesheets built before the per-plugin scope). `display: contents`
  * keeps the wrapper layout-neutral.
@@ -190,13 +221,22 @@ export function PluginSlotMount({
   slotId,
   children,
   crashFallback,
+  instanceId,
+  onCrash,
 }: PluginSlotMountProps) {
+  usePluginCss(pluginId);
   return (
     <PluginContext.Provider value={pluginId}>
       <PluginSlotBoundary
         pluginId={pluginId}
-        instanceKey={pluginSlotInstanceKey(pluginId, slotKind, slotId)}
+        instanceKey={pluginSlotInstanceKey(
+          pluginId,
+          slotKind,
+          slotId,
+          instanceId,
+        )}
         fallback={crashFallback}
+        {...(onCrash ? { onCrash } : {})}
       >
         <div
           data-bb-plugin-root=""

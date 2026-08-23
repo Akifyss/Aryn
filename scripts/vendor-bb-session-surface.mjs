@@ -4,7 +4,8 @@ import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promi
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const PINNED_COMMIT = '74d25d1ab6a4dd431f225a67ec9c53f0d8b714d7'
+const PINNED_COMMIT = '5205d98a74ed5a22469e521cf1f86b00b8232827'
+const UPSTREAM_REPOSITORY = 'https://github.com/get-bb/bb.git'
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = path.resolve(scriptDirectory, '..')
 const packageRoot = path.join(repositoryRoot, 'packages', 'bb-session-surface')
@@ -28,9 +29,6 @@ const normalizedUpstreamRoot = path.resolve(upstreamRoot)
 if (!`${normalizedUpstreamRoot}${path.sep}`.startsWith(normalizedPackageRoot)) {
   throw new Error(`Refusing to replace unexpected upstream directory: ${normalizedUpstreamRoot}`)
 }
-
-await rm(normalizedUpstreamRoot, { recursive: true, force: true })
-await mkdir(normalizedUpstreamRoot, { recursive: true })
 
 function normalizeRelativePath(value) {
   return value.split(path.sep).join('/')
@@ -86,7 +84,8 @@ async function resolveTypeScriptModule(root, importer, specifier) {
   return null
 }
 
-const importPattern = /(?:from\s+|import\s+)["']([^"']+)["']/g
+const staticImportPattern = /(?:from\s+|import\s+)["']([^"']+)["']/g
+const dynamicImportPattern = /import\s*\(\s*["']([^"']+)["']\s*\)/g
 
 async function collectModuleClosure({ root, starts, shouldTraverse }) {
   const queue = starts.map((value) => path.resolve(root, value))
@@ -99,9 +98,11 @@ async function collectModuleClosure({ root, starts, shouldTraverse }) {
     }
     files.add(filePath)
     const source = await readFile(filePath, 'utf8')
-    for (const match of source.matchAll(importPattern)) {
-      const resolved = await resolveTypeScriptModule(root, filePath, match[1])
-      if (resolved && shouldTraverse(resolved, root)) queue.push(resolved)
+    for (const pattern of [staticImportPattern, dynamicImportPattern]) {
+      for (const match of source.matchAll(pattern)) {
+        const resolved = await resolveTypeScriptModule(root, filePath, match[1])
+        if (resolved && shouldTraverse(resolved, root)) queue.push(resolved)
+      }
     }
   }
   return [...files]
@@ -135,6 +136,30 @@ const threadViewFiles = await listFiles(
   threadViewRoot,
   (filePath) => /\.ts$/.test(filePath),
 )
+
+const clientCoreRoot = path.join(sourceRoot, 'packages', 'client-core', 'src')
+// client-core also owns unrelated composer, sidebar, panel, and terminal
+// logic. Vendor the complete local dependency closure of the modules consumed
+// by the embedded timeline instead of pulling those other product surfaces in.
+const clientCoreFiles = await collectModuleClosure({
+  root: clientCoreRoot,
+  starts: [
+    'diff/renderable-patch.ts',
+    'file-preview.ts',
+    'prompt/mentions/plugin-mention-triggers.ts',
+    'prompt/prompt-draft.ts',
+    'timeline/compute-muted-prefix-length.ts',
+    'timeline/conversation-message-limits.ts',
+    'timeline/conversation-turn-request-label.ts',
+    'timeline/thread-runtime-status.ts',
+    'timeline/timeline-auto-expand.ts',
+    'timeline/timelineRowSignatures.ts',
+  ],
+  shouldTraverse(filePath, root) {
+    const relativePath = path.relative(root, filePath)
+    return relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`)
+  },
+})
 
 const sharedUiRoot = path.join(sourceRoot, 'packages', 'shared-ui', 'src')
 const sharedUiFiles = await collectModuleClosure({
@@ -172,15 +197,32 @@ const exactFiles = new Set([
   ...appComponentFiles,
   ...additionalTimelineFiles,
   ...threadViewFiles,
+  ...clientCoreFiles,
   ...sharedUiFiles,
   ...domainFiles,
   ...coreUiFiles,
   path.join(appSourceRoot, 'app.css'),
   path.join(appSourceRoot, 'components', 'ui', 'theme.css'),
+  path.join(appSourceRoot, 'lib', 'code-theme.ts'),
+  path.join(appSourceRoot, 'lib', 'document-visibility.ts'),
+  path.join(appSourceRoot, 'lib', 'pierre-strict-mode-recovery.ts'),
+  path.join(appSourceRoot, 'lib', 'pierre-worker-pool-boundary.tsx'),
+  path.join(appSourceRoot, 'lib', 'pierre-worker-pool-gate.ts'),
+  path.join(appSourceRoot, 'lib', 'scroll-anchoring-support.ts'),
   path.join(appSourceRoot, 'lib', 'thread-timeline-scroll-anchor.ts'),
-  path.join(sourceRoot, 'apps', 'app', 'public', 'bb-mark.svg'),
   path.join(sourceRoot, 'packages', 'server-contract', 'src', 'thread-timeline.ts'),
 ])
+
+const missingFiles = []
+for (const sourcePath of exactFiles) {
+  if (!await isFile(sourcePath)) missingFiles.push(sourcePath)
+}
+if (missingFiles.length > 0) {
+  throw new Error(`Cannot vendor missing upstream files:\n${missingFiles.join('\n')}`)
+}
+
+await rm(normalizedUpstreamRoot, { recursive: true, force: true })
+await mkdir(normalizedUpstreamRoot, { recursive: true })
 
 const manifest = []
 for (const sourcePath of [...exactFiles].sort()) {
@@ -200,7 +242,7 @@ await cp(path.join(sourceRoot, 'LICENSE'), path.join(packageRoot, 'LICENSE'))
 await writeFile(
   path.join(packageRoot, 'vendor-manifest.json'),
   `${JSON.stringify({
-    repository: 'https://github.com/ymichael/bb.git',
+    repository: UPSTREAM_REPOSITORY,
     upstreamCommit: PINNED_COMMIT,
     files: manifest,
   }, null, 2)}\n`,

@@ -513,7 +513,7 @@ async function applyDebugScenario(page) {
       const moduleRevision = document.querySelector('.bb-session-surface-host')
         ?.getAttribute('data-bb-surface-revision') ?? null
       if (moduleRevision) moduleUrl.searchParams.set('v', moduleRevision)
-      const previewImageUrl = new URL('./bb-session-surface/bb-mark.svg', document.baseURI).href
+      const previewImageUrl = new URL('./branding/logo.svg', document.baseURI).href
       const surfaceModule = await import(moduleUrl.href)
       const container = document.createElement('div')
       container.dataset.debugBbTimeline = 'true'

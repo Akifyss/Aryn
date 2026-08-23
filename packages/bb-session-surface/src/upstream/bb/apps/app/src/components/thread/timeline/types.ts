@@ -1,13 +1,12 @@
-import type { ThreadChatMessageReference } from "@bb/plugin-sdk";
+import type { ThreadChatMessageReference } from "@get-bb/plugin-sdk";
+import type { PromptInput } from "@bb/domain";
 import type {
   MarkdownPreviewLocalFileLink,
   MarkdownPreviewLocalFileLinkHandler,
 } from "../../ui/markdown-local-file-link.js";
 import type { MarkdownPreviewLinkHandler } from "../../ui/markdown-link.js";
-import type { PromptDraftAttachment } from "@/lib/prompt-draft";
+import type { PromptDraftAttachment } from "@bb/client-core";
 import type { MarkdownMessageDirectiveOpenThreadPanel } from "@/components/ui/markdown-message-directives";
-
-export type ThreadTimelineTheme = "light" | "dark";
 
 export type ThreadTimelineLocalFileLink = MarkdownPreviewLocalFileLink;
 
@@ -19,7 +18,7 @@ export type ThreadTimelineLinkHandler = MarkdownPreviewLinkHandler;
 export type ThreadTimelineOpenPluginPanelHandler =
   MarkdownMessageDirectiveOpenThreadPanel;
 
-export interface ThreadTimelineForkMessageTarget {
+interface ThreadTimelineForkMessageTarget {
   /** Last source event sequence included in the provider-history fork. */
   sourceSeqEnd: number;
 }
@@ -33,21 +32,29 @@ export type ThreadTimelineForkMessageHandler = (
   target: ThreadTimelineForkMessageTarget,
 ) => void;
 
-export interface ThreadTimelineSideChatMessageTarget {
-  /** Visible text of the agent message the side chat is anchored to. */
-  messageText: string;
-  /** Last source event sequence included in the provider-history fork. */
-  sourceSeqEnd?: number;
+export interface ThreadTimelineEditMessageTarget {
+  /** Stable id of the specific rendered user bubble being edited. */
+  messageId: string;
+  /** Event sequence of the user request the edit would replace. */
+  expectedRequestSequence: number;
+  /** User-visible input reconstructed from the unchanged timeline row. */
+  input: PromptInput[];
 }
 
 /**
- * Open a message-anchored side chat off the active thread. Supplied by the
- * timeline host (which owns the source thread + the secondary panel); the
- * per-message action bar invokes it with the row's anchor text.
+ * Start a client-local edit session for an eligible user request.
+ * Supplying this handler only enables the affordance; the row never mutates
+ * thread or provider state itself.
  */
-export type ThreadTimelineSideChatMessageHandler = (
-  target: ThreadTimelineSideChatMessageTarget,
+export type ThreadTimelineEditMessageHandler = (
+  target: ThreadTimelineEditMessageTarget,
 ) => void;
+
+/** Client-local editor mounted in place of one user conversation row. */
+export interface ThreadTimelineInlineMessageEditor {
+  messageId: string;
+  onHostElementChange: (element: HTMLDivElement | null) => void;
+}
 
 export interface ThreadTimelineSendToMainMessageTarget {
   /** Visible text of the side-chat agent message to hand back to the main thread. */
@@ -74,24 +81,6 @@ export type ThreadTimelineSendToMainMessageHandler = (
 export type ThreadTimelineAddToChatHandler = (
   text: string,
   attachments?: readonly PromptDraftAttachment[],
-) => void;
-
-export interface ThreadTimelineSelectionReplyInSideChatTarget {
-  /** Visible selected text the side chat is anchored to. */
-  messageText: string;
-  /** Last source event sequence included in the provider-history fork. */
-  sourceSeqEnd?: number;
-}
-
-/**
- * Open a side chat anchored on the selected agent-message text ("Reply in side
- * chat"). Distinct from the per-message Reply handler only in that the anchor is
- * the *selection*, not the whole message; both ultimately open a side chat off
- * the active thread. Supplied by the timeline host; absent when side chats are
- * unavailable.
- */
-export type ThreadTimelineSelectionReplyInSideChatHandler = (
-  target: ThreadTimelineSelectionReplyInSideChatTarget,
 ) => void;
 
 /**

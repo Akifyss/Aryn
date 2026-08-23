@@ -360,11 +360,13 @@ export function projectNativeSession({
   // summary compaction, ordering, turn grouping, streaming buffers, lifecycle
   // aggregation, activity classification, and TimelineRow construction.
   const timeline = buildThreadTimelineFromEvents({
-    acceptedClientRequestContext: { acceptedClientRequestEvents: [] },
+    acceptedClientRequestContext: {
+      acceptedClientRequestEvents: [],
+      rejectedClientRequestEvents: [],
+    },
     contextWindowEvents: canonical.contextWindowEvents,
     events: compactThreadTimelineSummaryEvents(canonical.events),
     options: {
-      includeDebugRawEvents: false,
       includeNestedRows: true,
       // Match bb's default user-facing timeline: retain unknown provider
       // events canonically for diagnostics, but do not render raw payload rows.

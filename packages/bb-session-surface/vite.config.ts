@@ -109,9 +109,6 @@ const scopeBbCss = {
         ))
         if (modernSources.length > 0) declaration.value = modernSources.join(',')
       }
-      if (declaration.value.includes('/bb-mark.svg')) {
-        declaration.value = declaration.value.replaceAll('/bb-mark.svg', './bb-mark.svg')
-      }
       if (!['animation', 'animation-name', '-webkit-animation', '-webkit-animation-name'].includes(declaration.prop)) return
       for (const [original, namespaced] of animationNames) {
         const escaped = original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -168,11 +165,12 @@ const scopeBbCssOutput: Plugin = {
 const alias = [
   { find: '@aryn/app-scroll-area', replacement: path.join(arynSource, 'components', 'app-scroll-area', 'index.ts') },
   { find: '@fontsource-variable/inter', replacement: path.join(source, 'compat', 'host-fonts.css') },
+  { find: '@bb/client-core', replacement: path.join(source, 'compat', 'client-core.ts') },
   { find: '@bb/domain', replacement: path.join(upstream, 'packages/domain/src/index.ts') },
   { find: '@bb/core-ui', replacement: path.join(upstream, 'packages/core-ui/src/index.ts') },
   { find: '@bb/server-contract', replacement: path.join(source, 'compat/server-contract.ts') },
   { find: '@bb/thread-view', replacement: path.join(upstream, 'packages/thread-view/src/index.ts') },
-  { find: '@bb/plugin-sdk', replacement: path.join(source, 'compat/plugin-sdk.ts') },
+  { find: '@get-bb/plugin-sdk', replacement: path.join(source, 'compat/plugin-sdk.ts') },
   { find: '@bb/shared-ui/activity-row-styles', replacement: path.join(sharedUiSource, 'components/ui/activity-row-styles.ts') },
   { find: '@bb/shared-ui/button', replacement: path.join(sharedUiSource, 'components/ui/button.tsx') },
   { find: '@bb/shared-ui/context-menu', replacement: path.join(sharedUiSource, 'components/ui/context-menu.tsx') },
@@ -180,6 +178,7 @@ const alias = [
   { find: '@bb/shared-ui/dropdown-menu', replacement: path.join(sharedUiSource, 'components/ui/dropdown-menu.tsx') },
   { find: '@bb/shared-ui/empty-state', replacement: path.join(sharedUiSource, 'components/ui/empty-state.tsx') },
   { find: '@bb/shared-ui/hooks/use-compact-viewport', replacement: path.join(sharedUiSource, 'components/ui/hooks/use-compact-viewport.tsx') },
+  { find: '@bb/shared-ui/hooks/use-media-query', replacement: path.join(sharedUiSource, 'components/ui/hooks/use-media-query.ts') },
   { find: '@bb/shared-ui/hooks/use-pointer-coarse', replacement: path.join(sharedUiSource, 'components/ui/hooks/use-pointer-coarse.ts') },
   { find: '@bb/shared-ui/icon', replacement: path.join(sharedUiSource, 'components/ui/icon.tsx') },
   { find: '@bb/shared-ui/lib/utils', replacement: path.join(sharedUiSource, 'lib/utils.ts') },
@@ -190,8 +189,10 @@ const alias = [
   { find: '@bb/shared-ui/skeleton', replacement: path.join(sharedUiSource, 'components/ui/skeleton.tsx') },
   { find: '@bb/shared-ui/tooltip', replacement: path.join(sharedUiSource, 'components/ui/tooltip.tsx') },
   { find: '@bb/shared-ui/workflow-progress', replacement: path.join(sharedUiSource, 'components/ui/workflow-progress.tsx') },
+  { find: '@tanstack/react-query', replacement: path.join(source, 'compat/react-query.ts') },
   { find: path.join(sharedUiSource, 'lib/portal-scope.ts'), replacement: path.join(source, 'compat/portal-scope.ts') },
   { find: '@/hooks/queries/query-keys', replacement: path.join(source, 'compat/query-keys.ts') },
+  { find: '@/hooks/queries/system-queries', replacement: path.join(source, 'compat/system-queries.ts') },
   { find: '@/hooks/queries/thread-queries', replacement: path.join(source, 'compat/thread-queries.ts') },
   { find: '@/hooks/useAppTheme', replacement: path.join(source, 'compat/theme.ts') },
   { find: '@/hooks/useSenderThreadMetadataById', replacement: path.join(source, 'compat/sender-thread-metadata.ts') },
@@ -205,10 +206,16 @@ const alias = [
   { find: '@/lib/plugin-logos', replacement: path.join(source, 'compat/plugins.ts') },
   { find: '@/lib/plugin-mention-triggers', replacement: path.join(source, 'compat/plugins.ts') },
   { find: '@/lib/plugin-message-actions.js', replacement: path.join(source, 'compat/plugins.ts') },
+  { find: '@/lib/plugin-css', replacement: path.join(source, 'compat/plugins.ts') },
+  { find: '@/lib/plugin-replacement-preference', replacement: path.join(source, 'compat/plugins.ts') },
+  { find: '@/lib/plugin-slot-resolvers', replacement: path.join(source, 'compat/plugins.ts') },
+  { find: '@/lib/plugin-slot-resolvers.js', replacement: path.join(source, 'compat/plugins.ts') },
+  { find: '@/lib/plugin-slots', replacement: path.join(source, 'compat/plugins.ts') },
   { find: '@/lib/plugin-slots.js', replacement: path.join(source, 'compat/plugins.ts') },
   { find: '@/lib/portal-scope', replacement: path.join(source, 'compat/portal-scope.ts') },
   { find: '@/lib/prompt-draft', replacement: path.join(source, 'compat/prompt-draft.ts') },
   { find: '@/lib/route-paths', replacement: path.join(source, 'compat/host-services.ts') },
+  { find: '@/lib/sdk', replacement: path.join(source, 'compat/sdk.ts') },
   { find: '@/lib/side-chat-plugin.js', replacement: path.join(source, 'compat/plugins.ts') },
   { find: '@/lib/thread-title', replacement: path.join(source, 'compat/host-services.ts') },
   { find: '@/lib/user-attachment-images', replacement: path.join(source, 'compat/host-services.ts') },
@@ -218,7 +225,7 @@ const alias = [
 ]
 
 export default defineConfig({
-  publicDir: path.join(upstream, 'apps', 'app', 'public'),
+  publicDir: false,
   plugins: [tailwindcss(), react(), scopeBbCssOutput],
   define: {
     'process.env.NODE_ENV': JSON.stringify('production'),

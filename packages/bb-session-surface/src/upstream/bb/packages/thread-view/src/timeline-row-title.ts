@@ -49,7 +49,7 @@ import {
 } from "./timeline-view.js";
 
 export type TimelineTitleTone = "default" | "summary";
-export type TimelineStatusDecorationStatus = "denied" | "error" | "interrupted";
+type TimelineStatusDecorationStatus = "denied" | "error" | "interrupted";
 
 /**
  * Optional link target attached to a title segment. Renderers that support
@@ -130,11 +130,6 @@ export type TimelineTitleAction =
       kind: "open-file-diff";
       /** Workspace-relative path of the file. For renames, the destination path. */
       path: string;
-    }
-  | {
-      kind: "open-side-chat";
-      /** The side-chat child thread to open as a tab in the current thread. */
-      threadId: string;
     }
   | {
       kind: "open-plugin-side-chat";

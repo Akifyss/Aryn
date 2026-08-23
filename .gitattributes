@@ -1,2 +1,3 @@
 packages/pi-web-session-surface/src/upstream/pi-web/** text eol=lf
+packages/bb-session-surface/src/upstream/bb/** text eol=lf
 /src/features/agent/codex-protocol/generated/** text eol=lf linguist-generated=true

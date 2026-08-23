@@ -1,6 +1,5 @@
 import type {
   ThreadEventItem,
-  ThreadEventTokenUsage,
   ThreadEventTokenUsageBreakdown,
   ThreadRuntimeDisplayStatus,
   ThreadStatus,
@@ -22,7 +21,7 @@ import {
   unsupportedUserContentBlocks,
   userContentFromBlocks,
 } from './common'
-import type { PersistedUserMessageIdentity } from './common'
+import type { PersistedUserMessageIdentity, ThreadEventTokenUsage } from './common'
 import type { CanonicalSessionProjection } from './types'
 
 function codexRuntimeStatus(snapshot: BbNativeSessionSnapshot, turns: unknown[]): ThreadRuntimeDisplayStatus {

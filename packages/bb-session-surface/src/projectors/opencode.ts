@@ -1,6 +1,5 @@
 import type {
   ThreadEventItem,
-  ThreadEventTokenUsage,
   ThreadEventTurnStatus,
   ThreadRuntimeDisplayStatus,
   ThreadStatus,
@@ -23,7 +22,11 @@ import {
   unsupportedUserContentBlocks,
   userContentFromBlocks,
 } from './common'
-import type { MarkdownAttachment, PersistedUserMessageIdentity } from './common'
+import type {
+  MarkdownAttachment,
+  PersistedUserMessageIdentity,
+  ThreadEventTokenUsage,
+} from './common'
 import type { CanonicalSessionProjection } from './types'
 
 function partStatus(part: Record<string, unknown>) {

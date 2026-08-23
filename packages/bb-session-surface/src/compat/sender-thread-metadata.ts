@@ -1,6 +1,6 @@
 export type SenderThreadMetadata = {
+  projectId: string
   title: string | null
-  childOrigin: import('@bb/domain').ThreadChildOrigin | null
   originKind: import('@bb/domain').ThreadOriginKind | null
   originPluginId: string | null
   visibility: import('@bb/domain').ThreadVisibility | null

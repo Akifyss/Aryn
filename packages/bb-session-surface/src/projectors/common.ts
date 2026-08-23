@@ -3,12 +3,16 @@ import {
   type ThreadEvent,
   type ThreadEventItem,
   type ThreadEventItemStatus,
-  type ThreadEventTokenUsage,
   type ThreadEventTurnStatus,
   type ThreadEventUserContent,
 } from '@bb/domain'
 import type { ThreadEventWithMeta } from '@bb/thread-view'
 import type { BbOptimisticUserMessage } from '../contracts'
+
+export type ThreadEventTokenUsage = Extract<
+  ThreadEvent,
+  { type: 'thread/tokenUsage/updated' }
+>['tokenUsage']
 
 export type PersistedUserMessageIdentity = {
   allowContentTimestampMatch?: boolean

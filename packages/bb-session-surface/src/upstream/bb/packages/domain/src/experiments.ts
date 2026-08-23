@@ -1,36 +1,36 @@
 import { z } from "zod";
 
 /**
- * User-opt-in experiments (the Settings → Experiments toggles). Distinct from
+ * User-set experiments (the Settings → Experiments toggles). Distinct from
  * `FeatureFlags`: flags are operator-set via env at server start, experiments
  * are user-toggled at runtime and persisted server-side so server-owned
  * policy (e.g. skill injection) can honor them.
- *
- * Every experiment defaults to off — opting in is the point.
  */
-export const experimentsSchema = z.object({
-  /**
-   * Claude Code mock CLI traffic: routes Claude Code API requests through the
-   * local proxy so forwarded requests use CLI-shaped traffic.
-   */
-  claudeCodeMockCliTraffic: z.boolean(),
-  /**
-   * Tools Hub: exposes the unified Skills, Plugins, and Automations management
-   * UI. This is a presentation gate only; it does not load or unload tools.
-   */
-  toolsHub: z.boolean(),
-  /**
-   * Side chat plugin: replaces the native side-chat implementation with the
-   * builtin `side-chat` plugin. ON hides the native "Reply in side chat"
-   * entry points and loads the plugin; OFF suppresses the plugin and keeps
-   * the legacy path fully functional.
-   */
-  sideChatPlugin: z.boolean(),
-});
+/**
+ * The complete experiment key list. Add an entry here without changing the
+ * database schema; experiment values use key/value persistence.
+ */
+export const experimentKeys = [
+  "changelogPreview",
+  "editMessages",
+  "mobileApp",
+  "providerSessionReaping",
+  "timelineWindowing",
+] as const;
+export const experimentKeySchema = z.enum(experimentKeys);
+export type ExperimentKey = z.infer<typeof experimentKeySchema>;
+
+export const experimentsSchema = z.record(experimentKeySchema, z.boolean());
 export type Experiments = z.infer<typeof experimentsSchema>;
 
+/**
+ * Values for an installation that has never saved a toggle. `setExperiments`
+ * persists every key, so one that has keeps its stored values instead.
+ */
 export const defaultExperiments: Experiments = {
-  claudeCodeMockCliTraffic: false,
-  toolsHub: false,
-  sideChatPlugin: false,
+  changelogPreview: false,
+  editMessages: true,
+  mobileApp: false,
+  providerSessionReaping: false,
+  timelineWindowing: false,
 };

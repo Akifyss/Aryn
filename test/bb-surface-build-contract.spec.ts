@@ -7,16 +7,19 @@ import surfaceConfig, { scopeBbSelector } from '../packages/bb-session-surface/v
 
 describe('bb unified session surface build contract', () => {
   it('pins the vendored source and ships provenance with the package', () => {
-    expect(manifest.repository).toBe('https://github.com/ymichael/bb.git')
-    expect(manifest.upstreamCommit).toBe('74d25d1ab6a4dd431f225a67ec9c53f0d8b714d7')
-    expect(manifest.files).toHaveLength(232)
+    expect(manifest.repository).toBe('https://github.com/get-bb/bb.git')
+    expect(manifest.upstreamCommit).toBe('5205d98a74ed5a22469e521cf1f86b00b8232827')
+    expect(manifest.files).toHaveLength(274)
     expect(manifest.files.filter(({ upstreamPath }) => upstreamPath.startsWith('packages/thread-view/src/'))).toHaveLength(57)
+    expect(manifest.files.filter(({ upstreamPath }) => upstreamPath.startsWith('packages/client-core/src/'))).toHaveLength(12)
+    expect(manifest.files.some(({ upstreamPath }) => upstreamPath.startsWith('packages/desktop-contract/src/'))).toBe(false)
     expect(manifest.files.map(({ upstreamPath }) => upstreamPath)).toEqual(expect.arrayContaining([
       'apps/app/src/components/ui/bottom-anchored-scroll-body.tsx',
       'apps/app/src/components/ui/scroll-to-bottom-button.tsx',
       'apps/app/src/lib/thread-timeline-scroll-anchor.ts',
+      'apps/app/src/lib/pierre-worker-pool-boundary.tsx',
       'apps/app/src/views/thread-detail/ThreadTimelineScrollToBottomButton.tsx',
-      'apps/app/public/bb-mark.svg',
+      'packages/client-core/src/timeline/conversation-message-limits.ts',
     ]))
     expect(surfacePackage.files).toEqual(expect.arrayContaining([
       'LICENSE',
@@ -43,6 +46,7 @@ describe('bb unified session surface build contract', () => {
     expect(config.build?.assetsInlineLimit).toBe(0)
     expect(config.build?.lib).toBeUndefined()
     expect(config.build?.rollupOptions?.preserveEntrySignatures).toBe('strict')
+    expect((surfaceConfig as { publicDir?: unknown }).publicDir).toBe(false)
   })
 
   it('does not retain provider-specific surface packages or build entry points', async () => {

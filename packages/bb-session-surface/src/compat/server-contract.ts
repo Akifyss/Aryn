@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 export * from '../upstream/bb/packages/server-contract/src/thread-timeline'
 
 export type GitDiffFileChangeKind =
@@ -14,11 +16,20 @@ export type ThreadContextWindowUsage = {
   usedTokens: number
 }
 
-export type TimelinePaginationCursor = {
-  beforeSeq?: number
-}
+export const THREAD_MENTION_RESOLVE_MAX_IDS = 32
 
-export type ThreadTimelineResponse = {
-  activeThinking: import('@bb/domain').ActiveThinking | null
-  rows: import('../upstream/bb/packages/server-contract/src/thread-timeline').TimelineRow[]
+export const uploadedPromptAttachmentSchema = z.object({
+  type: z.enum(['localImage', 'localFile']),
+  path: z.string(),
+  name: z.string(),
+  mimeType: z.string().optional(),
+  sizeBytes: z.number(),
+})
+
+export type UploadedPromptAttachment = z.infer<typeof uploadedPromptAttachmentSchema>
+
+export type ThreadResponse = {
+  projectId: string
+  title: string | null
+  titleFallback: string | null
 }

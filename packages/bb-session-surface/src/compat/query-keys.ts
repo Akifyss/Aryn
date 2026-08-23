@@ -4,3 +4,7 @@ export interface ThreadTimelineTurnSummaryDetailsQueryIdentity {
   threadId: string
   turnId: string
 }
+
+export function threadQueryKey(threadId: string) {
+  return ['thread', threadId] as const
+}

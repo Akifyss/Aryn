@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useState } from 'react'
+
 type AbsoluteFilePathArgs = { path: string; rootPath?: string | null }
 
 function normalizeSlashes(value: string) {
@@ -46,9 +48,12 @@ export function isAbsoluteFilePathWithinRoot({
   return candidate === root || candidate.startsWith(`${root}/`)
 }
 
-export function resolveAbsoluteFilePath({ path: filePath, rootPath }: AbsoluteFilePathArgs) {
-  if (/^(?:[A-Za-z]:[\\/]|\/)/.test(filePath)) return filePath
-  if (!rootPath) return filePath
+export function resolveAbsoluteFilePath({
+  path: filePath,
+  rootPath,
+}: AbsoluteFilePathArgs): string | null {
+  if (/^(?:[A-Za-z]:[\\/]|[\\/]{2}|\/)/.test(filePath)) return filePath
+  if (!rootPath) return null
   return `${rootPath.replace(/[\\/]$/, '')}/${filePath.replace(/^[\\/]/, '')}`
 }
 
@@ -83,16 +88,109 @@ export function buildProjectAttachmentContentUrl(_projectId: string, filePath: s
   return localFileUrl(filePath)
 }
 
-export async function copyToClipboardWithToast(
-  text: string,
-  _options?: Record<string, unknown>,
-) {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
+export interface ClipboardCopyOptions {
+  text: string
+  successMessage?: string | null
+  errorMessage?: string | null
+}
+
+function copyWithEditingCommand(text: string): boolean {
+  if (
+    typeof document === 'undefined'
+    || document.body === null
+    || typeof document.execCommand !== 'function'
+  ) {
     return false
   }
+
+  const activeElement = document.activeElement instanceof HTMLElement
+    ? document.activeElement
+    : null
+  const selection = document.getSelection()
+  const selectedRanges = selection
+    ? Array.from({ length: selection.rangeCount }, (_, index) => (
+        selection.getRangeAt(index).cloneRange()
+      ))
+    : []
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.readOnly = true
+  textarea.setAttribute('aria-hidden', 'true')
+  Object.assign(textarea.style, {
+    border: '0',
+    height: '1px',
+    left: '0',
+    opacity: '0',
+    padding: '0',
+    pointerEvents: 'none',
+    position: 'fixed',
+    top: '0',
+    width: '1px',
+  })
+  document.body.append(textarea)
+
+  let copied = false
+  try {
+    textarea.focus({ preventScroll: true })
+    textarea.select()
+    textarea.setSelectionRange(0, textarea.value.length)
+    copied = document.execCommand('copy')
+  } catch {
+    copied = false
+  } finally {
+    textarea.remove()
+    if (activeElement?.isConnected) activeElement.focus({ preventScroll: true })
+    if (selection) {
+      selection.removeAllRanges()
+      for (const range of selectedRanges) selection.addRange(range)
+    }
+  }
+  return copied
+}
+
+export async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (
+    typeof navigator !== 'undefined'
+    && typeof navigator.clipboard?.writeText === 'function'
+  ) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // Electron or browser permissions can reject the modern API even when
+      // it exists. bb falls back to the editing command in that case.
+    }
+  }
+  return copyWithEditingCommand(text)
+}
+
+export async function copyToClipboardWithToast(
+  text: string,
+  _options?: Omit<ClipboardCopyOptions, 'text'>,
+) {
+  return copyTextToClipboard(text)
+}
+
+export function useClipboardCopy({
+  text,
+  successMessage = null,
+  errorMessage = 'Failed to copy',
+}: ClipboardCopyOptions) {
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!copied) return
+    const timeoutId = window.setTimeout(() => setCopied(false), 2000)
+    return () => window.clearTimeout(timeoutId)
+  }, [copied])
+
+  const copy = useCallback(async () => {
+    if (!text || copied) return
+    const success = await copyToClipboardWithToast(text, { successMessage, errorMessage })
+    if (success) setCopied(true)
+  }, [copied, errorMessage, successMessage, text])
+
+  return { copied, copy }
 }
 
 export function useRewriteLocalhostLinksPreference(): readonly [boolean, (value: boolean) => void] {
@@ -107,13 +205,17 @@ export function rewriteLocalhostLinkHref({ href }: {
   return href
 }
 
-export function resolveRouteHref({ href }: { currentOrigin: string; href: string }) {
-  if (!href.startsWith('/')) return null
-  return { path: href }
+export function resolveRouteHref(
+  _args: { currentOrigin: string; href: string },
+): { path: string } | null {
+  // The embedded surface does not own bb's application router. Returning an
+  // app route here would also misclassify Unix absolute paths before bb's
+  // Markdown local-file resolver can hand them to Aryn's workspace bridge.
+  return null
 }
 
-export function isRoutePath({ path }: { path: string }) {
-  return path.startsWith('/')
+export function isRoutePath(_args: { path: string }) {
+  return false
 }
 
 export function getThreadRoutePath({ threadId }: { projectId: string; threadId: string }) {
