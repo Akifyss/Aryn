@@ -23,9 +23,9 @@ import {
 import { useAgentContext } from '@/features/agent/components/agent-sidebar/agent-sidebar-context'
 import {
   isAgentVisibleWorkspaceOperational,
+  resolveAgentThreadbarSessionPresentation,
   shouldShowAgentNewConversationPrompt,
   shouldShowAgentProjectSessionMenu,
-  shouldShowAgentThreadbarSessionControl,
 } from '@/features/agent/lib/agent-surface-state'
 import { buildBbSessionRuntimeState } from '@/features/agent/lib/bb-session-runtime-state'
 import { toBbCodexOptimisticMessages } from '@/features/agent/lib/optimistic-user-messages'
@@ -105,14 +105,11 @@ export function AgentChatSurface() {
   const sessionControlSelection = activeWorkspaceContext.kind === 'project'
     ? sessionControlTarget.selection
     : visibleSessionSelection
-  const isSessionControlNewConversation = shouldShowAgentNewConversationPrompt(
+  const threadbarSessionPresentation = resolveAgentThreadbarSessionPresentation({
     activeWorkspaceContext,
-    sessionControlSelection,
-  )
-  const showThreadbarSessionControl = shouldShowAgentThreadbarSessionControl(
-    activeWorkspaceContext,
-    sessionControlSelection,
-  )
+    isConversationMaterializing,
+    selection: sessionControlSelection,
+  })
   const activeProject = activeWorkspaceContext.kind === 'project'
     ? projectState.projects.find((project) => (
         project.id === activeWorkspaceContext.projectId
@@ -228,7 +225,7 @@ export function AgentChatSurface() {
     }
   }, [activeOverlayPanel, showProjectSessionMenu, setActiveOverlayPanel])
 
-  const threadbarNewButton = !isSessionControlNewConversation ? (
+  const threadbarNewButton = !threadbarSessionPresentation.isNewConversationPresentation ? (
     <AppIconButton
       type='button'
       disabled={!workspacePath || isWorkspaceContextPreparing}
@@ -254,7 +251,7 @@ export function AgentChatSurface() {
         <div className='agent-threadbar-leading'>
           {isAgentLayout ? threadbarNewButton : null}
 
-          {showThreadbarSessionControl ? (
+          {threadbarSessionPresentation.showSessionControl ? (
             <div className='agent-session-select'>
               {showProjectSessionMenu ? (
                 <Menu.Root

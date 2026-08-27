@@ -98,7 +98,7 @@ describe('agent session loading state', () => {
     expect(surfaceSource).not.toContain('MATERIALIZING_CONVERSATION_STATUS')
     expect(surfaceSource).toContain("sessionControlTarget.selection.kind === 'new'")
     expect(surfaceSource).toMatch(/const sessionControlSelection = activeWorkspaceContext\.kind === 'project'\s*\? sessionControlTarget\.selection\s*: visibleSessionSelection/)
-    expect(surfaceSource).toContain('const threadbarNewButton = !isSessionControlNewConversation')
+    expect(surfaceSource).toContain('const threadbarNewButton = !threadbarSessionPresentation.isNewConversationPresentation')
     expect(surfaceSource).toContain('disabled={!workspacePath || isWorkspaceContextPreparing}')
     expect(surfaceSource).toContain("activeSession ? formatAgentSessionLabel(activeSession) : '未命名会话'")
     expect(surfaceSource).toContain("label='正在加载会话…'")

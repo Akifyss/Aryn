@@ -3,11 +3,11 @@ import {
   isAgentVisibleWorkspaceOperational,
   resolveAgentComposerWorkspacePresentation,
   resolveAgentSessionControlPresentation,
+  resolveAgentThreadbarSessionPresentation,
   shouldRetainNewConversationSurfaceDuringSubmission,
   shouldShowAgentNewConversationPrompt,
   shouldShowAgentProjectSessionMenu,
   shouldShowAgentSessionLoadingIndicator,
-  shouldShowAgentThreadbarSessionControl,
 } from '../src/features/agent/lib/agent-surface-state'
 
 const project = {
@@ -117,21 +117,6 @@ describe('shouldShowAgentNewConversationPrompt', () => {
     })).toBe(false)
   })
 
-  it('hides the threadbar session control only for standalone conversation drafts', () => {
-    expect(shouldShowAgentThreadbarSessionControl(
-      { kind: 'conversationDraft' },
-      { kind: 'new' },
-    )).toBe(false)
-    expect(shouldShowAgentThreadbarSessionControl(
-      { kind: 'project', projectId: 'project-1' },
-      { kind: 'new' },
-    )).toBe(true)
-    expect(shouldShowAgentThreadbarSessionControl(
-      { kind: 'conversation', conversationId: 'conversation-1' },
-      { kind: 'new' },
-    )).toBe(true)
-  })
-
   it('keeps the project session menu identity independent of runtime readiness', () => {
     expect(shouldShowAgentProjectSessionMenu({ kind: 'project', projectId: 'project-1' })).toBe(true)
     expect(shouldShowAgentProjectSessionMenu({ kind: 'conversationDraft' })).toBe(false)
@@ -139,6 +124,64 @@ describe('shouldShowAgentNewConversationPrompt', () => {
       kind: 'conversation',
       conversationId: 'conversation-1',
     })).toBe(false)
+  })
+})
+
+describe('resolveAgentThreadbarSessionPresentation', () => {
+  it('keeps the standalone draft threadbar empty', () => {
+    expect(resolveAgentThreadbarSessionPresentation({
+      activeWorkspaceContext: { kind: 'conversationDraft' },
+      isConversationMaterializing: false,
+      selection: { kind: 'new' },
+    })).toEqual({
+      isNewConversationPresentation: true,
+      showSessionControl: false,
+    })
+  })
+
+  it('keeps the threadbar empty until a materialized conversation is ready', () => {
+    expect(resolveAgentThreadbarSessionPresentation({
+      activeWorkspaceContext: { kind: 'conversation', conversationId: 'conversation-1' },
+      isConversationMaterializing: true,
+      selection: { kind: 'new' },
+    })).toEqual({
+      isNewConversationPresentation: true,
+      showSessionControl: false,
+    })
+    expect(resolveAgentThreadbarSessionPresentation({
+      activeWorkspaceContext: { kind: 'conversation', conversationId: 'conversation-1' },
+      isConversationMaterializing: true,
+      selection: {
+        agentId: 'pi',
+        kind: 'session',
+        sessionPath: 'session-1',
+      },
+    })).toEqual({
+      isNewConversationPresentation: true,
+      showSessionControl: false,
+    })
+  })
+
+  it('preserves the project new-session title and controls', () => {
+    expect(resolveAgentThreadbarSessionPresentation({
+      activeWorkspaceContext: { kind: 'project', projectId: 'project-1' },
+      isConversationMaterializing: false,
+      selection: { kind: 'new' },
+    })).toEqual({
+      isNewConversationPresentation: true,
+      showSessionControl: true,
+    })
+  })
+
+  it('shows the selected conversation controls outside materialization', () => {
+    expect(resolveAgentThreadbarSessionPresentation({
+      activeWorkspaceContext: { kind: 'conversation', conversationId: 'conversation-1' },
+      isConversationMaterializing: false,
+      selection: { kind: 'new' },
+    })).toEqual({
+      isNewConversationPresentation: false,
+      showSessionControl: true,
+    })
   })
 })
 

@@ -88,12 +88,28 @@ export function shouldRetainNewConversationSurfaceDuringSubmission({
   return conversationStatus !== 'active' || !hasVisibleNativeSession
 }
 
-export function shouldShowAgentThreadbarSessionControl(
-  activeWorkspaceContext: ActiveWorkspaceContext,
-  selection: AgentSessionSelection,
-) {
-  return activeWorkspaceContext.kind !== 'conversationDraft'
-    || !shouldShowAgentNewConversationPrompt(activeWorkspaceContext, selection)
+export function resolveAgentThreadbarSessionPresentation({
+  activeWorkspaceContext,
+  isConversationMaterializing,
+  selection,
+}: {
+  activeWorkspaceContext: ActiveWorkspaceContext
+  isConversationMaterializing: boolean
+  selection: AgentSessionSelection
+}) {
+  // Standalone conversation creation keeps rendering the draft surface until
+  // its native session is visible. The threadbar must stay in the same empty
+  // presentation during that handoff instead of exposing a temporary label.
+  const isNewConversationPresentation = isConversationMaterializing
+    || shouldShowAgentNewConversationPrompt(activeWorkspaceContext, selection)
+
+  return {
+    isNewConversationPresentation,
+    showSessionControl: !isConversationMaterializing && (
+      activeWorkspaceContext.kind !== 'conversationDraft'
+      || !isNewConversationPresentation
+    ),
+  }
 }
 
 export function shouldShowAgentProjectSessionMenu(
