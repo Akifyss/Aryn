@@ -23,6 +23,7 @@ type AgentFileCardProps = {
   imageSrc?: string
   isImage?: boolean
   isMuted?: boolean
+  isRemoveDisabled?: boolean
   meta?: string
   onActivate?: () => void
   onRemove?: () => void
@@ -71,6 +72,7 @@ export function AgentFileCard({
   imageSrc,
   isImage = false,
   isMuted = false,
+  isRemoveDisabled = false,
   meta,
   onActivate,
   onRemove,
@@ -128,6 +130,7 @@ export function AgentFileCard({
           type='button'
           className='agent-file-card-remove'
           aria-label={`移除 ${fileName}`}
+          disabled={isRemoveDisabled}
           size='sm'
           tooltip='移除附件'
           onClick={(event) => {
@@ -148,10 +151,12 @@ export function AgentAttachmentFileCard({
   attachment,
   iconTheme,
   onRemove,
+  removeDisabled = false,
 }: {
   attachment: AgentFileCardAttachment
   iconTheme?: WorkspaceIconTheme | null
   onRemove?: () => void
+  removeDisabled?: boolean
 }) {
   const isImage = attachment.kind === 'image'
   const previewSrc = isImage ? attachment.data : undefined
@@ -170,6 +175,7 @@ export function AgentAttachmentFileCard({
       imageSrc={previewSrc}
       isImage={isImage}
       isMuted={attachment.status === 'omitted'}
+      isRemoveDisabled={removeDisabled}
       meta={meta}
       onRemove={onRemove}
     />

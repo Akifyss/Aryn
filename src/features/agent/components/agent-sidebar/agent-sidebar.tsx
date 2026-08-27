@@ -840,6 +840,7 @@ function AgentProvider({
   })
 
   const {
+    isSubmittedComposerPendingPresentation,
     isSubmittingComposerPrompt,
     submitComposerPrompt,
   } = useAgentPromptSubmission({
@@ -924,9 +925,6 @@ function AgentProvider({
   const canPerformComposerAction = composerAction === 'stop'
     ? canStopActivePrompt
     : canSend
-  const shouldShowComposerSendSpinner = composerAction === 'send'
-    && isSubmittingComposerPrompt
-    && activeSessionSelection.kind === 'new'
   const streamingShortcutModifierLabel = window.appApi.platform === 'darwin' ? '⌘↵' : 'Ctrl+Enter'
   const {
     handleComposerKeyDown,
@@ -1119,6 +1117,7 @@ function AgentProvider({
     isWorkspaceContextPreparing,
     isNewConversationSurfaceImmediate: isImmediateNewConversationSurface,
     isSessionLoading,
+    isSubmittedComposerPendingPresentation,
     showSessionLoadingIndicator,
     isThinkingStreaming,
     isSwitchingModel,
@@ -1164,7 +1163,6 @@ function AgentProvider({
     roundFileChangesByMessageId,
     sessionActivityById,
     sessionTreeAgentIds,
-    shouldShowComposerSendSpinner,
     removeComposerAttachment,
     respondToInteraction,
     sessionStatus,
@@ -1236,6 +1234,7 @@ function AgentProvider({
     isWorkspaceContextPreparing,
     isImmediateNewConversationSurface,
     isSessionLoading,
+    isSubmittedComposerPendingPresentation,
     showSessionLoadingIndicator,
     isThinkingStreaming,
     isSwitchingModel,
@@ -1277,7 +1276,6 @@ function AgentProvider({
     roundFileChangesByMessageId,
     sessionActivityById,
     sessionTreeAgentIds,
-    shouldShowComposerSendSpinner,
     removeComposerAttachment,
     respondToInteraction,
     sessionStatus,

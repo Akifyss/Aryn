@@ -175,6 +175,39 @@ describe('agent session loading state', () => {
     expect(workspaceLifecycleSource).toMatch(/if \(nextSelection\.kind === 'new' \|\| runtimeOwnsNextSelection\) \{\s*setViewedSessionSnapshot\(null\)/)
   })
 
+  it('retains a submitted new-session draft until its optimistic message is visible', async () => {
+    const [composerSource, composerStyles, submissionSource] = await Promise.all([
+      readSource('../src/features/agent/components/agent-composer-surface/agent-composer-surface.tsx'),
+      readSource('../src/features/agent/components/agent-composer-mention-input/styles.css'),
+      readSource('../src/features/agent/composer/use-agent-prompt-submission.ts'),
+    ])
+
+    const optimisticMessageCommit = submissionSource.indexOf('setOptimisticUserMessages((current) =>')
+    const conversationBindingCommit = submissionSource.indexOf(
+      'await onConversationSessionStarted(conversationId,',
+      optimisticMessageCommit,
+    )
+    const deferredComposerClear = submissionSource.indexOf(
+      'optimisticClearId = clearSubmittedComposerIfCurrent()',
+      conversationBindingCommit,
+    )
+
+    expect(submissionSource).toContain("const shouldRetainSubmittedComposer = requestSelection.kind === 'new'")
+    expect(submissionSource).toContain('setIsSubmittedComposerPendingPresentation(shouldRetainSubmittedComposer)')
+    expect(submissionSource).toMatch(/let optimisticClearId = shouldRetainSubmittedComposer\s*\? null\s*: clearSubmittedComposerIfCurrent\(\)/)
+    expect(optimisticMessageCommit).toBeGreaterThan(-1)
+    expect(conversationBindingCommit).toBeGreaterThan(optimisticMessageCommit)
+    expect(deferredComposerClear).toBeGreaterThan(conversationBindingCommit)
+    expect(submissionSource).toMatch(/composerStateRef\.current !== submittedComposerState\s*\|\| composerAttachmentsRef\.current !== submittedComposerAttachments/)
+    expect(submissionSource).toMatch(/optimisticClearId = clearSubmittedComposerIfCurrent\(\)\s*setIsSubmittedComposerPendingPresentation\(false\)/)
+    expect(composerSource).toMatch(/disabled=\{\s*isSubmittedComposerPendingPresentation\s*\|\| isOpenCodeChildSession/)
+    expect(composerSource).toContain('removeDisabled={isSubmittedComposerPendingPresentation}')
+    expect(composerSource).toContain("? '正在发送消息'")
+    expect(composerSource).toContain('aria-busy={isSubmittedComposerPendingPresentation || undefined}')
+    expect(composerStyles).toContain(".agent-composer-editor[aria-disabled='true']")
+    expect(composerStyles).toContain('color: var(--foreground-secondary);')
+  })
+
   it('replaces pending project navigation when another session is selected during preparation', async () => {
     const [flatTreeSource, projectTreeSource, sidebarSource] = await Promise.all([
       readSource('../src/features/agent/components/agent-session-tree/flat-session-tree.tsx'),

@@ -153,6 +153,7 @@ export function useAgentPromptSubmission({
   },
 }: UseAgentPromptSubmissionOptions) {
   const [isSubmittingComposerPrompt, setIsSubmittingComposerPrompt] = useState(false)
+  const [isSubmittedComposerPendingPresentation, setIsSubmittedComposerPendingPresentation] = useState(false)
   const isSubmittingComposerPromptRef = useRef(false)
 
   async function submitComposerPrompt(streamingBehavior?: AgentRunningPromptEnterBehavior) {
@@ -200,6 +201,8 @@ export function useAgentPromptSubmission({
 
     const requestAgentId = selectedAgentId
     const requestSelection = activeSessionSelectionRef.current
+    const shouldRetainSubmittedComposer = requestSelection.kind === 'new'
+    setIsSubmittedComposerPendingPresentation(shouldRetainSubmittedComposer)
     let expectedNavigationRevision = openSessionRequestIdRef.current
     let createdConversation: ConversationRecord | null = null
     let runtimeForSubmit = agentState.runtime
@@ -208,7 +211,22 @@ export function useAgentPromptSubmission({
       attachments: submittedComposerAttachments,
       state: submittedComposerState,
     }
-    const optimisticClearId = clearComposerOptimistically()
+    const clearSubmittedComposerIfCurrent = () => {
+      if (
+        composerStateRef.current !== submittedComposerState
+        || composerAttachmentsRef.current !== submittedComposerAttachments
+      ) {
+        return null
+      }
+
+      return clearComposerOptimistically()
+    }
+    // Existing sessions already have somewhere to present the submitted prompt,
+    // so keep their established immediate-clear behavior. A new session does not:
+    // retain its composer until the optimistic message can take ownership below.
+    let optimisticClearId = shouldRetainSubmittedComposer
+      ? null
+      : clearSubmittedComposerIfCurrent()
     const isOpenCodePrompt = requestAgentId === 'opencode'
     const supportsClientMessageId = isOpenCodePrompt || requestAgentId === 'codex'
     const nextOptimisticUserMessageId = isOpenCodePrompt
@@ -404,6 +422,12 @@ export function useAgentPromptSubmission({
         })
         didPersistConversationBinding = true
       }
+      if (shouldRetainSubmittedComposer) {
+        // The native session and any conversation binding now make the submitted
+        // prompt visible in the message surface, so the composer can hand it off.
+        optimisticClearId = clearSubmittedComposerIfCurrent()
+        setIsSubmittedComposerPendingPresentation(false)
+      }
 
       fallbackErrorMessage = 'Unable to send your prompt.'
       const promptAttachments = submittedComposerAttachments.map(({ id: _id, ...attachment }) => attachment)
@@ -462,10 +486,12 @@ export function useAgentPromptSubmission({
     } finally {
       isSubmittingComposerPromptRef.current = false
       setIsSubmittingComposerPrompt(false)
+      setIsSubmittedComposerPendingPresentation(false)
     }
   }
 
   return {
+    isSubmittedComposerPendingPresentation,
     isSubmittingComposerPrompt,
     submitComposerPrompt,
   }

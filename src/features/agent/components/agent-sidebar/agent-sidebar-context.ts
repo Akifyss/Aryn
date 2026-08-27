@@ -112,6 +112,7 @@ export type AgentContextValue = {
   isWorkspaceContextPreparing: boolean
   isNewConversationSurfaceImmediate: boolean
   isSessionLoading: boolean
+  isSubmittedComposerPendingPresentation: boolean
   showSessionLoadingIndicator: boolean
   isThinkingStreaming: boolean
   isSwitchingModel: boolean
@@ -174,7 +175,6 @@ export type AgentContextValue = {
   roundFileChangesByMessageId: Map<string, AgentMessageFileChange[]>
   sessionActivityById: Record<string, 'running' | 'waiting'>
   sessionTreeAgentIds: readonly AgentId[]
-  shouldShowComposerSendSpinner: boolean
   removeComposerAttachment: (attachmentId: string) => void
   respondToInteraction: (
     requestId: string,

@@ -102,6 +102,14 @@
   cursor: default;
 }
 
+.agent-composer-editor[aria-disabled='true'] {
+  color: var(--foreground-secondary);
+}
+
+.agent-composer-editor[aria-disabled='true'] .agent-composer-mention-token {
+  color: var(--foreground-secondary);
+}
+
 .agent-composer-editor::selection {
   background: var(--accent-soft);
 }

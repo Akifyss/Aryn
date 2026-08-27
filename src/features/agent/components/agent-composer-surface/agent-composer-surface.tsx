@@ -98,6 +98,7 @@ export function AgentComposerSurface({
     isWorkspaceContextPreparing,
     isNewConversationSurfaceImmediate,
     isSessionLoading,
+    isSubmittedComposerPendingPresentation,
     isViewingActiveRuntime,
     isSwitchingModel,
     isSwitchingThinkingLevel,
@@ -114,7 +115,6 @@ export function AgentComposerSurface({
     setActiveComposerMenu,
     setComposerState,
     setPanelError,
-    shouldShowComposerSendSpinner,
     streamingShortcutModifierLabel,
     surfaceMode,
     thinkingLevel,
@@ -145,6 +145,13 @@ export function AgentComposerSurface({
       ? supportsAlternateRunningPromptBehavior
         ? `Enter ${AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS[effectiveRunningPromptEnterBehavior]}，${streamingShortcutModifierLabel} ${AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS[alternateRunningPromptBehavior]}`
         : `Enter ${AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS[effectiveRunningPromptEnterBehavior]}`
+      : '发送消息'
+  const shouldShowComposerSendSpinner = composerAction === 'send'
+    && isSubmittedComposerPendingPresentation
+  const composerActionLabel = composerAction === 'stop'
+    ? '停止当前运行'
+    : isSubmittedComposerPendingPresentation
+      ? '正在发送消息'
       : '发送消息'
 
   const composerHeader = composerAttachments.length > 0 || attachmentCapabilityMessage ? (
@@ -182,6 +189,7 @@ export function AgentComposerSurface({
           <AgentAttachmentFileCard
             attachment={attachment}
             iconTheme={iconTheme}
+            removeDisabled={isSubmittedComposerPendingPresentation}
             key={attachment.id}
             onRemove={() => {
               removeComposerAttachment(attachment.id)
@@ -254,7 +262,8 @@ export function AgentComposerSurface({
           currentThinkingLevel={thinkingLevel}
           currentThinkingLevelLabel={thinkingLevelLabel}
           disabled={
-            isOpenCodeChildSession
+            isSubmittedComposerPendingPresentation
+            || isOpenCodeChildSession
             || (!canUseOperationalWorkspace && !canUseDraftRuntimeWithoutWorkspace)
             || !agentState.runtime.hasConfiguredModels
             || isSessionLoading
@@ -280,7 +289,8 @@ export function AgentComposerSurface({
             type='button'
             aria-label='附加文件'
             disabled={
-              isOpenCodeChildSession
+              isSubmittedComposerPendingPresentation
+              || isOpenCodeChildSession
               || (!canUseOperationalWorkspace && !canUseComposerWithoutWorkspace)
               || isLoading
               || isSessionLoading
@@ -295,11 +305,11 @@ export function AgentComposerSurface({
           </AppIconButton>
 
           <AppIconButton
-            aria-label={composerAction === 'stop' ? '停止当前运行' : '发送消息'}
+            aria-label={composerActionLabel}
             disabled={!canPerformComposerAction}
             type='submit'
             variant={composerAction === 'stop' ? 'outline' : 'solid'}
-            tooltip={composerActionTitle}
+            tooltip={isSubmittedComposerPendingPresentation ? '正在发送消息' : composerActionTitle}
           >
             {composerAction === 'stop' ? (
               <StopFill />
@@ -316,6 +326,7 @@ export function AgentComposerSurface({
 
   return (
     <form
+      aria-busy={isSubmittedComposerPendingPresentation || undefined}
       className='agent-composer'
       onSubmit={(event) => {
         void handleSubmit(event)
@@ -326,7 +337,8 @@ export function AgentComposerSurface({
         <AgentComposerMentionInput
           aria-label={`向 ${getAgentDefinition(visibleAgentId).label} 发送消息`}
           disabled={
-            isOpenCodeChildSession
+            isSubmittedComposerPendingPresentation
+            || isOpenCodeChildSession
             || (
               !isNewConversationSurfaceImmediate
               && (

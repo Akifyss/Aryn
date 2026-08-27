@@ -513,7 +513,8 @@ export function AgentComposerMentionInput({
     [activeMention?.query, mentionItems],
   )
   const shouldShowMentionMenu = Boolean(
-    isFocused
+    !disabled
+    && isFocused
     && activeMention
     && activeMentionKey !== dismissedMentionKey,
   )

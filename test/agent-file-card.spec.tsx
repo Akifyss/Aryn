@@ -42,4 +42,20 @@ describe('AgentAttachmentFileCard', () => {
     expect(markup).toContain('src="data:image/png;base64,preview"')
     expect(markup).not.toContain('agent-file-card-text')
   })
+
+  it('keeps the remove action visible but disabled while a prompt is being submitted', () => {
+    const markup = renderToStaticMarkup(
+      <AgentAttachmentFileCard
+        attachment={{
+          fileName: 'notes.md',
+          kind: 'file',
+        }}
+        onRemove={() => undefined}
+        removeDisabled
+      />,
+    )
+
+    expect(markup).toContain('agent-file-card-remove')
+    expect(markup).toContain('disabled=""')
+  })
 })
