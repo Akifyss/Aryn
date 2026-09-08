@@ -55,7 +55,7 @@
 .app-icon-button[data-popup-open]:not(:disabled):not([aria-disabled='true']):not([data-disabled]),
 .app-icon-button[aria-expanded='true']:not(:disabled):not([aria-disabled='true']):not([data-disabled]) {
   color: var(--foreground-primary);
-  background: var(--hover);
+  background: var(--app-icon-button-hover-background, var(--hover));
 }
 
 .app-icon-button[data-variant='outline']:hover:not(:disabled):not([aria-disabled='true']):not([data-disabled]),

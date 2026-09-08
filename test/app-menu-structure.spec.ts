@@ -430,7 +430,7 @@ describe('shared application menu', () => {
     )
     expect(indexCss).toContain('--app-menu-popup-max-width: 360px;')
     expect(indexCss).toContain('--app-menu-popup-max-height: 520px;')
-    expect(indexCss).toContain(
+    expect(indexCss.replace(/\r\n/g, '\n')).toContain(
       [
         '--app-menu-popup-shadow:',
         '    var(--shadow-sm),',
