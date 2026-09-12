@@ -3,19 +3,17 @@ import { useAppConfirmation } from '@/components/app-confirm-dialog/app-confirm-
 import type { ActiveWorkspaceContext } from '@/features/conversations/types'
 import { useConversationController } from '@/features/conversations/hooks/use-conversation-controller'
 import { conversationDraftContext } from '@/features/conversations/lib/conversation-state'
-import { AgentProvider } from '@/features/agent/components/agent-sidebar/agent-sidebar'
 import { DEFAULT_AGENT_ID } from '@/features/agent/agent-definition'
 import type { AgentWorkspaceState } from '@/features/agent/types'
 import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host/meo-editor-host'
 import type { MeoOpenGitDiffHandler } from '@/features/editor/lib/meo-native-editor-types'
 import { useGitWorkspaceController } from '@/features/git/hooks/use-git-workspace-controller'
 import { findGitChangeByFilePath } from '@/features/git/lib/repository-state'
-import type { ProjectMenuSurface } from '@/features/workspace/components/project-menu/project-menu'
 import type { ProjectMenuLayerConfiguration } from '@/features/workspace/components/project-menu/project-menu-layer'
 import { createWorkspaceEditorConfiguration } from '@/features/workspace/components/workspace-workbench/workspace-editor-configuration'
 import { createWorkspaceNavigationConfiguration } from '@/features/workspace/components/workspace-workbench/workspace-navigation-configuration'
 import { useWorkspaceStore } from '@/features/workspace/store/use-workspace-store'
-import { getBaseName } from '@/features/workspace/lib/workspace-paths'
+import { getBaseName, normalizeFilePath } from '@/features/workspace/lib/workspace-paths'
 import { WorkspaceNavigationCoordinator } from '@/features/workspace/lib/workspace-navigation-coordinator'
 import { useWorkspaceChangeSubscription } from '@/features/workspace/hooks/use-workspace-change-subscription'
 import { useWorkspaceDocumentNavigation } from '@/features/workspace/hooks/use-workspace-document-navigation'
@@ -29,21 +27,24 @@ import {
   type WorkspaceGitRefresh,
 } from '@/features/workspace/hooks/use-workspace-refresh-controller'
 import { useWorkspaceSyncController } from '@/features/workspace/hooks/use-workspace-sync-controller'
-import { useWorkspaceTabPersistence } from '@/features/workspace/hooks/use-workspace-tab-persistence'
-import { useSettingsStore, type AppLayoutPreference } from '@/hooks/use-settings-store'
+import { useSettingsStore } from '@/hooks/use-settings-store'
 import { useAppBootstrap } from '@/hooks/use-app-bootstrap'
 import { useAppKeyboardShortcuts } from '@/hooks/use-app-keyboard-shortcuts'
 import { useAppOverlayController } from '@/hooks/use-app-overlay-controller'
 import { useAppWindowClose } from '@/hooks/use-app-window-close'
 import { useDevToolsFocusSettlement } from '@/hooks/use-devtools-focus-settlement'
 import { AppOverlayLayer } from '@/features/layout/components/app-overlay-layer/app-overlay-layer'
-import { AppWorkspaceShell } from '@/features/layout/components/app-workspace-shell/app-workspace-shell'
 import { useShellLayoutController } from '@/features/layout/hooks/use-shell-layout-controller'
 import { useAppAppearanceController } from '@/features/appearance/hooks/use-app-appearance-controller'
+import { openDuoProjectSession, useDuoStore } from '@/features/duo/duo-state'
+import { useDuoWorkspaceSync } from '@/features/duo/use-duo-workspace-sync'
+import { flushDuoPersistence } from '@/features/duo/duo-persistence'
+import { DuoWorkspaceShell, startDuoConversation, type DuoWorkspaceHandle } from '@/features/duo/duo-workspace-shell'
+import { captureDuoDocumentTarget } from '@/features/duo/duo-document-navigation'
 
 function App() {
   const platform = window.appApi.platform
-  const { layoutPreference, meo, theme, setLayoutPreference } = useSettingsStore()
+  const { meo, theme } = useSettingsStore()
   const [, setStatusMessage] = useState('Open a folder to start.')
   const {
     hydrateWorkspaceIconThemes,
@@ -79,9 +80,11 @@ function App() {
   const openTabs = useWorkspaceStore((state) => state.openTabs)
   const tree = useWorkspaceStore((state) => state.tree)
   const workspaceFileSystem = useWorkspaceFileSystemState(currentPath)
-  const appLayoutPreference: AppLayoutPreference = layoutPreference
-  const isAgentLayout = appLayoutPreference === 'agent'
-  const shouldExposeAgentWorkspaceTools = !isAgentLayout || Boolean(currentPath)
+  // Shared document controllers use the full workspace surface in the Duo shell.
+  const isAgentLayout = false
+  const duoRef = useRef<DuoWorkspaceHandle>(null)
+  const duoInitialized = useDuoStore((state) => state.initialized)
+  const captureDocumentTarget = useCallback(() => captureDuoDocumentTarget(), [])
   const workspaceEditorSurface = useWorkspaceEditorSurfaceController({
     activeTabId,
     currentPath,
@@ -202,7 +205,7 @@ function App() {
     gitPanelLayout,
     isAgentLayout,
     platform,
-    shouldExposeRightSidebar: shouldExposeAgentWorkspaceTools,
+    shouldExposeRightSidebar: true,
   })
   const {
     activeLeftSidebarTab,
@@ -210,18 +213,17 @@ function App() {
     closeLeftDrawer,
     closeRightDrawer,
     expandAgentEditorSurface,
-    handleRightDrawerOpenChange,
     isLeftDrawerOpen,
     isLeftSidebarDrawer,
     isRightDrawerOpen,
     isRightSidebarDrawer,
     leftDrawerOverlayRoot,
-    revealEditorAssistantSurface,
     rightDrawerOverlayRoot,
     setActiveLeftSidebarTab,
   } = shellLayout
 
   const workspaceDocumentNavigation = useWorkspaceDocumentNavigation({
+    captureDocumentTarget,
     captureActiveMeoViewPosition,
     currentPath,
     displayActiveTabId,
@@ -239,9 +241,6 @@ function App() {
   })
 
   const {
-    activateFileTab,
-    cycleTabs,
-    openAgentMessageFile,
     openFile,
     openGitDiff,
     restoreWorkspaceTabs,
@@ -285,32 +284,24 @@ function App() {
     addExistingProject: handleAddExistingProject,
     clearPendingAgentProjectSessionRequest,
     closeProjectMenu,
-    completeAgentProjectSessionRequest,
     connectWorkspace,
     createEmptyProject: handleCreateEmptyProject,
     disconnectWorkspaceSurface,
-    enterProjectlessConversation,
     handleNewProjectDialogOpenChange,
     hydrateProjectState,
     isNewProjectDialogOpen,
     isPickingWorkspace,
     isProjectActionBusy,
-    needsProjectBootstrap,
     openNewProjectDialog,
     openProjectMenu,
-    openProjectSession: handleOpenProjectSession,
-    pendingAgentProjectSessionRequest,
     projectMenuAnchorRect,
     projectMenuMode,
     projectMenuSurface,
     projectState,
-    queueCurrentProjectSession,
-    removeProject: handleRemoveProject,
     selectProject: handleSelectProject,
-    showProjectInFolder: handleShowProjectInFolder,
-    startProjectSession: handleStartProjectSession,
     workspaceUnavailableMessage,
   } = useWorkspaceProjectController({
+    preserveProjectTabs: true,
     activeWorkspaceContext,
     confirmDiscardDirtyTabs,
     currentPathRef,
@@ -331,18 +322,9 @@ function App() {
     setStatusMessage,
   })
   const {
-    conversationDraftFailed: handleConversationDraftFailed,
-    conversationSessionStarted: handleConversationSessionStarted,
     conversationState,
-    conversationTitleSuggested: handleConversationTitleSuggested,
-    createConversationWorkspace: handleCreateConversationWorkspace,
-    enterConversationDraft,
     hydrateConversationState,
-    openConversation: handleOpenConversation,
-    removeConversation: handleRemoveConversation,
-    renameConversation: handleRenameConversation,
     restoreInitialConversationContext,
-    startStandaloneConversation: handleStartStandaloneConversation,
   } = useConversationController({
     activeWorkspaceContext,
     clearPendingAgentProjectSessionRequest,
@@ -358,15 +340,11 @@ function App() {
     setActiveWorkspaceContext,
     setStatusMessage,
   })
-  const editorWorkspaceSwitchLabel = activeWorkspaceContext.kind === 'project' && activeProject
-    ? activeProject.name
-    : workspaceLabel
+  const editorWorkspaceSwitchLabel = activeProject?.name ?? '选择项目'
+  function handleOpenProjectSwitchMenu(anchorRect?: Parameters<typeof openProjectMenu>[1]) {
+    openProjectMenu('editor-switch', anchorRect)
+  }
   const isProjectMenuOpen = Boolean(projectMenuMode)
-  const isProjectAddMenuOpenForSurface = (surface: ProjectMenuSurface) => (
-    isProjectMenuOpen
-    && projectMenuMode === 'agent-add'
-    && projectMenuSurface === surface
-  )
   const isGlobalProjectMenuOpen = isProjectMenuOpen && projectMenuSurface === 'global'
   const {
     closeCommandPalette,
@@ -376,8 +354,9 @@ function App() {
     isShortcutBlockingLayerOpen,
     openCommandPaletteFromChrome,
     openSettings,
+    openSettingsSection,
+    selectSettingsSection,
     setIsSettingsOpen,
-    setSettingsSection,
     settingsSection,
     toggleCommandPalette,
   } = useAppOverlayController({
@@ -388,26 +367,11 @@ function App() {
     isProjectMenuOpen,
   })
 
-  async function handleStartContextualConversation() {
-    if (activeProject) {
-      await handleStartProjectSession(activeProject)
-      return
-    }
-
-    await handleStartStandaloneConversation()
-  }
-
-  async function handleUseNoProject() {
-    await enterProjectlessConversation(enterConversationDraft)
-  }
-
   const projectMenuLayerConfiguration: ProjectMenuLayerConfiguration = {
-    activeProjectId: activeWorkspaceContext.kind === 'project'
-      ? activeWorkspaceContext.projectId
-      : null,
+    activeProjectId: activeProject?.id ?? null,
     activeSurface: projectMenuSurface,
     anchorRect: projectMenuAnchorRect,
-    canUseNoProject: isAgentLayout && activeWorkspaceContext.kind === 'project',
+    canUseNoProject: false,
     isBusy: isProjectActionBusy,
     leftDrawerPortal: leftDrawerOverlayRoot,
     mode: projectMenuMode,
@@ -417,7 +381,7 @@ function App() {
     onClose: closeProjectMenu,
     onCreateProject: openNewProjectDialog,
     onSelectProject: handleSelectProject,
-    onUseNoProject: handleUseNoProject,
+    onUseNoProject: closeProjectMenu,
   }
   const workspaceNavigationConfiguration = createWorkspaceNavigationConfiguration({
     activeTab: activeLeftSidebarTab,
@@ -446,9 +410,7 @@ function App() {
     navigationConfiguration: workspaceNavigationConfiguration,
     onActiveEditorCompositionChange: setIsActiveEditorComposing,
     onOpenMeoEditorGitDiff: handleOpenMeoEditorGitDiff,
-    onOpenWorkspaceSwitch: (anchorRect) => {
-      openProjectMenu('editor-switch', anchorRect)
-    },
+    onOpenWorkspaceSwitch: handleOpenProjectSwitchMenu,
     persistence: workspaceDocumentPersistence,
     theme,
     tree,
@@ -456,7 +418,8 @@ function App() {
     workspaceUnavailableMessage,
   })
 
-  useAppBootstrap({
+  const bootstrapReady = useAppBootstrap({
+    projectWorkspace: true,
     connectWorkspace,
     hydrateConversationState,
     hydrateProjectState,
@@ -481,6 +444,7 @@ function App() {
 
   const handleRequestWindowClose = useAppWindowClose({
     confirmDiscardDirtyTabs,
+    beforeClose: flushDuoPersistence,
   })
 
   useEffect(() => {
@@ -490,17 +454,22 @@ function App() {
   }, [])
 
   useAppKeyboardShortcuts({
-    activeTabId: displayActiveTabId,
-    closeActiveTab: closeEditorTab,
-    cycleTabs,
+    activeTabId: 'duo-active-tab',
+    closeActiveTab: () => duoRef.current?.closeActiveTab(),
+    cycleTabs: (direction) => duoRef.current?.cycleTabs(direction),
     isShortcutBlockingLayerOpen,
-    onSaveActiveTab: handleSaveActiveTab,
-    onStartContextualConversation: handleStartContextualConversation,
+    onSaveActiveTab: () => {
+      const duo = useDuoStore.getState()
+      const pane = duo.panes[duo.focusedPane]
+      if (pane.tabs.some((tab) => tab.kind === 'document' && tab.id === pane.activeTabId)) return handleSaveActiveTab()
+    },
+    onStartContextualConversation: () => startDuoConversation(activeProject, () => openProjectMenu('editor-switch')),
     onToggleCommandPalette: toggleCommandPalette,
     platform,
   })
 
-  useWorkspaceTabPersistence(currentPath, activeTabId, openTabs)
+  useDuoWorkspaceSync({ isActive: true, initialized: duoInitialized, bootstrapReady,
+    conversationState, projectState, selectedProject: activeProject, workspaceUnavailableMessage })
 
   useEffect(() => {
     if (!projectMenuMode) {
@@ -515,60 +484,27 @@ function App() {
     }
   }, [isLeftDrawerOpen, isRightDrawerOpen, projectMenuMode, projectMenuSurface])
 
+  // A project switch keeps the previous surface mounted until the next layout
+  // is ready. Its last runtime must not populate the new project's menus.
+  const currentAgentWorkspaceState = activeProject && agentWorkspaceState?.runtime.workspacePath
+    && normalizeFilePath(agentWorkspaceState.runtime.workspacePath) === normalizeFilePath(activeProject.path)
+    ? agentWorkspaceState : null
   const handleOpenSession = useCallback((sessionPath: string, sessionLabel: string) => {
-    if (queueCurrentProjectSession(
+    if (!activeProject) return
+    openDuoProjectSession(useDuoStore.getState().focusedPane, activeProject, {
       sessionPath,
-      agentWorkspaceState?.runtime.agentId ?? DEFAULT_AGENT_ID,
+      agentId: currentAgentWorkspaceState?.runtime.agentId ?? DEFAULT_AGENT_ID,
       sessionLabel,
-    )) {
-      revealEditorAssistantSurface()
-    }
-  }, [agentWorkspaceState?.runtime.agentId, queueCurrentProjectSession, revealEditorAssistantSurface])
-  const isEditorLayoutSwitchDisabled = activeWorkspaceContext.kind === 'conversationDraft' && isAgentLayout
+    })
+  }, [activeProject, currentAgentWorkspaceState?.runtime.agentId])
 
-  const appShell = (
-    <AppWorkspaceShell
-      appLayout={appLayoutPreference}
-      isDarkTheme={resolvedTheme === 'dark'}
-      isEditorLayoutSwitchDisabled={isEditorLayoutSwitchDisabled}
-      isModalLayerOpen={isAppModalLayerOpen}
-      layout={shellLayout}
-      panels={{
-        editor: workspaceEditorConfiguration,
-        isAgentLayout,
-        navigation: {
-          configuration: workspaceNavigationConfiguration,
-          isPickingWorkspace,
-          isProjectAddMenuOpenForSurface,
-          onOpenCommandPalette: openCommandPaletteFromChrome,
-          onOpenProjectMenu: (mode, surface, anchorRect) => {
-            openProjectMenu(mode, anchorRect, { surface })
-          },
-          onOpenSettings: openSettings,
-        },
-        projectBootstrap: {
-          isVisible: needsProjectBootstrap,
-          props: {
-            isBusy: isProjectActionBusy,
-            onAddExistingProject: handleAddExistingProject,
-            onCreateProject: openNewProjectDialog,
-          },
-        },
-      }}
-      projectMenu={projectMenuLayerConfiguration}
-      shouldExposeRightPanelTools={shouldExposeAgentWorkspaceTools}
-      onActivateFileTab={activateFileTab}
-      onLayoutChange={setLayoutPreference}
-      onRequestWindowClose={() => {
-        void handleRequestWindowClose()
-      }}
-    >
-      <AppOverlayLayer
+  const overlayLayer = (
+    <AppOverlayLayer
         commandPalette={{
           files: tree,
           iconTheme,
           isOpen: isCommandPaletteOpen,
-          sessions: agentWorkspaceState?.sessions ?? [],
+          sessions: currentAgentWorkspaceState?.sessions ?? [],
           theme,
           onClose: closeCommandPalette,
           onOpenFile: openFile,
@@ -589,7 +525,7 @@ function App() {
         projectMenu={projectMenuLayerConfiguration}
         settingsDialog={{
           activeSection: settingsSection,
-          agentState: agentWorkspaceState,
+          agentState: currentAgentWorkspaceState,
           iconThemeOptions,
           iconThemes,
           isIconThemeBusy: isApplyingIconTheme,
@@ -598,63 +534,54 @@ function App() {
           workspacePath: currentPath,
           onAgentStateChange: setAgentWorkspaceState,
           onOpenChange: setIsSettingsOpen,
-          onSectionChange: setSettingsSection,
+          onSectionChange: selectSettingsSection,
           onSelectIconTheme: selectWorkspaceIconTheme,
           onStatusMessage: setStatusMessage,
         }}
       />
-    </AppWorkspaceShell>
   )
 
-  const agentSurfaceMode = !isAgentLayout && isRightSidebarDrawer ? 'drawer' : 'docked'
-  const agentProjectMenuSurface: ProjectMenuSurface = agentSurfaceMode === 'drawer' ? 'right-drawer' : 'global'
-
   return (
-    <AgentProvider
-      activeWorkspaceContext={activeWorkspaceContext}
-      conversationState={conversationState}
-      externalSessionRequest={pendingAgentProjectSessionRequest}
-      onExternalSessionRequestHandled={completeAgentProjectSessionRequest}
-      iconTheme={iconTheme}
-      onConversationDraftFailed={handleConversationDraftFailed}
-      onConversationSessionStarted={handleConversationSessionStarted}
-      onConversationTitleSuggested={handleConversationTitleSuggested}
-      onCreateConversationWorkspace={handleCreateConversationWorkspace}
-      onOpenMessageFile={openAgentMessageFile}
-      onOpenConversation={handleOpenConversation}
-      onRenameConversation={handleRenameConversation}
-      onRemoveConversation={handleRemoveConversation}
-      onOpenProviderSettings={() => {
-        if (agentSurfaceMode === 'drawer') {
-          handleRightDrawerOpenChange(false)
-        }
-
-        openSettings('providers')
-      }}
-      workspacePath={currentPath}
-      workspaceState={agentWorkspaceState}
-      onWorkspaceStateChange={setAgentWorkspaceState}
-      isAgentLayout={isAgentLayout}
-      surfaceMode={agentSurfaceMode}
-      theme={resolvedTheme}
-      onOpenProjectAddMenu={(anchorRect) => openProjectMenu('agent-add', anchorRect, {
-        surface: agentProjectMenuSurface,
-      })}
-      onOpenProjectSwitchMenu={(anchorRect, options) => openProjectMenu(
-        options?.startNewSession ? 'agent-new-switch' : 'editor-switch',
-        anchorRect,
-        { surface: agentProjectMenuSurface },
-      )}
-      onOpenProjectFolder={handleShowProjectInFolder}
-      onOpenProjectSession={handleOpenProjectSession}
-      onRemoveProject={handleRemoveProject}
-      onStartStandaloneConversation={handleStartStandaloneConversation}
-      onStartProjectSession={handleStartProjectSession}
-      projectState={projectState}
-      isProjectAddMenuOpen={isProjectAddMenuOpenForSurface(agentProjectMenuSurface)}
-    >
-      {appShell}
-    </AgentProvider>
+    <>
+        <DuoWorkspaceShell
+          ref={duoRef}
+          configuration={{
+            editor: workspaceEditorConfiguration,
+            conversations: {
+              projectState,
+              selectedProject: activeProject,
+              onChooseProject: handleOpenProjectSwitchMenu,
+              onOpenProjectSwitchMenu: isPickingWorkspace ? undefined : handleOpenProjectSwitchMenu,
+              iconTheme,
+              theme: resolvedTheme,
+              onOpenProviderSettings: () => openSettingsSection('providers'),
+              onWorkspaceStateChange: setAgentWorkspaceState,
+            },
+            onCloseDocument: closeEditorTab,
+            documentNavigation: workspaceDocumentNavigation,
+            refreshGitState,
+            confirmCloseConversation: () => requestConfirmation({
+              title: '关闭对话标签页？',
+              message: '输入框中还有未发送的内容。关闭此标签页会丢弃这些内容，已发送的对话记录会保留。',
+              confirmLabel: '丢弃并关闭',
+              isDanger: true,
+            }),
+          }}
+          chromeVars={shellLayout.shellChromeVars}
+          platform={shellLayout.shellPlatform}
+          isFullScreen={shellLayout.isWindowFullScreen}
+          isModalOpen={isAppModalLayerOpen}
+          isActive
+          workspaceLabel={editorWorkspaceSwitchLabel}
+          isPickingWorkspace={isPickingWorkspace}
+          isWorkspaceMenuOpen={isGlobalProjectMenuOpen && projectMenuMode === 'editor-switch'}
+          onRequestClose={() => { void handleRequestWindowClose() }}
+          onSearch={openCommandPaletteFromChrome}
+          onSettings={openSettings}
+          onWorkspace={handleOpenProjectSwitchMenu}
+        />
+    {overlayLayer}
+    </>
   )
 }
 

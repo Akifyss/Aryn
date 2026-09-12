@@ -38,7 +38,8 @@ const TAB_STORAGE_PREFIXES = [
 
 const MEO_STATE_STORAGE_PREFIX = `${APP_STORAGE_PREFIX}:meo-state:`
 
-const LAYOUT_STORAGE_KEYS: Record<keyof PersistedLayoutState, string[]> = {
+// Duo was introduced after the JSON-store migration and has no legacy key.
+const LAYOUT_STORAGE_KEYS: Record<Exclude<keyof PersistedLayoutState, 'duo' | 'duoProjects'>, string[]> = {
   activeLeftSidebarTab: [`${APP_STORAGE_PREFIX}:active-left-sidebar-tab`],
   agentChatWidth: [`${APP_STORAGE_PREFIX}:agent-chat-width`],
   agentRightSidebarCollapsed: [`${APP_STORAGE_PREFIX}:agent-right-sidebar-collapsed`],

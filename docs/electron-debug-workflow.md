@@ -5,6 +5,28 @@ diagnostics from the renderer and main process.
 
 ## Commands
 
+### Temporary platform layout preview
+
+In the development window's DevTools Console, run:
+
+```js
+arynLayoutPreview('macos')             // macOS window: 84px leading safe area
+arynLayoutPreview('macos-fullscreen')  // macOS fullscreen layout: 6px leading inset
+arynLayoutPreview('windows')           // Windows layout and trailing caption controls
+arynLayoutPreview('system')            // Restore the real platform and window state
+arynLayoutPreview()                    // Inspect the current preview
+```
+
+Open DevTools with Ctrl+Shift+I on Windows or Cmd+Option+I on macOS.
+The command updates the layout immediately, preserves mounted tabs and drafts,
+and never writes project state or platform preferences. Reloading the renderer
+clears the preview. It is unavailable in production builds.
+
+This previews renderer geometry only; the real OS, keyboard shortcuts and
+native window behavior remain unchanged. Windows shows static traffic-light
+placeholders in the macOS window preview. Actual macOS system buttons are not
+modified by this command; native chrome still requires testing on macOS.
+
 Run against existing `dist/` and `dist-electron/` output:
 
 ```powershell

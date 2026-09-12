@@ -1,7 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type {
-  AppLayoutPreference,
   AppTheme,
   LeftSidebarTab,
   PersistedAgentSettings,
@@ -12,6 +11,7 @@ import type {
 } from '../shared/contracts/persistence'
 import type { WorkspaceIconThemeMode } from '../shared/contracts/workspace'
 import { AtomicJsonStore, type AtomicJsonStoreMissingResult } from './json-file-store'
+import { normalizeDuoLayout, normalizeDuoProjects } from '../shared/contracts/duo-layout'
 
 export const APP_STATE_SCHEMA_VERSION = 3
 export const DEFAULT_WINDOW_WIDTH = 1440
@@ -101,7 +101,7 @@ const DEFAULT_MEO_SETTINGS: PersistedMeoSettings = {
 
 const DEFAULT_APP_SETTINGS: PersistedAppSettings = {
   agent: DEFAULT_AGENT_SETTINGS,
-  layoutPreference: 'agent',
+  layoutPreference: 'duo',
   meo: DEFAULT_MEO_SETTINGS,
   theme: 'auto',
 }
@@ -182,10 +182,6 @@ function readAppTheme(value: unknown): AppTheme {
   return value === 'light' || value === 'dark' || value === 'auto' ? value : DEFAULT_APP_SETTINGS.theme
 }
 
-function readLayoutPreference(value: unknown): AppLayoutPreference {
-  return value === 'editor' || value === 'agent' ? value : DEFAULT_APP_SETTINGS.layoutPreference
-}
-
 function readRunningPromptEnterBehavior(value: unknown) {
   return value === 'steer' || value === 'followUp'
     ? value
@@ -258,7 +254,8 @@ export function normalizeAppSettings(value: unknown): PersistedAppSettings {
     agent: {
       runningPromptEnterBehavior: readRunningPromptEnterBehavior(agentCandidate.runningPromptEnterBehavior),
     },
-    layoutPreference: readLayoutPreference(stateCandidate.layoutPreference),
+    // Migrate legacy Agent/Editor preferences without altering saved pane state.
+    layoutPreference: DEFAULT_APP_SETTINGS.layoutPreference,
     meo: {
       focusedLineHighlight: meoCandidate.focusedLineHighlight === true,
       gitDiffLineHighlights: readBoolean(meoCandidate.gitDiffLineHighlights, DEFAULT_MEO_SETTINGS.gitDiffLineHighlights),
@@ -273,8 +270,12 @@ export function normalizeLayoutState(value: unknown): PersistedLayoutState {
   const candidate = value && typeof value === 'object'
     ? value as Record<string, unknown>
     : {}
+  const duo = normalizeDuoLayout(candidate.duo)
+  const duoProjects = normalizeDuoProjects(candidate.duoProjects)
 
   return {
+    ...(duo ? { duo } : {}),
+    ...(duoProjects ? { duoProjects } : {}),
     activeLeftSidebarTab: readLeftSidebarTab(candidate.activeLeftSidebarTab),
     agentChatWidth: readNumber(candidate.agentChatWidth, DEFAULT_LAYOUT_STATE.agentChatWidth, 1),
     agentRightSidebarCollapsed: readBoolean(candidate.agentRightSidebarCollapsed, DEFAULT_LAYOUT_STATE.agentRightSidebarCollapsed),

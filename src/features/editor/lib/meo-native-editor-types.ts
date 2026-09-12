@@ -8,6 +8,8 @@ import type {
 } from '@/features/git/types'
 import type { MeoSettings } from '@/hooks/use-settings-store'
 import type { MeoHostEnvironment } from '@/features/editor/lib/meo-host-environment'
+import type { EditorViewHandle } from './editor-view-handle'
+import type { EditorView } from '@codemirror/view'
 
 export type MeoOpenGitDiffHandler = (
   filePath: string,
@@ -32,7 +34,7 @@ export type NativeMeoMessage =
   | { type: 'viewPositionChanged', topLine?: number, topLineOffset?: number }
   | { type: string, [key: string]: unknown }
 
-export type NativeMeoController = {
+export type NativeMeoController = EditorViewHandle & {
   captureViewPosition: () => void
   destroy: () => void
   focus: () => void
@@ -129,7 +131,7 @@ export type MeoEditorInstance = {
   refreshDecorations: () => void
   refreshLayout: () => void
   refreshSelectionOverlay: () => void
-  restoreTopLine: (line: number, lineOffset: number) => void
+  restoreTopLine: (line: number, lineOffset: number, options?: { syncCursor: boolean }) => void
   scrollToLine: (line: number, position: string) => void
   setGitBaseline: (baseline: GitBaselinePayload) => void
   setFocusedLineHighlightVisible: (visible: boolean) => void
@@ -137,20 +139,7 @@ export type MeoEditorInstance = {
   setLineNumbers: (visible: boolean) => void
   setMode: (mode: 'live' | 'source') => void
   setText: (text: string) => void
-  view: {
-    dom: HTMLElement
-    scrollDOM: HTMLElement
-    state: {
-      doc: {
-        lineAt: (position: number) => { from: number, number: number }
-      }
-      selection: {
-        main: {
-          head: number
-        }
-      }
-    }
-  }
+  view: EditorView
 }
 
 export type MeoEditorCreateOptions = {

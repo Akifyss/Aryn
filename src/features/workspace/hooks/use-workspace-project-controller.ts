@@ -53,6 +53,9 @@ type UseWorkspaceProjectControllerOptions = {
   flushDiffAutosave: () => Promise<boolean>
   flushWorkspaceAutosave: (filePath?: string) => Promise<boolean>
   isAgentLayout: boolean
+  // Duo owns project tab restoration; switching filesystem roots must not
+  // destroy shared buffers or run the legacy single-pane restore afterwards.
+  preserveProjectTabs?: boolean
   loadTree: (
     rootPath: string,
     options?: {
@@ -89,6 +92,7 @@ export function useWorkspaceProjectController({
   flushDiffAutosave,
   flushWorkspaceAutosave,
   isAgentLayout,
+  preserveProjectTabs = false,
   loadTree,
   navigationCoordinator,
   prepareGitWorkspace,
@@ -232,7 +236,7 @@ export function useWorkspaceProjectController({
       setWorkspaceUnavailableMessage(null)
       currentPathRef.current = nextPath
       setCurrentPath(nextPath)
-      resetOpenTabs()
+      if (!preserveProjectTabs) resetOpenTabs()
       setIsAgentLayoutFixedTabActive(false)
       prepareGitWorkspace(nextPath)
       await refreshGitState(nextPath, { silent: false })
@@ -275,7 +279,7 @@ export function useWorkspaceProjectController({
     setCurrentPath(null)
     setTree([])
     resetExpandedPaths()
-    resetOpenTabs()
+    if (!preserveProjectTabs) resetOpenTabs()
     setIsAgentLayoutFixedTabActive(false)
     resetGitWorkspaceState()
     setAgentWorkspaceState(null)
@@ -312,6 +316,7 @@ export function useWorkspaceProjectController({
   ) {
     if (
       !isWorkspacePathCurrent(project.path)
+      && !preserveProjectTabs
       && !options.skipDirtyConfirm
       && !(await confirmDiscardDirtyTabs('switch-workspace'))
     ) {
@@ -323,6 +328,7 @@ export function useWorkspaceProjectController({
     )
     const isCurrent = navigationCoordinator.guard(intent)
     const previousWorkspaceContext = activeWorkspaceContextRef.current
+    const previousWorkspacePath = currentPathRef.current
     let didPersistProject = false
     const isCurrentWorkspace = isWorkspaceSurfaceConnected(project.path)
 
@@ -360,7 +366,7 @@ export function useWorkspaceProjectController({
           }
         }
 
-        if (options.restoreTabs !== false && !isCurrentWorkspace) {
+        if (!preserveProjectTabs && options.restoreTabs !== false && !isCurrentWorkspace) {
           await restoreWorkspaceTabs(project.path, undefined, {
             shouldApply: stillCurrent,
           })
@@ -375,8 +381,21 @@ export function useWorkspaceProjectController({
         return false
       }
 
-      if (!didPersistProject) {
+      if (!didPersistProject || preserveProjectTabs) {
         setActiveWorkspaceContext(previousWorkspaceContext)
+      }
+      if (preserveProjectTabs && previousWorkspaceContext.kind === 'project') {
+        // Failed root preparation must not leave Duo waiting for a CWD that
+        // will never arrive. Roll back the selected project and its surface.
+        await navigationCoordinator.run(intent, async (stillCurrent) => {
+          if (!stillCurrent()) return
+          if (didPersistProject) {
+            const restoredProject = await window.appApi.setActiveProject(previousWorkspaceContext.projectId)
+            if (stillCurrent()) setProjectState((state) => ({ ...state, lastProjectId: restoredProject.id,
+              projects: state.projects.map((project) => project.id === restoredProject.id ? restoredProject : project) }))
+          }
+          if (stillCurrent() && previousWorkspacePath) await connectWorkspace(previousWorkspacePath, { intent })
+        }).catch(() => undefined)
       }
       throw error
     }
@@ -451,7 +470,7 @@ export function useWorkspaceProjectController({
         return false
       }
 
-      if (options.restoreTabs !== false) {
+      if (!preserveProjectTabs && options.restoreTabs !== false) {
         await restoreWorkspaceTabs(
           nextActiveProject.path,
           nextActiveProject.lastFilePath,
@@ -477,7 +496,7 @@ export function useWorkspaceProjectController({
       return
     }
 
-    if (!(await confirmDiscardDirtyTabs('switch-workspace'))) {
+    if (!preserveProjectTabs && !(await confirmDiscardDirtyTabs('switch-workspace'))) {
       return
     }
 
@@ -513,7 +532,7 @@ export function useWorkspaceProjectController({
   }
 
   async function addExistingProject() {
-    if (!(await confirmDiscardDirtyTabs('switch-workspace'))) {
+    if (!preserveProjectTabs && !(await confirmDiscardDirtyTabs('switch-workspace'))) {
       return
     }
 
@@ -674,7 +693,7 @@ export function useWorkspaceProjectController({
               return
             }
 
-            await restoreWorkspaceTabs(
+            if (!preserveProjectTabs) await restoreWorkspaceTabs(
               nextActiveProject.path,
               nextActiveProject.lastFilePath,
               { shouldApply: stillCurrent },

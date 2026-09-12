@@ -1,4 +1,5 @@
 import type { GitBaselinePayload, GitBlameResult } from '@/features/git/types'
+import { EditorSelection } from '@codemirror/state'
 import {
   getRelativeFsPath,
   isExternalHref,
@@ -1221,6 +1222,28 @@ export function mountNativeMeoEditor({
   }, eventOptions)
 
   return {
+    capture() {
+      flushPendingSplitParentChange()
+      persistenceController.captureViewPosition()
+      const active = getActiveEditor()
+      if (!active) return null
+      return { kind: 'meo', mode: currentMode,
+        ranges: active.view.state.selection.ranges.map(({ anchor, head }) => ({ anchor, head })),
+        mainIndex: active.view.state.selection.mainIndex, position: active.getTopVisiblePosition() }
+    },
+    restore(state) {
+      if (state.kind !== 'meo') return
+      applyMode(state.mode)
+      const active = getActiveEditor()
+      if (!active) return
+      const clamp = (value: number) => Math.max(0, Math.min(active.view.state.doc.length, value))
+      active.view.dispatch({ selection: EditorSelection.create(state.ranges.map(({ anchor, head }) =>
+        EditorSelection.range(clamp(anchor), clamp(head))), state.mainIndex) })
+      if (state.position) {
+        if (isDiffMode(currentMode)) diffSplitController?.restoreTopLine(state.position.line, state.position.lineOffset, { syncCursor: false })
+        else editor?.restoreTopLine(state.position.line, state.position.lineOffset, { syncCursor: false })
+      }
+    },
     captureViewPosition() {
       persistenceController.captureViewPosition()
     },

@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react'
 import { getWorkspaceFileTabIdsForPath } from '@/features/workspace/lib/workspace-file-operation-state'
-import { normalizeFilePath } from '@/features/workspace/lib/workspace-paths'
+import { hasPathPrefix, normalizeFilePath } from '@/features/workspace/lib/workspace-paths'
 import { createDiffTab } from '@/features/workspace/lib/workspace-tabs'
 import {
   useWorkspaceStore,
@@ -123,7 +123,8 @@ export function useWorkspaceSyncController(
     const requestId = diffSyncRequestIdRef.current + 1
     diffSyncRequestIdRef.current = requestId
     const diffTabs = useWorkspaceStore.getState().openTabs.filter(
-      (tab): tab is WorkspaceDiffTab => tab.kind === 'diff',
+      (tab): tab is WorkspaceDiffTab => tab.kind === 'diff'
+        && hasPathPrefix(workspacePath, tab.diff.repositoryRootPath),
     )
 
     await Promise.all(diffTabs.map(async (tab) => {
@@ -133,7 +134,7 @@ export function useWorkspaceSyncController(
 
       try {
         const nextDiff = await window.appApi.getGitFileDiff(
-          workspacePath,
+          tab.diff.repositoryRootPath,
           tab.diff.change.path,
           tab.diff.change.scope,
         )

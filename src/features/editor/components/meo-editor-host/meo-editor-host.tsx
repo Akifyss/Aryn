@@ -1,4 +1,5 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
+import type { EditorViewHandle, EditorViewState } from '@/features/editor/lib/editor-view-handle'
 import type { GitChangeItem, GitDiffBlockAction, GitDiffSelection, GitRepositoryState } from '@/features/git/types'
 import type { WorkspaceFileGitDiffRequest } from '@/features/workspace/store/use-workspace-store'
 import type { MeoSettings } from '@/hooks/use-settings-store'
@@ -15,6 +16,7 @@ import 'katex/dist/katex.min.css'
 import './styles.css'
 
 type MeoEditorHostProps = {
+  viewHandleRef?: Ref<EditorViewHandle>
   filePath: string
   gitDiffRequest?: WorkspaceFileGitDiffRequest | null
   gitRepositoryState?: GitRepositoryState | null
@@ -86,10 +88,12 @@ export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>
   theme = 'auto',
   value,
   workspacePath,
+  viewHandleRef,
 }, forwardedRef) {
   const shellRef = useRef<HTMLDivElement | null>(null)
   const editorChromeRef = useRef<NativeMeoEditorShell | null>(null)
   const controllerRef = useRef<MountedNativeMeo | null>(null)
+  const remountViewRef = useRef<{ filePath: string; workspacePath: string | null | undefined; state: EditorViewState; focused: boolean } | null>(null)
   const contentRef = useRef(value)
   const isGitBaselineReadyRef = useRef(false)
   const lastHandledGitDiffRequestKeyRef = useRef<string | null>(null)
@@ -190,6 +194,12 @@ export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>
     })
 
     controllerRef.current = controller
+    const previousView = remountViewRef.current
+    remountViewRef.current = null
+    if (previousView?.filePath === filePath && previousView.workspacePath === workspacePath) {
+      if (previousView.focused) controller.focus()
+      controller.restore(previousView.state)
+    }
     contentRef.current = value
     appliedFocusedLineHighlightRef.current = meoSettings.focusedLineHighlight
     appliedGitChangeContextRef.current = gitChangeContext
@@ -206,11 +216,25 @@ export const MeoEditorHost = forwardRef<MeoEditorHostHandle, MeoEditorHostProps>
       pendingExternalValueRef.current = null
       isComposingRef.current = false
       onCompositionChangeRef.current?.(false)
+      const viewState = controller.capture()
+      if (viewState) remountViewRef.current = { filePath, workspacePath, state: viewState,
+        focused: editorShell.root.contains(document.activeElement) }
       controller.destroy()
       controllerRef.current = null
       recordOpenFileProfile('meo-host:cleanup:end', { filePath })
     }
   }, [environment, filePath, meoSettings.imageFolder, workspacePath])
+
+  useImperativeHandle(viewHandleRef, () => ({
+    capture: () => controllerRef.current?.capture() ?? null,
+    restore: (state) => {
+      // Moving an existing view must not replay its original "open diff at line"
+      // request after the asynchronous Git baseline finishes loading.
+      lastHandledGitDiffRequestKeyRef.current = gitDiffRequest?.requestKey ?? null
+      controllerRef.current?.restore(state)
+    },
+    focus: () => controllerRef.current?.focus(),
+  }), [gitDiffRequest?.requestKey])
 
   useEffect(() => {
     const controller = controllerRef.current

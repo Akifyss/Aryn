@@ -61,10 +61,6 @@
   box-shadow: var(--shadow-xs);
 }
 
-.agent-composer-shell.has-project-bar .agent-composer-field {
-  z-index: 2;
-}
-
 .agent-composer-placeholder {
   position: absolute;
   top: 8px;

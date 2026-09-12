@@ -94,16 +94,18 @@ describe('file tab boundary motion', () => {
     const activeFill = { setAttribute: vi.fn() }
     const outline = { setAttribute: vi.fn() }
     const shadow = { setAttribute: vi.fn() }
+    const contentClip = { setAttribute: vi.fn() }
     const paths = {
       activeFillPath: 'M active',
       outlinePath: 'M outline',
       surfacePath: 'M surface',
     }
 
-    expect(renderFileTabBoundaryMotionFrame({ activeFill, outline, shadow }, paths)).toBe(true)
+    expect(renderFileTabBoundaryMotionFrame({ activeFill, outline, shadow, contentClip }, paths)).toBe(true)
     expect(activeFill.setAttribute).toHaveBeenCalledWith('d', paths.activeFillPath)
     expect(outline.setAttribute).toHaveBeenCalledWith('d', paths.outlinePath)
     expect(shadow.setAttribute).toHaveBeenCalledWith('d', paths.surfacePath)
+    expect(contentClip.setAttribute).toHaveBeenCalledWith('d', paths.surfacePath)
   })
 
   it('falls back to React when the required boundary paths are not mounted', () => {
@@ -120,6 +122,14 @@ describe('file tab boundary motion', () => {
       shadow: null,
     }, paths)).toBe(false)
     expect(outline.setAttribute).not.toHaveBeenCalled()
+  })
+
+  it('clears the previous active fill when scrolling the selected tab out of view', () => {
+    const activeFill = { setAttribute: vi.fn() }
+    expect(renderFileTabBoundaryMotionFrame({ activeFill, outline: { setAttribute: vi.fn() }, shadow: null }, {
+      activeFillPath: null, outlinePath: 'M outline', surfacePath: 'M surface',
+    })).toBe(true)
+    expect(activeFill.setAttribute).toHaveBeenCalledWith('d', '')
   })
 
   it('parses CSS duration tokens without accepting ambiguous unitless values', () => {

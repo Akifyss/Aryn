@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 import type { AgentClientEvent, AgentInteractionResponse, AgentInteractionTimelineRecord, AgentPromptAttachment, AgentPromptSendOptions, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRequestScope, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState, OpenCodeSurfaceRequest, OpenCodeSurfaceResponse } from '@/features/agent/types'
 import type { AgentAvailability } from '@/features/agent/agent-definition'
 import type { ActiveWorkspaceContext, ConversationRecord, ConversationState, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '@/features/conversations/types'

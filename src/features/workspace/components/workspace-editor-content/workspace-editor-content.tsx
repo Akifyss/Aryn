@@ -1,4 +1,5 @@
 import { Suspense, type ReactNode, type Ref } from 'react'
+import type { EditorViewHandle } from '@/features/editor/lib/editor-view-handle'
 import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host/meo-editor-host'
 import {
   CodeEditor,
@@ -47,6 +48,7 @@ type WorkspaceFileEditorActions = {
 }
 
 type WorkspaceEditorContentProps = {
+  viewHandleRef?: Ref<EditorViewHandle>
   activeDiffTab: WorkspaceDiffTab | null
   activeFileTab: WorkspaceFileTab | null
   diffActions: WorkspaceDiffEditorActions
@@ -78,6 +80,7 @@ export function WorkspaceEditorContent({
   meoSettings,
   theme,
   workspacePath,
+  viewHandleRef,
 }: WorkspaceEditorContentProps) {
   const updateDiffTabDraft = useWorkspaceStore((state) => state.updateDiffTabDraft)
   const updateFileTabsContent = useWorkspaceStore((state) => state.updateFileTabsContent)
@@ -91,6 +94,7 @@ export function WorkspaceEditorContent({
     return (
       <Suspense fallback={<WorkspaceEditorLoadingState label='正在加载差异编辑器…' />}>
         <GitDiffEditor
+          viewHandleRef={viewHandleRef}
           key={activeDiffTab.id}
           diff={activeDiffTab.diff}
           draftContent={diffDraftContent}
@@ -122,6 +126,7 @@ export function WorkspaceEditorContent({
     return (
       <Suspense fallback={<WorkspaceEditorLoadingState />}>
         <MeoEditorHost
+          viewHandleRef={viewHandleRef}
           key={activeFileTab.id}
           ref={meoEditorHostRef}
           filePath={activeFileTab.filePath}
@@ -153,6 +158,7 @@ export function WorkspaceEditorContent({
       <WorkspaceEditorView leadingToolbarAction={leadingToolbarAction}>
         <Suspense fallback={<WorkspaceEditorLoadingState />}>
           <CodeEditor
+            viewHandleRef={viewHandleRef}
             key={activeFileTab.id}
             disabled={false}
             filePath={activeFileTab.filePath}

@@ -14,6 +14,7 @@ import {
 } from '@/features/workspace/lib/file-types'
 
 export type WorkspaceFileTab = {
+  workspacePath?: string | null
   content: string
   editorKind: WorkspaceFileTabEditorKind
   exists: boolean
@@ -55,21 +56,45 @@ export type WorkspaceDiffNavigationRequest = {
 export type WorkspaceTab = WorkspaceFileTab | WorkspaceDiffTab
 
 export type WorkspaceFixedPanelTab = {
+  /** Panel views may be ordinary closable tabs in a pane-based workbench. */
+  closable?: boolean
   content: ''
   editorKind: 'prose'
   exists: true
-  filePath: 'app://fixed/files' | 'app://fixed/git'
-  fixedTabKind: 'file-panel' | 'git-panel'
-  id: 'app://fixed/files' | 'app://fixed/git'
+  filePath: 'app://fixed/files' | 'app://fixed/git' | 'app://fixed/conversations'
+  fixedTabKind: 'file-panel' | 'git-panel' | 'conversation-panel'
+  id: 'app://fixed/files' | 'app://fixed/git' | 'app://fixed/conversations'
   isDirty: false
   kind: 'fixed-panel'
   savedContent: ''
 }
 
-export type WorkspaceDisplayTab = WorkspaceTab | WorkspaceFixedPanelTab
+// Conversation views belong to pane navigation, never to the file draft store.
+export type WorkspaceConversationTab = {
+  id: string
+  kind: 'conversation'
+  conversationId: string | null
+  title: string
+  filePath: string
+  exists: true
+  isDirty: false
+}
+
+// A presentation-only tab for an empty pane. Never persisted as a document.
+export type WorkspaceFallbackTab = {
+  id: string
+  kind: 'fallback'
+  title: string
+  filePath: string
+  exists: true
+  isDirty: false
+}
+
+export type WorkspaceDisplayTab = WorkspaceTab | WorkspaceFixedPanelTab | WorkspaceConversationTab | WorkspaceFallbackTab
 export type TabDropPosition = 'before' | 'after'
 
 type WorkspaceState = {
+  tabRenames: Array<{ from: string; to: string }>
   activeTabId: string | null
   currentPath: string | null
   openTabs: WorkspaceTab[]
@@ -79,11 +104,12 @@ type WorkspaceState = {
   // File tabs are view instances over a shared per-file draft. These mutations
   // intentionally fan out to every open tab for the same file path.
   markFileTabsMissing: (path: string) => void
-  markDiffTabSaved: (tabId: string, savedContent: string) => void
-  markFileTabsSaved: (path: string, savedContent: string) => void
+  markDiffTabSaved: (tabId: string, savedContent: string, previousContent?: string) => void
+  markFileTabsSaved: (path: string, savedContent: string, previousTabs?: readonly WorkspaceTab[]) => void
   moveTab: (movingId: string, targetId: string, position: TabDropPosition) => void
   openDiffTab: (tab: WorkspaceDiffTab, activate?: boolean) => void
   openTab: (tab: {
+    workspacePath?: string | null
     content: string
     editorKind: WorkspaceFileTabEditorKind
     exists?: boolean
@@ -204,8 +230,8 @@ function mapWorkspaceFileTabsByPath(
   return { didChange, nextTabs }
 }
 
-export function reorderWorkspaceTabs(
-  openTabs: WorkspaceTab[],
+export function reorderWorkspaceTabs<T extends { id: string }>(
+  openTabs: T[],
   movingId: string,
   targetId: string,
   position: TabDropPosition,
@@ -235,6 +261,7 @@ export function reorderWorkspaceTabs(
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
+  tabRenames: [],
   activeTabId: null,
   currentPath: null,
   openTabs: [],
@@ -255,7 +282,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
     return didChange ? { openTabs: nextTabs } : state
   }),
-  markDiffTabSaved: (tabId, savedContent) => set((state) => {
+  markDiffTabSaved: (tabId, savedContent, previousContent = savedContent) => set((state) => {
     let didChange = false
 
     const openTabs = state.openTabs.map((tab) => {
@@ -263,14 +290,16 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         return tab
       }
 
+      const currentContent = tab.draftContent ?? tab.diff.modifiedContent
+      const content = currentContent === previousContent ? savedContent : currentContent
       const nextTab = {
         ...tab,
         diff: {
           ...tab.diff,
           modifiedContent: savedContent,
         },
-        draftContent: null,
-        isDirty: false,
+        draftContent: content === savedContent ? null : content,
+        isDirty: content !== savedContent,
       }
 
       if (
@@ -287,13 +316,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
     return didChange ? { openTabs } : state
   }),
-  markFileTabsSaved: (path, savedContent) => set((state) => {
+  markFileTabsSaved: (path, savedContent, previousTabs) => set((state) => {
     const { didChange, nextTabs } = mapWorkspaceFileTabsByPath(state.openTabs, path, (tab) => {
+      // A save may finish after either pane has produced another edit.
+      const previousTab = previousTabs?.find(item => item.id === tab.id && item.kind === 'file')
+      const changedDuringSave = previousTab?.kind === 'file' && previousTab.content !== tab.content
+      const content = tab.isDirty || changedDuringSave ? tab.content : savedContent
       const nextTab: WorkspaceFileTab = {
         ...tab,
-        content: savedContent,
+        content,
         exists: true,
-        isDirty: false,
+        isDirty: isEditableWorkspaceFileViewMode(tab.viewMode) && content !== savedContent,
         savedContent,
       }
 
@@ -316,7 +349,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
     return nextTabs === state.openTabs ? state : { openTabs: nextTabs }
   }),
-  openTab: ({ content, editorKind, exists = true, filePath, gitDiffRequest, viewMode }) => set((state) => {
+  openTab: ({ content, editorKind, exists = true, filePath, gitDiffRequest, viewMode, workspacePath }) => set((state) => {
     const nextViewMode = normalizeWorkspaceFileViewMode(filePath, editorKind, viewMode)
     const tabId = createWorkspaceFileTabId(filePath, nextViewMode)
     const existingTab = state.openTabs.find((tab) => tab.id === tabId)
@@ -353,6 +386,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
           kind: 'file',
           savedContent: content,
           viewMode: nextViewMode,
+          ...(workspacePath !== undefined ? { workspacePath } : {}),
         },
       ],
     }
@@ -462,6 +496,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     return {
       activeTabId: nextActiveTabId,
       openTabs: nextTabs,
+      tabRenames: renamedTabs.flatMap((tab, index) => tab.id === state.openTabs[index].id
+        ? [] : [{ from: state.openTabs[index].id, to: tab.id }]),
     }
   }),
   replaceTabs: (openTabs, activeTabId) => set({ activeTabId, openTabs }),

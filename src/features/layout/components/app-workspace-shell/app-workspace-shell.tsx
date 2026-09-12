@@ -4,7 +4,6 @@ import { AppIconButton } from '@/components/app-icon-button'
 import {
   AppChromeSearchButton,
   AppChromeSidebarToggleButton,
-  AppLayoutModeSwitch,
 } from '@/features/layout/components/app-chrome-controls/app-chrome-controls'
 import { AppShell } from '@/features/layout/components/app-shell/app-shell'
 import type { useShellLayoutController } from '@/features/layout/hooks/use-shell-layout-controller'
@@ -29,17 +28,15 @@ import {
 const SHOW_COLLAPSED_FIXED_TAB_ACTIONS = false
 
 type AppWorkspaceShellProps = {
-  appLayout: AppLayoutPreference
+  appLayout: Exclude<AppLayoutPreference, 'duo'>
   children?: ReactNode
   isDarkTheme: boolean
-  isEditorLayoutSwitchDisabled: boolean
   isModalLayerOpen: boolean
   layout: ReturnType<typeof useShellLayoutController>
   panels: AppWorkspacePanelConfiguration
   projectMenu: ProjectMenuLayerConfiguration
   shouldExposeRightPanelTools: boolean
   onActivateFileTab: (tabId: string) => void
-  onLayoutChange: (layout: AppLayoutPreference) => void
   onRequestWindowClose: () => void
 }
 
@@ -47,14 +44,12 @@ export function AppWorkspaceShell({
   appLayout,
   children,
   isDarkTheme,
-  isEditorLayoutSwitchDisabled,
   isModalLayerOpen,
   layout,
   panels,
   projectMenu,
   shouldExposeRightPanelTools,
   onActivateFileTab,
-  onLayoutChange,
   onRequestWindowClose,
 }: AppWorkspaceShellProps) {
   const handleCollapsedFixedTabClick = (tab: AgentLayoutFixedTab) => {
@@ -68,13 +63,6 @@ export function AppWorkspaceShell({
       isDarkTheme={isDarkTheme}
       isModalLayerOpen={isModalLayerOpen}
       layout={layout}
-      layoutModeSwitch={(
-        <AppLayoutModeSwitch
-          isEditorDisabled={isEditorLayoutSwitchDisabled}
-          value={appLayout}
-          onValueChange={onLayoutChange}
-        />
-      )}
       leftChromeSearchAction={(
         <AppChromeSearchButton
           onClick={panels.navigation.onOpenCommandPalette}

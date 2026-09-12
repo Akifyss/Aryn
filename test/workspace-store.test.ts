@@ -685,6 +685,16 @@ describe('useWorkspaceStore', () => {
       isDirty: false,
       kind: 'diff',
     })
+
+    // A peer pane may edit the same draft while this save is still pending.
+    store.updateDiffTabDraft(diffTabId, 'saving')
+    store.updateDiffTabDraft(diffTabId, 'newer edit')
+    store.markDiffTabSaved(diffTabId, 'saving')
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({
+      diff: { modifiedContent: 'saving' }, draftContent: 'newer edit', isDirty: true,
+    })
+    store.markDiffTabSaved(diffTabId, 'newer edit')
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({ draftContent: null, isDirty: false })
   })
 
   it('never creates editable drafts for non-text diff presentations', () => {

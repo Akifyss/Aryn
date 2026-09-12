@@ -16,6 +16,8 @@ import {
 import {
   AppItem,
   AppItemActionButton,
+  AppItemOpenInPaneButton,
+  type AppItemOpenInPaneAction,
 } from '@/components/app-item'
 import {
   DEFAULT_TREE_ROW_SIZE,
@@ -47,6 +49,11 @@ import './styles.css'
 
 type GitChangeSectionKind = 'staged' | 'unstaged' | 'pulled' | 'commit'
 
+type GitChangeOtherPaneAction = {
+  direction: AppItemOpenInPaneAction['direction']
+  onOpen: (change: GitDisplayChange) => void
+}
+
 export type GitChangeRowProps = {
   change: GitDisplayChange
   iconTheme: WorkspaceIconTheme | null
@@ -57,6 +64,7 @@ export type GitChangeRowProps = {
   onOpenDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
   onOpenMeoDiff: (change: GitChangeItem) => void
+  otherPaneAction?: GitChangeOtherPaneAction
   onStage: (filePaths: string[]) => void
   onUnstage: (filePaths: string[]) => void
 }
@@ -68,6 +76,7 @@ function GitRowActions({
   onDiscard,
   onOpenFile,
   onOpenMeoDiff,
+  otherPaneAction,
   isFolder,
   change,
 }: {
@@ -77,6 +86,7 @@ function GitRowActions({
   onDiscard?: () => void
   onOpenFile?: () => void
   onOpenMeoDiff?: () => void
+  otherPaneAction?: AppItemOpenInPaneAction
   isFolder?: boolean
   change?: GitDisplayChange
 }) {
@@ -88,12 +98,13 @@ function GitRowActions({
   const showUnstage = kind === 'staged'
   const showStageControls = kind === 'unstaged'
 
-  if (!showOpenFile && !showMeoDiff && !showUnstage && !showStageControls) {
+  if (!otherPaneAction && !showOpenFile && !showMeoDiff && !showUnstage && !showStageControls) {
     return null
   }
 
   return (
     <>
+      {otherPaneAction ? <AppItemOpenInPaneButton {...otherPaneAction} /> : null}
       {showOpenFile ? (
         <AppItemActionButton
           aria-label='打开文件'
@@ -222,6 +233,7 @@ export function GitChangeRow({
   onOpenDiff,
   onOpenFile,
   onOpenMeoDiff,
+  otherPaneAction,
   onStage,
   onUnstage,
 }: GitChangeRowProps) {
@@ -249,6 +261,10 @@ export function GitChangeRow({
         <GitRowActions
           kind={kind}
           change={change}
+          otherPaneAction={otherPaneAction ? {
+            direction: otherPaneAction.direction,
+            onOpen: () => otherPaneAction.onOpen(change),
+          } : undefined}
           onStage={() => onStage([change.path])}
           onUnstage={() => onUnstage([change.path])}
           onDiscard={() => isChange && onDiscardMany([change])}
@@ -288,6 +304,7 @@ export function GitChangeSection({
   onOpenCommitFileDiff,
   onOpenMeoDiff,
   onOpenFile,
+  otherPaneAction,
   iconTheme,
   scrollElementRef,
 }: {
@@ -303,6 +320,7 @@ export function GitChangeSection({
   onOpenCommitFileDiff?: (change: GitCommitFileChange) => void
   onOpenMeoDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
+  otherPaneAction?: GitChangeOtherPaneAction
   iconTheme: WorkspaceIconTheme | null
   scrollElementRef: RefObject<HTMLDivElement | null>
 }) {
@@ -368,6 +386,7 @@ export function GitChangeSection({
             ) : (
               <GitChangeRow
                 change={row.change}
+                otherPaneAction={otherPaneAction}
                 iconTheme={iconTheme}
                 kind={kind}
                 layout={layout}

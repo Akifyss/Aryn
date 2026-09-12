@@ -65,6 +65,8 @@ export function FlatAgentSessionTree({
   onRequestClose,
   id = 'agent-session-tree',
   isFloating = false,
+  openSessionsInPlace = true,
+  otherPaneAction,
   menuPortalTarget,
 }: AgentSessionTreeViewProps) {
   const {
@@ -207,6 +209,10 @@ export function FlatAgentSessionTree({
         itemAs='div'
         label={formatAgentSessionLabel(session)}
         menuPortalTarget={menuPortalTarget}
+        otherPaneAction={otherPaneAction ? {
+          direction: otherPaneAction.direction,
+          onOpen: () => otherPaneAction.onOpenSession(session.agentId, session.path, formatAgentSessionLabel(session)),
+        } : undefined}
         onCancelRename={() => setRenamingSessionPath(null)}
         onDelete={() => {
           if (operationWorkspacePath) {
@@ -217,7 +223,7 @@ export function FlatAgentSessionTree({
         onOpen={() => {
           setRenamingSessionPath(null)
 
-          if (canOpenAgentProjectSessionInPlace(
+          if (openSessionsInPlace && canOpenAgentProjectSessionInPlace(
             isCurrentProjectWorkspace,
             isWorkspaceContextPreparing,
           )) {

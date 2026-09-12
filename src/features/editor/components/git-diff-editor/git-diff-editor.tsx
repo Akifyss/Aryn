@@ -1,12 +1,15 @@
 import {
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
   type ReactNode,
+  type Ref,
 } from 'react'
+import type { EditorViewHandle } from '@/features/editor/lib/editor-view-handle'
 import {
   FileDiff as PierreFileDiff,
   getSingularPatch,
@@ -417,6 +420,7 @@ function PierreTextDiff({
   onDraftChange,
   onSave,
   theme,
+  viewHandleRef,
 }: {
   diff: GitFileDiffResult
   initialDraftContent: string
@@ -426,15 +430,34 @@ function PierreTextDiff({
   onDraftChange: (content: string) => void
   onSave: () => void
   theme: AppTheme
+  viewHandleRef?: Ref<EditorViewHandle>
 }) {
   const [surfaceModifiedContent, setSurfaceModifiedContent] = useState(initialDraftContent)
   const draftContentRef = useRef(initialDraftContent)
   const lastBaselineRef = useRef(diff.modifiedContent)
   const lastHandledNavigationRequestKeyRef = useRef<string | null>(null)
   const surfaceNodeRef = useRef<HTMLElement | null>(null)
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const editingRef = useRef<Editor<undefined> | null>(null)
+  const [attachedEditor, setAttachedEditor] = useState<Editor<undefined> | null>(null)
+  const [surfaceReady, setSurfaceReady] = useState(false)
   const onCompositionChangeRef = useRef(onCompositionChange)
   const onDraftChangeRef = useRef(onDraftChange)
   const onSaveRef = useRef(onSave)
+  useImperativeHandle<EditorViewHandle | null, EditorViewHandle | null>(viewHandleRef, () => surfaceReady && (!isEditable || attachedEditor) ? {
+    capture: () => ({ kind: 'diff' as const, view: editingRef.current?.getState() ?? null,
+      scrollTop: viewportRef.current?.scrollTop ?? 0, scrollLeft: viewportRef.current?.scrollLeft ?? 0 }),
+    restore: (state) => {
+      if (state.kind !== 'diff') return
+      lastHandledNavigationRequestKeyRef.current = navigationRequest?.requestKey ?? null
+      if (state.view) editingRef.current?.setState(state.view)
+      viewportRef.current?.scrollTo({ top: state.scrollTop, left: state.scrollLeft, behavior: 'instant' })
+    },
+    focus: () => {
+      if (editingRef.current) editingRef.current.focus({ preventScroll: true })
+      else viewportRef.current?.focus({ preventScroll: true })
+    },
+  } : null, [surfaceReady, attachedEditor, isEditable, navigationRequest?.requestKey])
 
   useEffect(() => {
     onCompositionChangeRef.current = onCompositionChange
@@ -492,9 +515,15 @@ function PierreTextDiff({
       node.removeEventListener('keydown', handleKeyDown)
       node.removeEventListener('compositionstart', handleCompositionStart)
       node.removeEventListener('compositionend', handleCompositionEnd)
-      if (surfaceNodeRef.current === node) surfaceNodeRef.current = null
+      if (surfaceNodeRef.current === node) {
+        surfaceNodeRef.current = null
+        editingRef.current = null
+        setAttachedEditor(null)
+        setSurfaceReady(false)
+      }
       return
     }
+    setSurfaceReady(true)
 
     if (
       !navigationRequest
@@ -510,6 +539,7 @@ function PierreTextDiff({
     )
 
     window.requestAnimationFrame(() => {
+      if (lastHandledNavigationRequestKeyRef.current === navigationRequest.requestKey || !node.isConnected) return
       if (revealNavigationTarget(node, target)) {
         lastHandledNavigationRequestKeyRef.current = navigationRequest.requestKey
       }
@@ -576,6 +606,10 @@ function PierreTextDiff({
 
   const editorOptions = useMemo<EditorOptions<undefined>>(() => ({
     historyMaxEntries: 100,
+    onAttach(editor) {
+      editingRef.current = editor
+      setAttachedEditor(editor)
+    },
     onChange(file) {
       if (file.contents === draftContentRef.current) return
       draftContentRef.current = file.contents
@@ -595,6 +629,7 @@ function PierreTextDiff({
       className='git-diff-scroll-area'
       contentClassName='git-diff-pierre-content'
       viewportClassName='git-diff-pierre-viewport'
+      viewportRef={viewportRef}
     >
       <PierreDiffSurface
         key={surfaceKey}
@@ -1450,6 +1485,7 @@ export function GitDiffEditor({
   onStageChange,
   onUnstageChange,
   theme = 'auto',
+  viewHandleRef,
 }: {
   diff: GitFileDiffResult
   draftContent: string
@@ -1462,6 +1498,7 @@ export function GitDiffEditor({
   onStageChange: (change: GitChangeItem) => void
   onUnstageChange: (change: GitChangeItem) => void
   theme?: AppTheme
+  viewHandleRef?: Ref<EditorViewHandle>
 }) {
   const [isComposing, setIsComposing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -1577,6 +1614,7 @@ export function GitDiffEditor({
       ) : presentation.kind === 'text' ? (
         hasTextContentDifference ? (
           <PierreTextDiff
+            viewHandleRef={viewHandleRef}
             diff={diff}
             initialDraftContent={initialDraftContent}
             isEditable={isEditable}

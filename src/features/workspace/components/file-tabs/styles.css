@@ -27,6 +27,10 @@
 .app-shell[data-app-layout='editor']
   .panel-editor
   > .editor-frame
+  > .file-tabs-shell,
+.app-shell[data-app-layout='duo']
+  .duo-pane
+  > .editor-frame
   > .file-tabs-shell {
   --file-tabs-rail-surface: var(--sidebar);
 }
@@ -175,6 +179,15 @@
   -webkit-app-region: no-drag;
 }
 
+.file-tabs-new-action {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding-inline: 4px;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
 .app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-actions {
   padding: 0 6px;
 }
@@ -185,6 +198,7 @@
 
 .file-tab {
   --file-tab-actions-surface: var(--file-tabs-rail-surface);
+  --file-tab-actions-fade-width: 16px;
 
   position: relative;
   display: flex;
@@ -199,6 +213,15 @@
   -webkit-app-region: no-drag;
   z-index: 1;
 }
+
+.file-tab[data-movable='true'] {
+  --file-tab-actions-gap: 2px;
+  /* Size to the title. Only keep enough room for the leading icon and hover
+     actions; the fade overlays the title tail without changing tab geometry. */
+  min-width: 96px;
+}
+
+.file-tab[data-movable='true'] .file-tab-actions { gap: var(--file-tab-actions-gap); }
 
 .file-tab.is-pinned {
   max-width: min(288px, 42vw);
@@ -229,6 +252,7 @@
 }
 
 .file-tabs-scroller[data-dragging='true'] .file-tab-actions,
+.file-tabs-scroller[data-dragging='true'] .file-tab:has(:focus-visible) .file-tab-actions,
 .file-tabs-scroller[data-dragging='true'] .file-tab:hover .file-tab-actions,
 .file-tabs-scroller[data-dragging='true'] .file-tab.is-dirty .file-tab-actions {
   opacity: 0;
@@ -353,6 +377,9 @@
 .file-tab-trigger {
   position: relative;
   display: flex;
+  /* Base UI measures this trigger for the outline; include the outer tab's
+     minimum width so the outline and absolutely positioned actions agree. */
+  flex: 1 1 auto;
   align-items: center;
   gap: 4px;
   min-width: 0;
@@ -406,53 +433,58 @@
 .file-tab-actions {
   position: absolute;
   right: 4px;
-  top: 0;
-  bottom: 0;
+  /* Keep action surfaces inside both the SVG outline and keyboard focus ring.
+     Equal insets preserve the buttons' vertical alignment with the title. */
+  top: 3px;
+  bottom: 3px;
   display: flex;
   align-items: center;
   flex-shrink: 0;
   box-sizing: border-box;
-  padding: 0 0 var(--file-tab-content-bottom-inset) 12px;
+  padding: 0 0 var(--file-tab-content-bottom-inset);
+  border-top-right-radius: var(--file-tab-radius);
   opacity: 0;
   pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    var(--file-tab-actions-surface) 0 calc(100% - 1px),
-    transparent calc(100% - 1px)
-  );
+  background: var(--file-tab-actions-surface);
   transition: opacity 140ms ease;
   z-index: 10;
 }
 
-.file-tab.is-dirty:not(:hover):not(:focus-within) .file-tab-actions {
+.file-tab.is-dirty:not(:hover):not(:has(:focus-visible)) .file-tab-actions {
   background: transparent;
 }
 
-/* Background gradient to fade out text behind actions */
+/* Fade immediately before the entire action group, including its move button. */
 .file-tab-actions::before {
   content: "";
   position: absolute;
-  left: -16px;
+  left: calc(0px - var(--file-tab-actions-fade-width));
   top: 0;
-  bottom: 1px;
-  width: 16px;
+  bottom: 0;
+  width: var(--file-tab-actions-fade-width);
   background: linear-gradient(to right, transparent, var(--file-tab-actions-surface));
   pointer-events: none;
 }
 
-.file-tab.is-dirty:not(:hover):not(:focus-within) .file-tab-actions::before {
+.file-tab.is-dirty:not(:hover):not(:has(:focus-visible)) .file-tab-actions::before {
   display: none;
 }
 
 .file-tab:hover .file-tab-actions,
-.file-tab:focus-within .file-tab-actions,
+.file-tab:has(:focus-visible) .file-tab-actions,
 .file-tab.is-dirty .file-tab-actions {
   opacity: 1;
   pointer-events: auto;
 }
 
+.file-tab.is-dirty:not(:hover):not(:has(:focus-visible)) .file-tab-move {
+  /* Like the close button, remain reachable by Tab while visually hidden. */
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* When dirty but NOT hovered, hide the functional icons to show the dot */
-.file-tab.is-dirty:not(:hover):not(:focus-within) .file-tab-close svg {
+.file-tab.is-dirty:not(:hover):not(:has(:focus-visible)) .file-tab-close svg {
   opacity: 0;
   pointer-events: none;
 }
@@ -507,7 +539,7 @@
 }
 
 .file-tab.is-dirty:hover .file-tab-dirty-indicator,
-.file-tab.is-dirty:focus-within .file-tab-dirty-indicator,
+.file-tab.is-dirty:has(:focus-visible) .file-tab-dirty-indicator,
 .file-tab.is-dirty .file-tab-close:hover .file-tab-dirty-indicator,
 .file-tab.is-dirty .file-tab-close:focus-visible .file-tab-dirty-indicator {
   opacity: 0;

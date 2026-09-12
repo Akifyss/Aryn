@@ -151,6 +151,18 @@ function createBootstrapFixture(activeContext: ActiveWorkspaceContext) {
 }
 
 describe('application bootstrap restoration', () => {
+  it.each<ActiveWorkspaceContext>([
+    { kind: 'conversationDraft' },
+    { kind: 'conversation', conversationId: 'legacy' },
+    { kind: 'project', projectId: 'removed-project' },
+  ])('restores the last project in project-only mode without the legacy Tab or standalone restore: %j', async context => {
+    const fixture = createBootstrapFixture(context)
+    await restoreAppBootstrapState(fixture.api, { ...fixture.options, projectWorkspace: true }, () => false)
+    expect(fixture.options.setActiveWorkspaceContext).toHaveBeenLastCalledWith({ kind: 'project', projectId: 'project-1' })
+    expect(fixture.options.connectWorkspace).toHaveBeenCalledOnce()
+    expect(fixture.options.restoreWorkspaceTabs).not.toHaveBeenCalled()
+    expect(fixture.options.restoreInitialConversationContext).not.toHaveBeenCalled()
+  })
   it('hydrates persisted state and restores the active project', async () => {
     const fixture = createBootstrapFixture({
       kind: 'project',

@@ -34,6 +34,7 @@ import {
   formatCommitRelativeTime,
   getCommitChangeCountLabel,
   getCommitMeta,
+  isScopedGitChange,
   type GitHistorySelection,
 } from '../git-panel-model'
 import {
@@ -53,6 +54,11 @@ type GitHistoryLoadState = {
   commits: GitCommitItem[]
   error: string | null
   isLoading: boolean
+}
+
+export type GitHistoryOtherPaneAction = {
+  direction: 'left' | 'right'
+  onOpenCommitFileDiff: (commitHash: string, change: GitCommitFileChange) => void
 }
 
 type GitRevertActionProps = {
@@ -271,6 +277,7 @@ export function GitHistorySection({
   scrollElementRef,
   onExpandedChange,
   onOpenCommitFileDiff,
+  otherPaneAction,
   onRevertCommit,
   onToggleCommit,
 }: GitHistoryLoadState & GitRevertActionProps & {
@@ -283,6 +290,7 @@ export function GitHistorySection({
   scrollElementRef: RefObject<HTMLDivElement | null>
   onExpandedChange: (isExpanded: boolean) => void
   onOpenCommitFileDiff: (commitHash: string, change: GitCommitFileChange) => void
+  otherPaneAction?: GitHistoryOtherPaneAction
   onToggleCommit: (commitHash: string) => void
 }) {
   const rows = useMemo(() => createGitHistorySectionRows({
@@ -337,6 +345,10 @@ export function GitHistorySection({
                     layout='list'
                     onDiscardMany={ignoreChanges}
                     onOpenCommitFileDiff={(change) => onOpenCommitFileDiff(row.commitHash, change)}
+                    otherPaneAction={otherPaneAction ? {
+                      direction: otherPaneAction.direction,
+                      onOpen: () => otherPaneAction.onOpenCommitFileDiff(row.commitHash, row.change),
+                    } : undefined}
                     onOpenDiff={ignoreChange}
                     onOpenFile={ignoreFilePath}
                     onOpenMeoDiff={ignoreChange}
@@ -411,6 +423,7 @@ export function GitCommitDetail({
   layout,
   layoutAction,
   onOpenCommitFileDiff,
+  otherPaneAction,
   onRevertCommit,
   revertDisabledReason,
   selectedCommitHash,
@@ -423,6 +436,7 @@ export function GitCommitDetail({
   layout: GitPanelLayout
   layoutAction: ReactNode
   onOpenCommitFileDiff: (commitHash: string, change: GitCommitFileChange) => void
+  otherPaneAction?: GitHistoryOtherPaneAction
   selectedCommitHash: string | null
   summary: GitCommitItem | null
 }) {
@@ -505,6 +519,12 @@ export function GitCommitDetail({
             scrollElementRef={viewportRef}
             onDiscardMany={ignoreChanges}
             onOpenCommitFileDiff={(change) => onOpenCommitFileDiff(details.hash, change)}
+            otherPaneAction={otherPaneAction ? {
+              direction: otherPaneAction.direction,
+              onOpen: (change) => {
+                if (!isScopedGitChange(change)) otherPaneAction.onOpenCommitFileDiff(details.hash, change)
+              },
+            } : undefined}
             onOpenDiff={ignoreChange}
             onOpenMeoDiff={ignoreChange}
             onOpenFile={ignoreFilePath}

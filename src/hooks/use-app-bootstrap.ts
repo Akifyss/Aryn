@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   ActiveWorkspaceContext,
   ConversationState,
@@ -16,6 +16,7 @@ type AppBootstrapApi = Pick<
 >
 
 type AppBootstrapOptions = {
+  projectWorkspace?: boolean
   connectWorkspace: (
     workspacePath: string,
     options?: { intent?: WorkspaceNavigationIntent },
@@ -86,14 +87,15 @@ export async function restoreAppBootstrapState(
   options.hydrateConversationState(conversationState)
   options.setActiveWorkspaceContext(activeContext)
 
-  const activeProject = activeContext.kind === 'project'
+  const activeProject = (activeContext.kind === 'project'
     ? projectState.projects.find((project) => project.id === activeContext.projectId) ?? null
-    : projectState.projects.find((project) => project.id === projectState.lastProjectId) ?? null
+    : projectState.projects.find((project) => project.id === projectState.lastProjectId) ?? null)
+    ?? (options.projectWorkspace ? projectState.projects.find((project) => project.id === projectState.lastProjectId) ?? projectState.projects[0] ?? null : null)
 
   await options.navigationCoordinator.run(intent, async (stillCurrent) => {
     const shouldApply = () => stillCurrent() && isNavigationCurrent()
 
-    if (await options.restoreInitialConversationContext(
+    if (!options.projectWorkspace && await options.restoreInitialConversationContext(
       activeContext,
       conversationState,
       { intent, isCancelled: () => !shouldApply() },
@@ -105,7 +107,7 @@ export async function restoreAppBootstrapState(
       return
     }
 
-    if (activeContext.kind === 'conversationDraft') {
+    if (!options.projectWorkspace && activeContext.kind === 'conversationDraft') {
       options.setStatusMessage('新对话')
       return
     }
@@ -117,9 +119,10 @@ export async function restoreAppBootstrapState(
     }
 
     try {
+      if (options.projectWorkspace) options.setActiveWorkspaceContext({ kind: 'project', projectId: activeProject.id })
       const didConnect = await options.connectWorkspace(activeProject.path, { intent })
 
-      if (didConnect && shouldApply()) {
+      if (!options.projectWorkspace && didConnect && shouldApply()) {
         await options.restoreWorkspaceTabs(
           activeProject.path,
           activeProject.lastFilePath,
@@ -140,6 +143,7 @@ export async function restoreAppBootstrapState(
 
 export function useAppBootstrap(options: AppBootstrapOptions) {
   const initialOptionsRef = useRef(options)
+  const [isComplete, setIsComplete] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -156,7 +160,9 @@ export function useAppBootstrap(options: AppBootstrapOptions) {
       window.appApi,
       initialOptionsRef.current,
       () => cancelled,
-    ).catch((error: unknown) => {
+    ).then(() => {
+      if (!cancelled) setIsComplete(true)
+    }).catch((error: unknown) => {
       if (cancelled) {
         return
       }
@@ -171,4 +177,5 @@ export function useAppBootstrap(options: AppBootstrapOptions) {
       cancelled = true
     }
   }, [])
+  return isComplete
 }

@@ -106,7 +106,7 @@ describe('workspace workbench ownership', () => {
 
     expect(appSource).toContain('createWorkspaceNavigationConfiguration({')
     expect(appSource).toContain('createWorkspaceEditorConfiguration({')
-    expect(appSource).toContain('<AppWorkspaceShell')
+    expect(appSource).toContain('<DuoWorkspaceShell')
     expect(appSource).not.toContain('<WorkspaceNavigationSurface')
     expect(appSource).not.toContain('<WorkspaceEditorWorkbench')
     expect(appSource).not.toContain('function renderWorkspaceTreePanel')

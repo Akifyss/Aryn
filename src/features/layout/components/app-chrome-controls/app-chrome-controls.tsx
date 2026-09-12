@@ -1,48 +1,5 @@
-import { Chat3Line, FolderLine, LayoutLeftLine, SearchLine } from '@mingcute/react'
+import { LayoutLeftLine, SearchLine } from '@mingcute/react'
 import { AppIconButton } from '@/components/app-icon-button'
-import { SegmentedTabs } from '@/components/ui/segmented-tabs/segmented-tabs'
-import type { AppLayoutPreference } from '@/hooks/use-settings-store'
-import './styles.css'
-
-type AppLayoutModeSwitchProps = {
-  isEditorDisabled: boolean
-  value: AppLayoutPreference
-  onValueChange: (value: AppLayoutPreference) => void
-}
-
-export function AppLayoutModeSwitch({
-  isEditorDisabled,
-  value,
-  onValueChange,
-}: AppLayoutModeSwitchProps) {
-  return (
-    <SegmentedTabs<AppLayoutPreference>
-      ariaLabel='Layout mode'
-      className='app-layout-mode-switch'
-      value={value}
-      options={[
-        {
-          ariaLabel: 'Agent mode',
-          icon: <Chat3Line aria-hidden='true' />,
-          tooltip: 'Agent 模式',
-          value: 'agent',
-        },
-        {
-          ariaLabel: isEditorDisabled ? 'Editor mode, select a workspace first' : 'Editor mode',
-          disabled: isEditorDisabled,
-          icon: <FolderLine aria-hidden='true' />,
-          tooltip: isEditorDisabled ? '先选择工作目录' : '编辑器模式',
-          value: 'editor',
-        },
-      ]}
-      onValueChange={(nextValue) => {
-        if (nextValue === 'agent' || (nextValue === 'editor' && !isEditorDisabled)) {
-          onValueChange(nextValue)
-        }
-      }}
-    />
-  )
-}
 
 type AppChromeSearchButtonProps = {
   onClick: () => void

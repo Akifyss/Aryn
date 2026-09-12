@@ -19,6 +19,12 @@ export type AgentProjectSwitchMenuOptions = {
 }
 
 export type AgentSessionTreeProps = {
+  scope?: 'all' | 'current-project'
+  openSessionsInPlace?: boolean
+  otherPaneAction?: {
+    direction: 'left' | 'right'
+    onOpenSession: (agentId: AgentId, sessionPath: string, sessionLabel: string) => void
+  }
   className?: string
   onRequestClose?: () => void
   onOpenProjectAddMenu?: (anchorRect?: AgentMenuAnchorRect) => void

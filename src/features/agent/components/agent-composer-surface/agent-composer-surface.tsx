@@ -16,13 +16,10 @@ import {
   AgentQueuedComposerTray,
   type AgentQueuedComposerMessage,
 } from '@/features/agent/components/agent-queued-composer-tray/agent-queued-composer-tray'
-import {
-  AgentProjectSwitchTrigger,
-} from '@/features/agent/components/agent-session-tree/agent-session-tree'
 import { useAgentContext } from '@/features/agent/components/agent-sidebar/agent-sidebar-context'
+import { AgentProjectSwitchTrigger } from '@/features/agent/components/agent-session-tree/agent-session-tree'
 import { resolveAgentComposerWorkspacePresentation } from '@/features/agent/lib/agent-surface-state'
 import type { AgentWorkspaceState } from '@/features/agent/types'
-import type { ProjectRecord } from '@/features/workspace/types'
 import {
   AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS,
   getAlternateRunningPromptBehavior,
@@ -61,14 +58,12 @@ function AgentInlineSpinner() {
 }
 
 type AgentComposerSurfaceProps = {
-  activeProject: ProjectRecord | null
-  isNewConversation: boolean
+  isNewConversation?: boolean
   localOverlayRoot: HTMLDivElement | null
 }
 
 export function AgentComposerSurface({
-  activeProject,
-  isNewConversation,
+  isNewConversation = false,
   localOverlayRoot,
 }: AgentComposerSurfaceProps) {
   const runningPromptEnterBehavior = useSettingsStore((state) => state.agent.runningPromptEnterBehavior)
@@ -105,10 +100,11 @@ export function AgentComposerSurface({
     modelFieldRef,
     modelInputValue,
     modelPresentationRuntime,
-    onOpenProjectSwitchMenu,
     onOpenProviderSettings,
+    onOpenProjectSwitchMenu,
     openCodeNativeSession,
     pendingInteraction,
+    projectState,
     removeComposerAttachment,
     resolvedSelectedProviderValue,
     respondToInteraction,
@@ -154,6 +150,18 @@ export function AgentComposerSurface({
       ? '正在发送消息'
       : '发送消息'
 
+  const activeProject = activeWorkspaceContext.kind === 'project'
+    ? projectState.projects.find(project => project.id === activeWorkspaceContext.projectId) ?? null
+    : null
+  const projectSwitchBar = isNewConversation && activeProject ? (
+    <div className='agent-new-project-bar'>
+      <AgentProjectSwitchTrigger
+        activeProject={activeProject}
+        onOpenProjectSwitchMenu={onOpenProjectSwitchMenu}
+        size='sm'
+      />
+    </div>
+  ) : null
   const composerHeader = composerAttachments.length > 0 || attachmentCapabilityMessage ? (
     <ScrollShadow
       hideScrollBar
@@ -228,16 +236,6 @@ export function AgentComposerSurface({
       request={pendingInteraction}
       onRespond={respondToInteraction}
     />
-  ) : null
-  const projectSwitchBar = isNewConversation ? (
-    <div className='agent-new-project-bar'>
-      <AgentProjectSwitchTrigger
-        activeProject={activeWorkspaceContext.kind === 'project' ? activeProject : null}
-        onOpenProjectSwitchMenu={onOpenProjectSwitchMenu}
-        placeholder={activeWorkspaceContext.kind === 'conversationDraft' ? '选择工作目录' : undefined}
-        size='sm'
-      />
-    </div>
   ) : null
   const {
     canUseOperationalWorkspace,
@@ -332,7 +330,7 @@ export function AgentComposerSurface({
         void handleSubmit(event)
       }}
     >
-      <div className={`agent-composer-shell${projectSwitchBar ? ' has-project-bar' : ''}`}>
+      <div className='agent-composer-shell'>
         {projectSwitchBar}
         <AgentComposerMentionInput
           aria-label={`向 ${getAgentDefinition(visibleAgentId).label} 发送消息`}

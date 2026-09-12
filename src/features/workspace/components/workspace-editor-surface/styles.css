@@ -13,6 +13,11 @@
   overflow: hidden;
 }
 
+/* The SVG boundary owns the surface silhouette, including moving tab corners. */
+.editor-frame[data-boundary-clipped='true'] {
+  background: transparent;
+}
+
 .editor-content-shell {
   --editor-surface-header-height: 44px;
   --editor-toolbar-inline-padding: 6px;
@@ -28,6 +33,7 @@
   min-height: 0;
   overflow: hidden;
   background: var(--background-primary);
+  clip-path: var(--editor-content-clip-path, none);
 }
 
 /* Reserve the frame outline's one-pixel footprint without changing the
@@ -53,6 +59,17 @@
   min-height: 0;
   border-right: 1px solid var(--separator);
   background: var(--background-primary);
+}
+
+.editor-directory-sidebar[data-side='right'] {
+  /* Stay at the trailing edge even when no tab content fills the row. */
+  margin-left: auto;
+  border-right: 0;
+  border-left: 1px solid var(--separator);
+}
+
+.editor-directory-toggle[data-side='right'] > svg {
+  transform: scaleX(-1);
 }
 
 .editor-directory-toggle-slot {

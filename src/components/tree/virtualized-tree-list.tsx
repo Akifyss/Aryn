@@ -1,3 +1,5 @@
+// @refresh reset
+// Measurement changes must not retain a virtualizer's stale imperative caches during HMR.
 import {
   type CSSProperties,
   type HTMLAttributes,
@@ -13,6 +15,7 @@ import {
 } from 'react'
 import {
   defaultRangeExtractor,
+  measureElement as measureVirtualElement,
   useVirtualizer,
 } from '@tanstack/react-virtual'
 import { TreeList } from './tree'
@@ -137,6 +140,18 @@ export function VirtualizedTreeList<Row extends KeyedTreeRow>({
     initialRect: {
       height: initialViewportHeight,
       width: initialViewportWidth,
+    },
+    measureElement: (element, entry, instance) => {
+      const size = measureVirtualElement(element, entry, instance)
+      // Retained panes (e.g. Duo) report zero-sized rows while display:none.
+      // Caching those zeros makes restoration look like rows grew above the
+      // viewport, so scroll compensation can discard the visible top rows.
+      if (size === 0 && element.getClientRects().length === 0) {
+        const index = instance.indexFromElement(element)
+        return instance.itemSizeCache.get(instance.options.getItemKey(index))
+          ?? instance.options.estimateSize(index)
+      }
+      return size
     },
     overscan,
     rangeExtractor,

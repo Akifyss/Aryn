@@ -1127,12 +1127,15 @@ export function createEditor({
     };
   };
 
+  let scrollRestoreGeneration = 0;
   const restoreTopVisibleLine = (lineNumber, lineOffset = 0, { syncCursor = true } = {}) => {
+    const generation = ++scrollRestoreGeneration;
     const requestedLineNumber = Math.max(1, Math.floor(lineNumber || 1));
     const targetOffset = normalizeTopLineOffset(lineOffset);
     let attempts = 0;
     let stableFrames = 0;
     const restoreScroll = () => {
+      if (generation !== scrollRestoreGeneration) return;
       if (!view || ++attempts > SCROLL_RESTORE_MAX_ATTEMPTS) {
         if (syncCursor && view) {
           syncCursorToTopVisibleLine();
@@ -1687,6 +1690,7 @@ export function createEditor({
       view.focus();
     },
     destroy() {
+      scrollRestoreGeneration++;
       gitBlameHover?.destroy();
       gitBlameHover = null;
       gitDiffOverviewRuler?.destroy();
@@ -1951,8 +1955,8 @@ export function createEditor({
       const line = view.state.doc.line(Math.min(lineNumber, view.state.doc.lines));
       applyRevealSelection(line.from, line.from, { focusEditor: true, align });
     },
-    restoreTopLine(lineNumber, lineOffset) {
-      restoreTopVisibleLine(lineNumber, lineOffset, { syncCursor: true });
+    restoreTopLine(lineNumber, lineOffset, options = { syncCursor: true }) {
+      restoreTopVisibleLine(lineNumber, lineOffset, options);
     },
     getTopVisiblePosition() {
       const position = computeTopVisiblePosition();

@@ -1,5 +1,9 @@
 import { useCallback, useState } from 'react'
-import type { SettingsSectionId } from '@/features/settings/components/settings-dialog/settings-dialog'
+import {
+  DEFAULT_SETTINGS_SECTION,
+  normalizeSettingsSection,
+  type SettingsSectionId,
+} from '@/features/settings/lib/settings-sections'
 
 type AppOverlayStateOptions = {
   hasConfirmation: boolean
@@ -50,9 +54,15 @@ export function useAppOverlayController({
   isProjectMenuOpen,
 }: UseAppOverlayControllerOptions) {
   const [settingsSection, setSettingsSection] =
-    useState<SettingsSectionId>('appearance')
+    useState<SettingsSectionId>(DEFAULT_SETTINGS_SECTION)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
+  const validSettingsSection = normalizeSettingsSection(settingsSection)
+  // Keep selection validity with its owner, including state retained across code updates.
+  // Adjust our own state before children render; the view never repairs its parent's state.
+  if (settingsSection !== validSettingsSection) {
+    setSettingsSection(validSettingsSection)
+  }
   const overlayState = deriveAppOverlayState({
     hasConfirmation,
     isCommandPaletteOpen,
@@ -68,12 +78,17 @@ export function useAppOverlayController({
     closeDrawers()
     setIsCommandPaletteOpen(true)
   }, [closeDrawers])
-  const openSettings = useCallback((section?: SettingsSectionId) => {
-    if (section !== undefined) {
-      setSettingsSection(section)
-    }
-
+  // Opening is a no-argument UI action; navigation requires a section explicitly.
+  // An optional section would survive () => void props and receive DOM click events.
+  const openSettings = useCallback(() => {
     setIsSettingsOpen(true)
+  }, [])
+  const openSettingsSection = useCallback((section: SettingsSectionId) => {
+    setSettingsSection(section)
+    setIsSettingsOpen(true)
+  }, [])
+  const selectSettingsSection = useCallback((section: SettingsSectionId) => {
+    setSettingsSection(section)
   }, [])
   const toggleCommandPalette = useCallback(() => {
     setIsCommandPaletteOpen((currentValue) => !currentValue)
@@ -86,9 +101,10 @@ export function useAppOverlayController({
     isSettingsOpen,
     openCommandPaletteFromChrome,
     openSettings,
+    openSettingsSection,
+    selectSettingsSection,
     setIsSettingsOpen,
-    setSettingsSection,
-    settingsSection,
+    settingsSection: validSettingsSection,
     toggleCommandPalette,
   }
 }

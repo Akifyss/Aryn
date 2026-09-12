@@ -64,7 +64,6 @@ export function useWorkspaceDocumentPersistence({
   const closeTab = useWorkspaceStore((state) => state.closeTab)
   const markDiffTabSaved = useWorkspaceStore((state) => state.markDiffTabSaved)
   const markFileTabsSaved = useWorkspaceStore((state) => state.markFileTabsSaved)
-  const syncFileTabsWithDisk = useWorkspaceStore((state) => state.syncFileTabsWithDisk)
   const updateDiffTabDraft = useWorkspaceStore((state) => state.updateDiffTabDraft)
   const workspaceAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const workspaceAutosaveTargetRef = useRef<{ filePath: string } | null>(null)
@@ -118,9 +117,10 @@ export function useWorkspaceDocumentPersistence({
   const persistWorkspaceFileContent = useCallback(async (
     filePath: string,
     content: string,
-    options: { announce?: boolean, syncMode?: 'mark' | 'sync' } = {},
+    options: { announce?: boolean } = {},
   ) => {
-    const { announce = false, syncMode = 'mark' } = options
+    const { announce = false } = options
+    const previousTabs = useWorkspaceStore.getState().openTabs
     markInternalWorkspaceSave(filePath)
 
     try {
@@ -130,11 +130,7 @@ export function useWorkspaceDocumentPersistence({
       throw error
     }
 
-    if (syncMode === 'sync') {
-      syncFileTabsWithDisk(filePath, content)
-    } else {
-      markFileTabsSaved(filePath, content)
-    }
+    markFileTabsSaved(filePath, content, previousTabs)
 
     if (announce) {
       setStatusMessage('Changes saved')
@@ -150,7 +146,6 @@ export function useWorkspaceDocumentPersistence({
     markInternalWorkspaceSave,
     refreshWorkspaceAfterSave,
     setStatusMessage,
-    syncFileTabsWithDisk,
   ])
 
   const persistDiffTabContent = useCallback(async (
@@ -160,6 +155,10 @@ export function useWorkspaceDocumentPersistence({
     options: { announce?: boolean } = {},
   ) => {
     const { announce = false } = options
+    const previousTabs = useWorkspaceStore.getState().openTabs
+    const previousTab = previousTabs.find(tab => tab.id === tabId && tab.kind === 'diff')
+    const previousContent = previousTab?.kind === 'diff'
+      ? previousTab.draftContent ?? previousTab.diff.modifiedContent : content
     markInternalWorkspaceSave(filePath)
 
     try {
@@ -169,8 +168,8 @@ export function useWorkspaceDocumentPersistence({
       throw error
     }
 
-    syncFileTabsWithDisk(filePath, content)
-    markDiffTabSaved(tabId, content)
+    markFileTabsSaved(filePath, content, previousTabs)
+    markDiffTabSaved(tabId, content, previousContent)
 
     if (announce) {
       setStatusMessage('Changes saved')
@@ -183,10 +182,10 @@ export function useWorkspaceDocumentPersistence({
     clearInternalWorkspaceSaveMarker,
     currentPath,
     markDiffTabSaved,
+    markFileTabsSaved,
     markInternalWorkspaceSave,
     refreshWorkspaceAfterSave,
     setStatusMessage,
-    syncFileTabsWithDisk,
   ])
 
   const flushDiffTab = useCallback(async (
@@ -329,7 +328,6 @@ export function useWorkspaceDocumentPersistence({
 
     const savePromise = persistWorkspaceFileContent(targetTab.filePath, targetTab.content, {
       announce: false,
-      syncMode: 'mark',
     })
     workspaceAutosavePromiseRef.current = savePromise
 
@@ -597,7 +595,6 @@ export function useWorkspaceDocumentPersistence({
 
     await persistWorkspaceFileContent(targetFilePath, targetContent, {
       announce: options.announce ?? true,
-      syncMode: 'mark',
     })
   }, [
     currentFileContent,
@@ -624,7 +621,6 @@ export function useWorkspaceDocumentPersistence({
     if (!targetDiffTab) {
       await persistWorkspaceFileContent(filePath, content, {
         announce: options.announce ?? false,
-        syncMode: 'sync',
       })
       return
     }

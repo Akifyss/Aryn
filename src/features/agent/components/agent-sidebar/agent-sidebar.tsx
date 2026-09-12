@@ -69,7 +69,7 @@ import type {
   ConversationSessionStartedPatch,
   ConversationState,
 } from '@/features/conversations/types'
-import type { ProjectRecord, ProjectState, WorkspaceIconTheme } from '@/features/workspace/types'
+import type { ProjectRecord, ProjectState, WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
 import {
   initialAgentFileAutoOpenState,
   resolveNextAgentFileAutoOpen,
@@ -137,6 +137,8 @@ type AgentSidebarProps = {
 }
 
 type AgentSurfaceProps = {
+  autoOpenChangedFiles?: boolean
+  workspaceTreeOverride?: WorkspaceNode[]
   activeWorkspaceContext?: ActiveWorkspaceContext
   conversationState?: ConversationState
   externalSessionRequest?: AgentProjectSessionRequest | null
@@ -173,8 +175,12 @@ type AgentSurfaceProps = {
 }
 
 type AgentProviderProps = AgentSurfaceProps & {
+  /** Catalogue-only surfaces must never activate or persist a native session. */
+  workspaceActivation?: 'automatic' | 'none'
   children: ReactNode
   onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
+  /** A tab owns its draft across local CWD changes and runtime activation. */
+  preserveComposerOnNavigation?: boolean
 }
 
 const emptyAgentState: AgentWorkspaceState = {
@@ -228,6 +234,9 @@ const defaultActiveWorkspaceContext: ActiveWorkspaceContext = {
 }
 
 function AgentProvider({
+  workspaceActivation = 'automatic',
+  autoOpenChangedFiles = true,
+  workspaceTreeOverride,
   activeWorkspaceContext = defaultActiveWorkspaceContext,
   children,
   conversationState = emptyConversationState,
@@ -251,6 +260,7 @@ function AgentProvider({
   onStartStandaloneConversation,
   onStartProjectSession,
   onWorkspaceStateChange,
+  preserveComposerOnNavigation = false,
   projectState = emptyProjectState,
   isProjectAddMenuOpen = false,
   isAgentLayout = false,
@@ -260,7 +270,8 @@ function AgentProvider({
   workspacePath,
 }: AgentProviderProps) {
   const runningPromptEnterBehavior = useSettingsStore((state) => state.agent.runningPromptEnterBehavior)
-  const workspaceTree = useWorkspaceStore((state) => state.tree)
+  const sharedWorkspaceTree = useWorkspaceStore((state) => state.tree)
+  const workspaceTree = workspaceTreeOverride ?? sharedWorkspaceTree
   const initialActiveConversation = activeWorkspaceContext.kind === 'conversation'
     ? conversationState.conversations.find((conversation) => (
         conversation.id === activeWorkspaceContext.conversationId
@@ -461,7 +472,8 @@ function AgentProvider({
     workspacePath,
     workspacePathRef,
   })
-  const { loadAgentWorkspaceState } = useAgentWorkspaceLifecycle({
+  const { loadAgentWorkspaceState, retryWorkspaceLoad, workspaceLoadError } = useAgentWorkspaceLifecycle({
+    enabled: workspaceActivation === 'automatic',
     catalog: {
       markAgentUnavailable,
     },
@@ -493,6 +505,7 @@ function AgentProvider({
       hasLoadedWorkspaceState,
       isLoading,
       resetComposer: () => {
+        if (preserveComposerOnNavigation) return
         setComposerState(EMPTY_AGENT_COMPOSER_STATE)
         setComposerAttachments([])
       },
@@ -593,6 +606,7 @@ function AgentProvider({
       agentState,
       closeSessionOverlay: () => setActiveOverlayPanel(null),
       resetComposer: () => {
+        if (preserveComposerOnNavigation) return
         setComposerState(EMPTY_AGENT_COMPOSER_STATE)
         setComposerAttachments([])
       },
@@ -1066,10 +1080,10 @@ function AgentProvider({
     })
     fileAutoOpenStateRef.current = result.state
 
-    if (result.fileChange) {
+    if (autoOpenChangedFiles && result.fileChange) {
       void onOpenMessageFile?.(result.fileChange.filePath, result.fileChange.kind)
     }
-  }, [activeSessionPath, isViewingActiveRuntime, latestAutoOpenFileChange, onOpenMessageFile])
+  }, [activeSessionPath, autoOpenChangedFiles, isViewingActiveRuntime, latestAutoOpenFileChange, onOpenMessageFile])
 
   const contextValue = useMemo<AgentContextValue>(() => ({
     agentCatalog: resolvedAgentCatalog,
@@ -1187,6 +1201,8 @@ function AgentProvider({
     theme,
     workspacePath,
     workspaceTree,
+    workspaceLoadError,
+    retryWorkspaceLoad,
   }), [
     activeWorkspaceContext,
     resolvedAgentCatalog,
@@ -1296,6 +1312,8 @@ function AgentProvider({
     theme,
     workspacePath,
     workspaceTree,
+    workspaceLoadError,
+    retryWorkspaceLoad,
   ])
 
   return (

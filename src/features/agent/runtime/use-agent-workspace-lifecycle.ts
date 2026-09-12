@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
 } from 'react'
 import type { AgentId } from '@/features/agent/agent-definition'
 import {
@@ -45,6 +46,7 @@ import type {
 import type { ProjectState } from '@/features/workspace/types'
 
 type UseAgentWorkspaceLifecycleOptions = {
+  enabled?: boolean
   catalog: {
     markAgentUnavailable: (agentId: AgentId, reason: string, guidance?: string) => void
   }
@@ -97,6 +99,7 @@ type UseAgentWorkspaceLifecycleOptions = {
 }
 
 export function useAgentWorkspaceLifecycle({
+  enabled = true,
   catalog: {
     markAgentUnavailable,
   },
@@ -144,6 +147,9 @@ export function useAgentWorkspaceLifecycle({
     workspaceState,
   },
 }: UseAgentWorkspaceLifecycleOptions) {
+  const [workspaceLoadError, setWorkspaceLoadError] = useState<string | null>(null)
+  const [loadRevision, setLoadRevision] = useState(0)
+  const retryWorkspaceLoad = useCallback(() => setLoadRevision((revision) => revision + 1), [])
   const loadAgentStateRequestIdRef = useRef(0)
   const primaryLoadPendingRef = useRef(false)
   const backgroundRefreshRequestIdRef = useRef(0)
@@ -259,10 +265,14 @@ export function useAgentWorkspaceLifecycle({
   }, [activeWorkspaceContext.kind, selectedAgentId, targetWorkspacePath, workspacePath, workspaceState])
 
   useEffect(() => {
+    // A session browser observes catalogues and runtime events. Mounting it
+    // must not activate a native workspace or compete with conversation tabs.
+    if (!enabled) return
     const requestId = loadAgentStateRequestIdRef.current + 1
     loadAgentStateRequestIdRef.current = requestId
     primaryLoadPendingRef.current = true
     backgroundRefreshRequestIdRef.current += 1
+    setWorkspaceLoadError(null)
 
     if (!isAgentWorkspacePathReadyForTarget(workspacePath, targetWorkspacePath)) {
       primaryLoadPendingRef.current = false
@@ -325,6 +335,7 @@ export function useAgentWorkspaceLifecycle({
         .catch((error) => {
           if (loadAgentStateRequestIdRef.current === requestId) {
             const message = error instanceof Error ? error.message : 'Unable to load provider settings.'
+            setWorkspaceLoadError(message)
             markAgentUnavailable(selectedAgentId, message)
             setPanelError(message)
           }
@@ -485,6 +496,7 @@ export function useAgentWorkspaceLifecycle({
       .catch((error) => {
         if (loadAgentStateRequestIdRef.current === requestId) {
           const message = error instanceof Error ? error.message : 'Unable to load Agent sessions.'
+          setWorkspaceLoadError(message)
           setPanelError(message)
         }
       })
@@ -494,12 +506,13 @@ export function useAgentWorkspaceLifecycle({
           setIsLoading(false)
         }
       })
-  }, [loadAgentWorkspaceState, markAgentUnavailable, selectedAgentId, targetAgentSessionPath, targetWorkspacePath, workspacePath])
+  }, [enabled, loadRevision, loadAgentWorkspaceState, markAgentUnavailable, selectedAgentId, targetAgentSessionPath, targetWorkspacePath, workspacePath])
 
   // Opening the Agent selector refreshes discovery in the background. Revalidate
   // the current new-session runtime without replacing the surface with a loader
   // or discarding the user's composer and model drafts.
   useEffect(() => {
+    if (!enabled) return
     if (runtimeRefreshRevision <= handledRuntimeRefreshRevisionRef.current) {
       return
     }
@@ -567,6 +580,7 @@ export function useAgentWorkspaceLifecycle({
         setPanelError(message)
       })
   }, [
+    enabled,
     activeWorkspaceContext.kind,
     agentState.runtime,
     hasLoadedWorkspaceState,
@@ -583,6 +597,7 @@ export function useAgentWorkspaceLifecycle({
   ])
 
   useEffect(() => {
+    if (!enabled) return
     if (
       !workspacePath
       || isLoading
@@ -605,6 +620,7 @@ export function useAgentWorkspaceLifecycle({
       })
     }
   }, [
+    enabled,
     activeSessionSelection,
     agentState.runtime.agentId,
     agentState.runtime.workspacePath,
@@ -630,5 +646,5 @@ export function useAgentWorkspaceLifecycle({
     onWorkspaceStateChange?.(agentState)
   }, [agentState, onWorkspaceStateChange])
 
-  return { loadAgentWorkspaceState }
+  return { loadAgentWorkspaceState, retryWorkspaceLoad, workspaceLoadError }
 }

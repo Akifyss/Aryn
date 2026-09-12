@@ -11,6 +11,8 @@ import {
   AppItemIcon,
   AppItemMain,
   AppItemMainButton,
+  AppItemOpenInPaneButton,
+  type AppItemOpenInPaneAction,
   type AppItemMainRenderer,
 } from '@/components/app-item'
 import { AppMenu as Menu } from '@/components/app-menu'
@@ -37,6 +39,7 @@ type AgentSessionTreeRowProps = {
   relativeTime?: string
   rowClassName?: string
   onOpen: () => void
+  otherPaneAction?: AppItemOpenInPaneAction
   onCancelRename: () => void
   onDelete: () => void
   onMenuOpenChange?: (open: boolean) => void
@@ -59,6 +62,7 @@ export function AgentSessionTreeRow({
   relativeTime,
   rowClassName,
   onOpen,
+  otherPaneAction,
   onCancelRename,
   onDelete,
   onMenuOpenChange,
@@ -250,22 +254,25 @@ export function AgentSessionTreeRow({
       </AppItemActionButton>
     </>
   ) : (
-    <Menu.Root modal={false} onOpenChange={setIsActionMenuOpen}>
-      <Menu.Trigger
-        aria-label={`Open ${accessibleLabel} menu`}
-        disabled={isDeleting}
-        render={<AppItemActionButton />}
-        title={menuTitle}
-      >
-        <More1Line />
-      </Menu.Trigger>
-      <AgentTreeMenuPopup
-        disabled={isDeleting}
-        menuPortalTarget={menuPortalTarget}
-        onDelete={onDelete}
-        onRename={onRequestRename}
-      />
-    </Menu.Root>
+    <>
+      {otherPaneAction ? <AppItemOpenInPaneButton {...otherPaneAction} disabled={isDeleting} /> : null}
+      <Menu.Root modal={false} onOpenChange={setIsActionMenuOpen}>
+        <Menu.Trigger
+          aria-label={`Open ${accessibleLabel} menu`}
+          disabled={isDeleting}
+          render={<AppItemActionButton />}
+          title={menuTitle}
+        >
+          <More1Line />
+        </Menu.Trigger>
+        <AgentTreeMenuPopup
+          disabled={isDeleting}
+          menuPortalTarget={menuPortalTarget}
+          onDelete={onDelete}
+          onRename={onRequestRename}
+        />
+      </Menu.Root>
+    </>
   )
 
   return (

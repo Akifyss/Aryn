@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PersistedLayoutState } from '@/features/persistence/types'
 import { useSidebarLayoutTransition } from '@/features/layout/hooks/use-sidebar-layout-transition'
 import { useShellDrawerController } from '@/features/layout/hooks/use-shell-drawer-controller'
+import { resolveLayoutPlatformPreview, useLayoutPlatformPreview, useLayoutPlatformPreviewCommand } from './use-layout-platform-preview'
 import {
   readStoredLayoutBoolean,
   readStoredLayoutNumber,
@@ -18,7 +19,6 @@ import {
   clampEditorRightSidebarWidth,
   clampLeftSidebarWidth,
   deriveLayoutMode,
-  deriveShellPlatform,
   EDITOR_MAIN_MIN_WIDTH,
   EDITOR_RIGHT_SIDEBAR_MAX_WIDTH,
   EDITOR_RIGHT_SIDEBAR_MIN_WIDTH,
@@ -83,7 +83,9 @@ export function useShellLayoutController({
   const [shellWidth, setShellWidth] = useState(() => (
     typeof window !== 'undefined' ? window.innerWidth : FULL_LAYOUT_BREAKPOINT + 1
   ))
-  const [isWindowFullScreen, setIsWindowFullScreen] = useState(false)
+  const [isNativeWindowFullScreen, setIsWindowFullScreen] = useState(false)
+  const platformPreview = useLayoutPlatformPreview()
+  useLayoutPlatformPreviewCommand(platform, isNativeWindowFullScreen)
 
   const resizeSidebarRef = useRef<(panel: ResizePanel, pointerClientX: number) => void>(() => undefined)
   const finishSidebarResizeRef = useRef<(panel: ResizePanel) => void>(() => undefined)
@@ -96,7 +98,7 @@ export function useShellLayoutController({
     runSidebarLayoutTransition,
   } = useSidebarLayoutTransition(activeResizePanel !== null)
 
-  const shellPlatform = deriveShellPlatform(platform)
+  const { shellPlatform, isWindowFullScreen } = resolveLayoutPlatformPreview(platform, isNativeWindowFullScreen, platformPreview)
   const shellChromeVars = getShellChromeVars(shellPlatform, {
     isFullScreen: isWindowFullScreen,
   }) as CSSProperties

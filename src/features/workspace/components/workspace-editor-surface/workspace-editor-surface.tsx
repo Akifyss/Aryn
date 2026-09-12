@@ -16,11 +16,14 @@ import { recordOpenFileProfile } from '@/lib/open-file-profile'
 import './styles.css'
 
 type WorkspaceEditorSurfaceProps = {
+  contentPanelId?: string
   children: ReactNode
   tabs: ReactNode
 }
 
 type WorkspaceEditorDirectoryToggleProps = {
+  side?: 'left' | 'right'
+  controls?: string
   isVisible: boolean
   onToggle: () => void
 }
@@ -36,14 +39,14 @@ type WorkspaceEditorViewProps = {
   leadingToolbarAction?: ReactNode
 }
 
-export function WorkspaceEditorSurface({ children, tabs }: WorkspaceEditorSurfaceProps) {
+export function WorkspaceEditorSurface({ children, tabs, contentPanelId = 'editor-content-panel' }: WorkspaceEditorSurfaceProps) {
   return (
     <div className='editor-frame'>
       {tabs}
       <div
         aria-label='Editor content'
         className='editor-content-shell'
-        id='editor-content-panel'
+        id={contentPanelId}
         role='tabpanel'
       >
         {children}
@@ -52,11 +55,13 @@ export function WorkspaceEditorSurface({ children, tabs }: WorkspaceEditorSurfac
   )
 }
 
-export function WorkspaceEditorDirectorySidebar({ children }: { children: ReactNode }) {
-  return <aside className='editor-directory-sidebar'>{children}</aside>
+export function WorkspaceEditorDirectorySidebar({ children, side = 'left', id }: { children: ReactNode; side?: 'left' | 'right'; id?: string }) {
+  return <aside id={id} className='editor-directory-sidebar' data-side={side}>{children}</aside>
 }
 
 export function WorkspaceEditorDirectoryToggle({
+  side,
+  controls,
   isVisible,
   onToggle,
 }: WorkspaceEditorDirectoryToggleProps) {
@@ -64,7 +69,10 @@ export function WorkspaceEditorDirectoryToggle({
     <AppIconButton
       type='button'
       className='editor-directory-toggle'
-      aria-label={isVisible ? '隐藏目录侧边栏' : '显示目录侧边栏'}
+      aria-label={`${isVisible ? '隐藏' : '显示'}${side === 'left' ? '左侧' : side === 'right' ? '右侧' : ''}目录侧边栏`}
+      aria-controls={controls}
+      aria-expanded={isVisible}
+      data-side={side}
       aria-pressed={isVisible}
       onClick={onToggle}
       tooltip={isVisible ? '隐藏目录' : '显示目录'}

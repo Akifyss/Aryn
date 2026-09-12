@@ -23,7 +23,8 @@ export type {
 } from './types'
 
 export function AgentSessionTreeView(props: AgentSessionTreeViewProps) {
-  return props.isFloating ? <FlatAgentSessionTree {...props} /> : <AgentProjectTree {...props} />
+  return props.isFloating || props.scope === 'current-project'
+    ? <FlatAgentSessionTree {...props} /> : <AgentProjectTree {...props} />
 }
 
 export function AgentProjectSwitchTrigger({
@@ -54,9 +55,10 @@ export function AgentProjectSwitchTrigger({
       disabled={!isEnabled}
       size={size}
       variant='ghost'
+      aria-haspopup='menu'
       aria-label={activeProject ? `切换项目，当前项目：${activeProject.name}` : label}
       onClick={(event) => {
-        onOpenProjectSwitchMenu?.(event.currentTarget.getBoundingClientRect(), { startNewSession: true })
+        onOpenProjectSwitchMenu?.(event.currentTarget.getBoundingClientRect())
       }}
     >
       <ProjectIcon size={iconSize} />

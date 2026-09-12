@@ -8,7 +8,7 @@ import {
 } from '@mingcute/react'
 import { AppItem, AppItemActionButton } from '@/components/app-item'
 import { TreeScrollArea } from '@/components/tree'
-import { WorkspaceTree, type WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree/workspace-tree'
+import { WorkspaceTree, type WorkspaceTreeActivationEvent, type WorkspaceTreeOtherPaneAction } from '@/features/workspace/components/workspace-tree/workspace-tree'
 import { WorkspaceTreeEmptyState } from '@/features/workspace/components/workspace-tree/workspace-tree-empty-state'
 import type { GitChangeItem, GitRepositoryState } from '@/features/git/types'
 import type { WorkspaceIconTheme, WorkspaceNode } from '@/features/workspace/types'
@@ -35,6 +35,7 @@ type WorkspaceTreePanelProps = {
   onMoveNode: (node: WorkspaceNode, targetDirectoryPath: string) => Promise<void>
   onOpenDiff?: (change: GitChangeItem) => void
   onOpenInCodeEditor: (path: string) => void
+  otherPaneAction?: WorkspaceTreeOtherPaneAction
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
   onSelectFile: (path: string, event: WorkspaceTreeActivationEvent) => void
   onToggleFileTreeExpansion: () => void
@@ -61,6 +62,7 @@ export function WorkspaceTreePanel({
   onMoveNode,
   onOpenDiff,
   onOpenInCodeEditor,
+  otherPaneAction,
   onRenameNode,
   onSelectFile,
   onToggleFileTreeExpansion,
@@ -141,6 +143,7 @@ export function WorkspaceTreePanel({
             onMoveNode={onMoveNode}
             onOpenDiff={onOpenDiff}
             onOpenInCodeEditor={onOpenInCodeEditor}
+            otherPaneAction={otherPaneAction}
             onRenameNode={onRenameNode}
             onSelectFile={onSelectFile}
           />

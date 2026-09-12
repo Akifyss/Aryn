@@ -29,6 +29,7 @@ import {
   AppItem,
   AppItemActionButton,
   AppItemMain,
+  AppItemOpenInPaneButton,
 } from '@/components/app-item'
 import { AppMenu as Menu, shouldCloseClickOpenedMenu } from '@/components/app-menu'
 import {
@@ -63,6 +64,11 @@ import './styles.css'
 
 export type WorkspaceTreeActivationEvent = Pick<MouseEvent<HTMLElement>, 'button' | 'ctrlKey' | 'metaKey'>
 
+export type WorkspaceTreeOtherPaneAction = {
+  direction: 'left' | 'right'
+  onOpenFile: (path: string) => void
+}
+
 type WorkspaceTreeProps = {
   activeFilePath: string | null
   iconTheme: WorkspaceIconTheme | null
@@ -72,6 +78,7 @@ type WorkspaceTreeProps = {
   workspacePath: string | null
   onSelectFile: (path: string, event: WorkspaceTreeActivationEvent) => void
   onOpenInCodeEditor: (path: string) => void
+  otherPaneAction?: WorkspaceTreeOtherPaneAction
   onOpenDiff?: (change: GitChangeItem) => void
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
   onDeleteNode: (node: WorkspaceNode) => Promise<void>
@@ -303,6 +310,7 @@ function FileTreeItem({
   onDropOnNode,
   onOpenInCodeEditor,
   onOpenDiff,
+  otherPaneAction,
   onRenameNode,
   onSelectFile,
   onToggleDirectory,
@@ -326,6 +334,7 @@ function FileTreeItem({
   onDropOnNode: (node: WorkspaceNode, event: DragEvent<HTMLElement>) => Promise<void>
   onOpenInCodeEditor: (path: string) => void
   onOpenDiff?: (change: GitChangeItem) => void
+  otherPaneAction?: WorkspaceTreeOtherPaneAction
   onRenameNode: (node: WorkspaceNode, nextName: string) => Promise<void>
   onSelectFile: (path: string, event: WorkspaceTreeActivationEvent) => void
   onToggleDirectory: (path: string) => void
@@ -588,25 +597,34 @@ function FileTreeItem({
       </AppItemActionButton>
     </>
   ) : (
-    <FileRowActionMenu
-      canOpenInCodeEditor={canOpenInCodeEditor}
-      isSubmitting={isSubmitting}
-      gitDiffChange={gitDiffChange}
-      menuPortalTarget={menuPortalTarget}
-      onMenuOpenChange={setIsRowMenuOpen}
-      onOpenInCodeEditor={() => onOpenInCodeEditor(node.path)}
-      onOpenDiff={onOpenDiff}
-      onShowInFolder={() => {
-        window.appApi.showItemInFolder(node.path).catch((error) => {
-          console.error('Failed to show item in folder:', error)
-        })
-      }}
-      onRename={() => {
-        setDraftName(node.name)
-        setIsEditing(true)
-      }}
-      onDelete={() => setIsDeleteDialogOpen(true)}
-    />
+    <>
+      {!isFolder && otherPaneAction ? (
+        <AppItemOpenInPaneButton
+          direction={otherPaneAction.direction}
+          disabled={isSubmitting}
+          onOpen={() => otherPaneAction.onOpenFile(node.path)}
+        />
+      ) : null}
+      <FileRowActionMenu
+        canOpenInCodeEditor={canOpenInCodeEditor}
+        isSubmitting={isSubmitting}
+        gitDiffChange={gitDiffChange}
+        menuPortalTarget={menuPortalTarget}
+        onMenuOpenChange={setIsRowMenuOpen}
+        onOpenInCodeEditor={() => onOpenInCodeEditor(node.path)}
+        onOpenDiff={onOpenDiff}
+        onShowInFolder={() => {
+          window.appApi.showItemInFolder(node.path).catch((error) => {
+            console.error('Failed to show item in folder:', error)
+          })
+        }}
+        onRename={() => {
+          setDraftName(node.name)
+          setIsEditing(true)
+        }}
+        onDelete={() => setIsDeleteDialogOpen(true)}
+      />
+    </>
   )
 
   return (
@@ -670,6 +688,7 @@ export function WorkspaceTree({
   onSelectFile,
   onOpenInCodeEditor,
   onOpenDiff,
+  otherPaneAction,
   onRenameNode,
   onDeleteNode,
   onMoveNode,
@@ -951,6 +970,7 @@ export function WorkspaceTree({
           onDropOnNode={handleDropOnNode}
           onOpenDiff={onOpenDiff}
           onOpenInCodeEditor={onOpenInCodeEditor}
+          otherPaneAction={otherPaneAction}
           onRenameNode={onRenameNode}
           onSelectFile={onSelectFile}
           onToggleDirectory={handleToggle}

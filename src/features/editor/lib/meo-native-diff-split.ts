@@ -187,7 +187,7 @@ export type MeoDiffSplitController = {
   refreshDecorations: () => void
   replaceAll: (query: string, replacement: string, options?: SearchOptions) => { replaced: number, total: number }
   replaceCurrent: (query: string, replacement: string, options?: SearchOptions) => SearchNavigationResult & { replaced: boolean }
-  restoreTopLine: (lineNumber: number, lineOffset?: number) => void
+  restoreTopLine: (lineNumber: number, lineOffset?: number, options?: { syncCursor: boolean }) => void
   scrollToLine: (lineNumber: number, align?: string) => void
   selectAll: () => boolean
   setBaseline: (baseline: GitBaselinePayload | null) => void
@@ -3442,6 +3442,7 @@ type TopLineRestoreResult = {
 
 type RestoreTopLineOptions = {
   shouldContinue?: () => boolean
+  syncCursor?: boolean
 }
 
 function measureTopLineAnchorDelta(
@@ -3526,7 +3527,7 @@ function restoreTopLine(
   const shouldContinue = () => options.shouldContinue?.() !== false
 
   const syncSelection = () => {
-    if (didSyncSelection || !view.dom.isConnected || !shouldContinue()) {
+    if (options.syncCursor === false || didSyncSelection || !view.dom.isConnected || !shouldContinue()) {
       return
     }
     didSyncSelection = true
@@ -4109,6 +4110,7 @@ export function createMeoDiffSplitController({
     lineNumber: number
     lineOffset: number
     stableFrames: number
+    syncCursor: boolean
   } | null = null
   let syncedOriginalGitBaseText: string | null = null
   let syncedModifiedGitBaseText: string | null = null
@@ -4379,7 +4381,7 @@ export function createMeoDiffSplitController({
       scrollElement,
       {
         requireAnchorMeasurement: true,
-        syncSelection: pendingRestoreAnchor.stableFrames === 0,
+        syncSelection: pendingRestoreAnchor.syncCursor && pendingRestoreAnchor.stableFrames === 0,
       },
     )
 
@@ -4429,13 +4431,14 @@ export function createMeoDiffSplitController({
     })
   }
 
-  const startRestoreAnchor = (lineNumber: number, lineOffset = 0) => {
+  const startRestoreAnchor = (lineNumber: number, lineOffset = 0, syncCursor = true) => {
     restoreAnchorGeneration += 1
     pendingRestoreAnchor = {
       attempts: 0,
       lineNumber: Math.max(1, Math.floor(lineNumber || 1)),
       lineOffset: Number.isFinite(lineOffset) ? Math.max(0, Number(lineOffset)) : 0,
       stableFrames: 0,
+      syncCursor,
     }
     attachRestoreAnchorInputListeners()
     schedulePendingRestoreAnchor()
@@ -4455,9 +4458,11 @@ export function createMeoDiffSplitController({
     lineNumber: number,
     lineOffset = 0,
     scrollContainer?: HTMLElement | null,
+    syncCursor = true,
   ) => {
-    const restoreGeneration = startRestoreAnchor(lineNumber, lineOffset)
+    const restoreGeneration = startRestoreAnchor(lineNumber, lineOffset, syncCursor)
     restoreTopLine(view, lineNumber, lineOffset, scrollContainer, {
+      syncCursor,
       shouldContinue: () => isRestoreAnchorGenerationActive(restoreGeneration),
     })
   }
@@ -5995,6 +6000,20 @@ export function createMeoDiffSplitController({
     return true
   }
 
+  // Baseline arrival can replace a preview with a full diff. Keep the user's
+  // current selection (including a just-moved view) across that internal render.
+  const renderPreservingSelection = () => {
+    const previous = getEditableView()
+    const selection = previous.state.selection
+    const focused = previous.hasFocus
+    render()
+    const next = getEditableView()
+    const clamp = (offset: number) => Math.min(offset, next.state.doc.length)
+    next.dispatch({ selection: EditorSelection.create(selection.ranges.map(({ anchor, head }) =>
+      EditorSelection.range(clamp(anchor), clamp(head))), selection.mainIndex) })
+    if (focused) next.focus()
+  }
+
   const syncResolvedDocuments = () => {
     const startedAt = performance.now()
     const previousState = lastRenderedState
@@ -6017,10 +6036,10 @@ export function createMeoDiffSplitController({
       const frameChanged = !!previousState && hasResolvedViewFrameChanged(previousState, originalState)
       if (frameChanged) {
         const topPosition = getTopVisiblePosition(previewView, previewView.scrollDOM)
-        render()
+        renderPreservingSelection()
         const nextView = getModifiedView()
         if (topPosition && nextView) {
-          restoreTopLineWithAnchor(nextView, topPosition.line, topPosition.lineOffset, getActiveScrollElement())
+          restoreTopLineWithAnchor(nextView, topPosition.line, topPosition.lineOffset, getActiveScrollElement(), false)
         }
         recordOpenFileProfile('diff-split:sync-resolved-documents:end', {
           durationMs: getOpenFileProfileDuration(startedAt),
@@ -6075,9 +6094,9 @@ export function createMeoDiffSplitController({
       )
     ) {
       const topPosition = getTopVisiblePosition(unifiedView, unifiedView.scrollDOM)
-      render()
+      renderPreservingSelection()
       if (topPosition && unifiedView) {
-        restoreTopLineWithAnchor(unifiedView, topPosition.line, topPosition.lineOffset, unifiedView.scrollDOM)
+        restoreTopLineWithAnchor(unifiedView, topPosition.line, topPosition.lineOffset, unifiedView.scrollDOM, false)
       }
       recordOpenFileProfile('diff-split:sync-resolved-documents:end', {
         durationMs: getOpenFileProfileDuration(startedAt),
@@ -6429,8 +6448,8 @@ export function createMeoDiffSplitController({
         ? { replaced: true, ...nextMatch }
         : { current: 0, found: false, replaced: true, total: countSearchMatches(getEditableTextValue(), query, options) }
     },
-    restoreTopLine(lineNumber, lineOffset = 0) {
-      restoreTopLineWithAnchor(getEditableView(), lineNumber, lineOffset, getActiveScrollElement())
+    restoreTopLine(lineNumber, lineOffset = 0, options = { syncCursor: true }) {
+      restoreTopLineWithAnchor(getEditableView(), lineNumber, lineOffset, getActiveScrollElement(), options.syncCursor)
       refreshAfterLayoutSettles()
     },
     scrollToLine(lineNumber, align = 'center') {

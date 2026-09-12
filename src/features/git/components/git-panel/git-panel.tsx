@@ -35,6 +35,7 @@ import {
   getCleanStateSubtext,
   getRepositoryHeading,
   getSelectedCommitHash,
+  isScopedGitChange,
   type GitHistorySelection,
 } from './git-panel-model'
 import { GitChangeSection } from './git-change-section/git-change-section'
@@ -43,6 +44,7 @@ import {
   GitCommitDetail,
   GitHistoryPane,
   GitHistorySection,
+  type GitHistoryOtherPaneAction,
 } from './git-history/git-history'
 import './styles.css'
 
@@ -63,6 +65,9 @@ type GitPanelProps = {
   onOpenDiff: (change: GitChangeItem) => void
   onOpenFile: (filePath: string) => void
   onOpenMeoDiff: (change: GitChangeItem) => void
+  otherPaneAction?: GitHistoryOtherPaneAction & {
+    onOpenDiff: (change: GitChangeItem) => void
+  }
   onPull: () => void
   onPush: () => void
   onRefresh: () => void
@@ -122,6 +127,7 @@ export function GitPanel({
   onOpenDiff,
   onOpenFile,
   onOpenMeoDiff,
+  otherPaneAction,
   onPull,
   onPush,
   onRefresh,
@@ -436,6 +442,7 @@ export function GitPanel({
       scrollElementRef={sectionsViewportRef}
       onExpandedChange={setIsHistoryExpanded}
       onOpenCommitFileDiff={onOpenCommitFileDiff}
+      otherPaneAction={otherPaneAction}
       onRevertCommit={onRevertCommit}
       onToggleCommit={toggleHistoryCommit}
     />
@@ -597,6 +604,10 @@ export function GitPanel({
           <>
             <GitChangeSection
               title='已暂存更改'
+              otherPaneAction={otherPaneAction ? {
+                direction: otherPaneAction.direction,
+                onOpen: (change) => { if (isScopedGitChange(change)) otherPaneAction.onOpenDiff(change) },
+              } : undefined}
               changes={currentRepositoryState.stagedChanges}
               kind='staged'
               layout={layout}
@@ -622,6 +633,10 @@ export function GitPanel({
 
             <GitChangeSection
               title='更改'
+              otherPaneAction={otherPaneAction ? {
+                direction: otherPaneAction.direction,
+                onOpen: (change) => { if (isScopedGitChange(change)) otherPaneAction.onOpenDiff(change) },
+              } : undefined}
               changes={currentRepositoryState.unstagedChanges}
               kind='unstaged'
               layout={layout}
@@ -699,6 +714,7 @@ export function GitPanel({
               selectedCommitHash={selectedCommitHash}
               summary={selectedCommitSummary}
               onOpenCommitFileDiff={onOpenCommitFileDiff}
+              otherPaneAction={otherPaneAction}
               onRevertCommit={onRevertCommit}
             />
           )}

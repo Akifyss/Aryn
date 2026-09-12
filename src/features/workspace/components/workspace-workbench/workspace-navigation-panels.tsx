@@ -61,7 +61,7 @@ type WorkspaceTreePaneProps = {
   menuPortalTarget?: HTMLElement | null
 }
 
-function WorkspaceTreePane({
+export function WorkspaceTreePane({
   configuration,
   fileClickMode = 'open-tab',
   menuPortalTarget = null,
@@ -109,7 +109,7 @@ export function WorkspaceGitPane({
   menuPortalTarget = null,
 }: WorkspaceGitPaneProps) {
   return (
-    <div className='sidebar-stack-pane sidebar-git-pane' id='git-panel'>
+    <div className='sidebar-stack-pane sidebar-git-pane'>
       <GitPanel
         {...configuration.gitPanel}
         menuPortalTarget={menuPortalTarget}

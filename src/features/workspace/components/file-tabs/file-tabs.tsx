@@ -2,7 +2,7 @@ import { forwardRef, type AnimationEvent as ReactAnimationEvent, type DragEvent 
 import { createPortal } from 'react-dom'
 import { ScrollArea } from '@base-ui/react/scroll-area'
 import { Tabs } from '@base-ui/react/tabs'
-import { CloseLine, FolderLine, GitBranchLine, GitCompareLine } from '@mingcute/react'
+import { ArrowLeftLine, ArrowRightLine, Chat3Line, CloseLine, FolderLine, GitBranchLine, GitCompareLine, Home3Line } from '@mingcute/react'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppTooltip } from '@/components/app-tooltip'
@@ -26,19 +26,22 @@ import {
   type FileTabsShadowSnapshot,
 } from './file-tabs-boundary-shadow'
 import { parseComputedBoxShadow, type FileTabsShadowLayer } from './file-tabs-shadow'
+import { getVisibleFileTabsBoundaryShape } from './file-tabs-boundary-viewport'
 import {
   reorderWorkspaceTabs,
   type TabDropPosition,
   type WorkspaceDisplayTab,
-  type WorkspaceTab,
 } from '@/features/workspace/store/use-workspace-store'
 import { getBaseName, getRelativePath } from '@/features/workspace/lib/workspace-paths'
 import type { WorkspaceIconTheme } from '@/features/workspace/types'
 import './styles.css'
 
 type FileTabsProps = {
+  contentPanelId?: string
   activeTabId: string | null
   actions?: ReactNode
+  otherPaneAction?: { direction: 'left' | 'right'; onMove: (tabId: string) => void }
+  newTabAction?: ReactNode
   iconTheme: WorkspaceIconTheme | null
   tabs: WorkspaceDisplayTab[]
   workspacePath: string | null
@@ -60,6 +63,8 @@ type FileTabLabelTooltip = {
 }
 
 type FileTabsBoundaryGeometryBase = {
+  viewportLeft: number
+  viewportRight: number
   frameHeight: number
   frameLeft: number
   frameTop: number
@@ -110,10 +115,11 @@ const FILE_TAB_SHADOW_HANDOFF_FALLBACK_BUFFER_MS = 100
 
 function getTabLabel(tab: WorkspaceDisplayTab) {
   if (tab.kind === 'fixed-panel') {
+    if (tab.fixedTabKind === 'conversation-panel') return '对话'
     return tab.fixedTabKind === 'file-panel' ? '文件' : '更改'
   }
 
-  return tab.kind === 'diff'
+  return tab.kind === 'diff' || tab.kind === 'conversation' || tab.kind === 'fallback'
     ? tab.title
     : getBaseName(tab.filePath)
 }
@@ -127,7 +133,7 @@ function getFileIconName(tab: WorkspaceDisplayTab) {
 }
 
 function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab, hasDuplicateName: boolean) {
-  if (tab.kind === 'fixed-panel') {
+  if (tab.kind === 'fixed-panel' || tab.kind === 'conversation' || tab.kind === 'fallback') {
     return null
   }
 
@@ -148,8 +154,8 @@ function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab,
   return locationLabel
 }
 
-function isReorderableTab(tab: WorkspaceDisplayTab): tab is WorkspaceTab {
-  return tab.kind !== 'fixed-panel'
+function isReorderableTab(tab: WorkspaceDisplayTab) {
+  return tab.kind !== 'fallback' && (tab.kind !== 'fixed-panel' || tab.closable === true)
 }
 
 function getFileTabLabelOverflowTooltip(element: HTMLElement) {
@@ -160,9 +166,22 @@ function getFileTabLabelOverflowTooltip(element: HTMLElement) {
     return null
   }
 
-  return labelElement.scrollWidth > labelElement.clientWidth + FILE_TAB_TEXT_OVERFLOW_EPSILON
-    ? label
-    : null
+  if (labelElement.scrollWidth > labelElement.clientWidth + FILE_TAB_TEXT_OVERFLOW_EPSILON) {
+    return label
+  }
+
+  // Hover actions can obscure a title without changing its layout width.
+  const actions = element.closest('.file-tab[data-movable="true"]')?.querySelector<HTMLElement>('.file-tab-actions')
+  if (actions && Number(getComputedStyle(actions).opacity) > 0) {
+    const fadeWidth = parseFloat(getComputedStyle(actions, '::before').width) || 0
+    const titleRange = document.createRange()
+    titleRange.selectNodeContents(labelElement)
+    if (titleRange.getBoundingClientRect().right > actions.getBoundingClientRect().left - fadeWidth) {
+      return label
+    }
+  }
+
+  return null
 }
 
 function resolveDropPosition(event: ReactDragEvent<HTMLElement>, element: HTMLElement): TabDropPosition {
@@ -227,7 +246,7 @@ function createFileTabsBoundaryChromeRenderData(
     frameWidth: geometry.frameWidth,
     hasBottomBoundary: geometry.hasBottomBoundary,
     radius: geometry.radius,
-    shape: geometry.kind === 'active'
+    shape: getVisibleFileTabsBoundaryShape(geometry.kind === 'active'
       ? {
           kind: 'active',
           activeHeight: geometry.activeHeight,
@@ -238,7 +257,7 @@ function createFileTabsBoundaryChromeRenderData(
       : {
           kind: 'empty',
           railHeight: geometry.railHeight,
-        },
+        }, geometry.viewportLeft, geometry.viewportRight),
   })
 
   if (!paths) {
@@ -270,6 +289,8 @@ const FileTabsBoundaryChrome = forwardRef<FileTabsBoundaryChromeHandle, {
   geometry,
 }, forwardedRef) {
   const shadowFilterPrefix = `file-tabs-boundary-shadow-${useId().replace(/:/g, '')}`
+  const contentClipId = `file-tabs-content-clip-${useId().replace(/:/g, '')}`
+  const contentClipPathRef = useRef<SVGPathElement | null>(null)
   const activeFillPathRef = useRef<SVGPathElement | null>(null)
   const activationShadowPathRef = useRef<SVGPathElement | null>(null)
   const outlinePathRef = useRef<SVGPathElement | null>(null)
@@ -328,10 +349,24 @@ const FileTabsBoundaryChrome = forwardRef<FileTabsBoundaryChromeHandle, {
     [geometry],
   )
   const paths = renderablePaths?.paths ?? null
+  const hasSurfacePaths = Boolean(paths)
   const currentShadowSnapshot = useMemo(
     () => paths ? createFileTabsShadowSnapshot(geometry, paths) : null,
     [geometry, paths],
   )
+  useLayoutEffect(() => {
+    const frame = chromeHost.closest<HTMLElement>('.editor-frame')
+    if (!frame || !hasSurfacePaths) return
+
+    // The outline includes the tab rail; only the content below it is clipped.
+    // Keeping the frame transparent also removes its rectangular corner fill.
+    frame.dataset.boundaryClipped = 'true'
+    frame.style.setProperty('--editor-content-clip-path', `url("#${contentClipId}")`)
+    return () => {
+      delete frame.dataset.boundaryClipped
+      frame.style.removeProperty('--editor-content-clip-path')
+    }
+  }, [chromeHost, contentClipId, hasSurfacePaths])
   useImperativeHandle(forwardedRef, () => ({
     renderMotionGeometry(nextGeometry) {
       if (nextGeometry.kind !== 'active') {
@@ -345,13 +380,13 @@ const FileTabsBoundaryChrome = forwardRef<FileTabsBoundaryChromeHandle, {
         hasLeftBoundary: nextGeometry.hasLeftBoundary,
         hasRightBoundary: nextGeometry.hasRightBoundary,
         radius: nextGeometry.radius,
-        shape: {
+        shape: getVisibleFileTabsBoundaryShape({
           kind: 'active',
           activeHeight: nextGeometry.activeHeight,
           activeLeft: nextGeometry.activeLeft,
           activeTop: nextGeometry.activeTop,
           activeWidth: nextGeometry.activeWidth,
-        },
+        }, nextGeometry.viewportLeft, nextGeometry.viewportRight),
       })
 
       if (!nextRenderablePaths) {
@@ -362,6 +397,7 @@ const FileTabsBoundaryChrome = forwardRef<FileTabsBoundaryChromeHandle, {
         activeFill: activeFillPathRef.current,
         outline: outlinePathRef.current,
         shadow: activationShadowPathRef.current,
+        contentClip: contentClipPathRef.current,
       }, nextRenderablePaths)
     },
   }), [])
@@ -549,6 +585,15 @@ const FileTabsBoundaryChrome = forwardRef<FileTabsBoundaryChromeHandle, {
         {...svgProps}
         className='file-tabs-boundary-chrome file-tabs-boundary-outline-layer'
       >
+        <defs>
+          <clipPath id={contentClipId} clipPathUnits='userSpaceOnUse'>
+            <path
+              ref={contentClipPathRef}
+              d={renderablePaths.surfacePath}
+              transform={`translate(0, -${geometry.kind === 'active' ? geometry.activeTop + geometry.activeHeight : geometry.railHeight})`}
+            />
+          </clipPath>
+        </defs>
         <path
           ref={outlinePathRef}
           className='file-tabs-boundary-outline'
@@ -573,6 +618,8 @@ function areBoundaryGeometriesEqual(
   nextGeometry: FileTabsBoundaryGeometry,
 ) {
   const hasSameFrame = currentGeometry?.kind === nextGeometry.kind
+    && Math.abs(currentGeometry.viewportLeft - nextGeometry.viewportLeft) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
+    && Math.abs(currentGeometry.viewportRight - nextGeometry.viewportRight) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
     && Math.abs(currentGeometry.frameHeight - nextGeometry.frameHeight) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
     && Math.abs(currentGeometry.frameLeft - nextGeometry.frameLeft) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
     && Math.abs(currentGeometry.frameTop - nextGeometry.frameTop) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
@@ -796,6 +843,9 @@ function FileTabsBoundaryChromeController({
     )
     const syncBoundaryGeometry = () => {
       const frameRect = frameElement.getBoundingClientRect()
+      const viewportRect = scrollerElement.getBoundingClientRect()
+      const viewportLeft = Math.max(0, viewportRect.left - frameRect.left)
+      const viewportRight = Math.min(frameRect.width, viewportRect.right - frameRect.left)
       const computedStyle = window.getComputedStyle(shellElement)
       const radius = Number.parseFloat(computedStyle.getPropertyValue('--file-tab-radius')) || 0
       const panelElement = frameElement.parentElement
@@ -804,6 +854,8 @@ function FileTabsBoundaryChromeController({
       const isEditorPanel = panelElement?.classList.contains('panel-editor') ?? false
       const isAgentPanel = panelElement?.classList.contains('panel-agent') ?? false
       const hasLeftBoundary = (
+        appLayout === 'duo'
+        ||
         (appLayout === 'agent' && isAgentPanel)
         || (appLayout === 'editor' && isEditorPanel)
       )
@@ -812,6 +864,8 @@ function FileTabsBoundaryChromeController({
         && panelRect.bottom - frameRect.bottom > FILE_TAB_BOUNDARY_EDGE_GAP_EPSILON,
       )
       const hasRightBoundary = (
+        appLayout === 'duo'
+        ||
         (
           appLayout === 'editor'
           && isEditorPanel
@@ -829,6 +883,8 @@ function FileTabsBoundaryChromeController({
       if (isEmpty) {
         const shellRect = shellElement.getBoundingClientRect()
         nextGeometry = {
+          viewportLeft,
+          viewportRight,
           frameHeight: frameRect.height,
           frameLeft: frameRect.left,
           frameTop: frameRect.top,
@@ -855,6 +911,8 @@ function FileTabsBoundaryChromeController({
           frameRect,
         )
         nextGeometry = {
+          viewportLeft,
+          viewportRight,
           activeHeight: indicatorGeometry?.activeHeight ?? activeRect.height,
           activeLeft: indicatorGeometry?.activeLeft ?? activeRect.left - frameRect.left,
           activeTop: indicatorGeometry?.activeTop ?? activeRect.top - frameRect.top,
@@ -903,6 +961,7 @@ function FileTabsBoundaryChromeController({
 
     resizeObserver?.observe(shellElement)
     resizeObserver?.observe(frameElement)
+    resizeObserver?.observe(scrollerElement)
 
     const mutationObserver = appShellElement && typeof MutationObserver !== 'undefined'
       ? new MutationObserver((records) => {
@@ -985,8 +1044,11 @@ function FileTabsBoundaryChromeController({
 }
 
 export function FileTabs({
+  contentPanelId = 'editor-content-panel',
   activeTabId,
   actions,
+  otherPaneAction,
+  newTabAction,
   iconTheme,
   tabs,
   workspacePath,
@@ -1049,14 +1111,23 @@ export function FileTabs({
       return
     }
 
-    if (!isTabVisibleInScroller(activeTabElement, scrollerElement)) {
-      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      activeTabElement.scrollIntoView({
-        behavior: resolveFileTabAutoScrollBehavior(prefersReducedMotion),
-        block: 'nearest',
-        inline: 'nearest',
-      })
+    const revealActiveTab = (behavior: ScrollBehavior) => {
+      if (!isTabVisibleInScroller(activeTabElement, scrollerElement)) {
+        activeTabElement.scrollIntoView({ behavior, block: 'nearest', inline: 'nearest' })
+      }
     }
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    revealActiveTab(resolveFileTabAutoScrollBehavior(prefersReducedMotion))
+    // Resizing changes the viewport without changing activeTabId. Keep the
+    // selection readable without restarting smooth scrolling on every frame.
+    let previousWidth = scrollerElement.clientWidth
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
+      const width = scrollerElement.clientWidth
+      if (width > 0 && width !== previousWidth) revealActiveTab('instant')
+      previousWidth = width
+    })
+    resizeObserver?.observe(scrollerElement)
+    return () => resizeObserver?.disconnect()
 
   }, [activeTabId])
 
@@ -1365,7 +1436,9 @@ export function FileTabs({
                 const fileIconName = getFileIconName(tab)
                 const metaLabel = getTabMetaLabel(workspacePath, tab, duplicateNameSet.has(baseName))
                 const isActive = activeTabId === tab.id
-                const isPinned = tab.kind === 'fixed-panel'
+                const isPinned = !isReorderableTab(tab)
+                const canMoveToOtherPane = Boolean(otherPaneAction && isReorderableTab(tab))
+                const moveLabel = otherPaneAction?.direction === 'left' ? '移到左侧' : '移到右侧'
 
                 return (
                   <div
@@ -1375,6 +1448,7 @@ export function FileTabs({
                     }}
                     className={`file-tab${isActive ? ' is-active' : ''}${tab.isDirty ? ' is-dirty' : ''}${tab.exists ? '' : ' is-missing'}${draggingTabId === tab.id ? ' is-drag-source' : ''}${isPinned ? ' is-pinned' : ''}`}
                     data-active={isActive ? 'true' : 'false'}
+                    data-movable={canMoveToOtherPane ? 'true' : undefined}
                     data-reorderable={isReorderableTab(tab) ? 'true' : 'false'}
                     data-tab-id={tab.id}
                   >
@@ -1390,7 +1464,7 @@ export function FileTabs({
                         type='button'
                         value={tab.id}
                         draggable={isReorderableTab(tab)}
-                        aria-controls='editor-content-panel'
+                        aria-controls={contentPanelId}
                         aria-grabbed={draggingTabId === tab.id}
                         className='file-tab-trigger'
                         onPointerEnter={(event) => {
@@ -1435,7 +1509,11 @@ export function FileTabs({
                           onClose(tab.id)
                         }}
                       >
-                        {tab.kind === 'fixed-panel' ? (
+                        {tab.kind === 'fallback' ? (
+                          <Home3Line aria-hidden='true' className='file-tab-leading-icon' />
+                        ) : tab.kind === 'conversation' || (tab.kind === 'fixed-panel' && tab.fixedTabKind === 'conversation-panel') ? (
+                          <Chat3Line aria-hidden='true' className='file-tab-leading-icon' />
+                        ) : tab.kind === 'fixed-panel' ? (
                           tab.fixedTabKind === 'file-panel'
                             ? <FolderLine aria-hidden='true' className='file-tab-leading-icon' />
                             : <GitBranchLine aria-hidden='true' className='file-tab-leading-icon' />
@@ -1449,6 +1527,20 @@ export function FileTabs({
 
                     {!isPinned ? (
                       <div className='file-tab-actions'>
+                        {canMoveToOtherPane ? <AppIconButton
+                          type='button'
+                          className='file-tab-move'
+                          aria-label={`将 ${baseName} ${moveLabel}`}
+                          size='sm'
+                          tooltip={moveLabel}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            closeLabelTooltip()
+                            otherPaneAction?.onMove(tab.id)
+                          }}
+                        >
+                          {otherPaneAction?.direction === 'left' ? <ArrowLeftLine aria-hidden='true' /> : <ArrowRightLine aria-hidden='true' />}
+                        </AppIconButton> : null}
                         <AppIconButton
                           type='button'
                           className='file-tab-close'
@@ -1480,6 +1572,8 @@ export function FileTabs({
         <div className='file-tabs-scroll-edge file-tabs-scroll-edge-left' aria-hidden='true' />
         <div className='file-tabs-scroll-edge file-tabs-scroll-edge-right' aria-hidden='true' />
       </ScrollArea.Root>
+
+      {newTabAction ? <div className='file-tabs-new-action'>{newTabAction}</div> : null}
 
       <div
         className='file-tabs-drag-spacer'

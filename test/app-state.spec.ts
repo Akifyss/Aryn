@@ -95,7 +95,7 @@ describe('app state persistence', () => {
       agent: {
         runningPromptEnterBehavior: 'followUp',
       },
-      layoutPreference: 'agent',
+      layoutPreference: 'duo',
       meo: {
         focusedLineHighlight: false,
         gitDiffLineHighlights: true,
@@ -479,7 +479,7 @@ describe('app state persistence', () => {
       agent: {
         runningPromptEnterBehavior: 'steer',
       },
-      layoutPreference: 'editor',
+      layoutPreference: 'duo',
       meo: {
         focusedLineHighlight: true,
         gitDiffLineHighlights: false,

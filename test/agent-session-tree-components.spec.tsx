@@ -78,6 +78,30 @@ function createController(
 }
 
 describe('AgentSessionTree presentation components', () => {
+  it('renders only the selected project sessions in the docked project-scoped browser', () => {
+    const project = { id: 'selected', name: 'Selected', path: '/selected', addedAt: '', lastOpenedAt: '', lastFilePath: null }
+    const other = { ...project, id: 'other', name: 'Other', path: '/other' }
+    const bucket = (name: string) => ({ hasCompleteSnapshot: true, sources: {
+      'builtin-pi': { error: null, hasLoaded: true, isLoading: false, sessions: [{
+        id: name, name, path: name, preview: name, messageCount: 1,
+        createdAt: '2026-09-12T00:00:00Z', modifiedAt: '2026-09-12T00:00:00Z',
+      }] },
+    } })
+    const markup = renderToStaticMarkup(<AgentSessionTreeView scope='current-project' controller={createController({
+      activeWorkspaceContext: { kind: 'project', projectId: project.id },
+      projectState: { projects: [project, other], lastProjectId: other.id },
+      workspacePath: project.path,
+      projectSessions: { selected: bucket('Visible project session'), other: bucket('Hidden project session') },
+      conversationState: { version: 3, conversations: [{
+        id: 'standalone', title: 'Hidden standalone conversation', agentId: 'builtin-pi', status: 'active',
+        titleSource: 'user', createdAt: '', updatedAt: '', workspacePath: null, agentSessionPath: null, lastMessagePreview: null,
+      }] },
+    })} />)
+    expect(markup).toContain('Visible project session')
+    expect(markup).not.toContain('Hidden project session')
+    expect(markup).not.toContain('Hidden standalone conversation')
+    expect(markup).not.toContain('agent-project-tree-header')
+  })
   it('uses a smaller initial render window for floating virtualized trees', () => {
     const rows = Array.from({ length: 1_000 }, (_, index) => ({
       key: `row-${index}`,

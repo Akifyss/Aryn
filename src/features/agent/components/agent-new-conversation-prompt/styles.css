@@ -27,6 +27,6 @@
   font-size: inherit;
 }
 
-.agent-new-conversation-prompt h2 .agent-project-switch-trigger .agent-project-switch-chevron {
+.agent-new-conversation-prompt h2 .agent-project-switch-chevron {
   display: none;
 }

@@ -2,9 +2,10 @@ import type { AgentRunningPromptBehavior } from '../agent-contracts/types'
 import type { GitPanelLayout } from './git'
 import type { WorkspaceFileSystemState } from './workspace'
 import type { LegacyWorkspaceFileViewMode } from './workspace-files'
+import type { PersistedDuoLayout, PersistedDuoProjects } from './duo-layout'
 
 export type AppTheme = 'light' | 'dark' | 'auto'
-export type AppLayoutPreference = 'agent' | 'editor'
+export type AppLayoutPreference = 'agent' | 'editor' | 'duo'
 export type AgentRunningPromptEnterBehavior = AgentRunningPromptBehavior
 export type MeoOutlinePosition = 'left' | 'right'
 
@@ -29,6 +30,8 @@ export type PersistedAppSettings = {
 export type LeftSidebarTab = 'file' | 'git'
 
 export type PersistedLayoutState = {
+  duo?: PersistedDuoLayout
+  duoProjects?: PersistedDuoProjects
   activeLeftSidebarTab: LeftSidebarTab
   agentChatWidth: number
   agentRightSidebarCollapsed: boolean

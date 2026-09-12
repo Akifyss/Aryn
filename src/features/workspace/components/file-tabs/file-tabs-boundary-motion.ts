@@ -27,6 +27,7 @@ export type FileTabBoundaryMotionPathTargets = {
   activeFill: Pick<SVGPathElement, 'setAttribute'> | null
   outline: Pick<SVGPathElement, 'setAttribute'> | null
   shadow: Pick<SVGPathElement, 'setAttribute'> | null
+  contentClip?: Pick<SVGPathElement, 'setAttribute'> | null
 }
 
 export type FileTabFrameGeometry = {
@@ -121,11 +122,12 @@ export function renderFileTabBoundaryMotionFrame(
 
   targets.outline.setAttribute('d', paths.outlinePath)
 
-  if (targets.activeFill && paths.activeFillPath) {
-    targets.activeFill.setAttribute('d', paths.activeFillPath)
+  if (targets.activeFill) {
+    targets.activeFill.setAttribute('d', paths.activeFillPath ?? '')
   }
 
   targets.shadow?.setAttribute('d', paths.surfacePath)
+  targets.contentClip?.setAttribute('d', paths.surfacePath)
   return true
 }
 

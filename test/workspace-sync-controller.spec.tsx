@@ -250,6 +250,28 @@ describe('useWorkspaceSyncController', () => {
     expect(useWorkspaceStore.getState().openTabs).toEqual([])
   })
 
+  it('does not refresh or close another project\'s retained diff tabs', async () => {
+    const appApi = stubWorkspaceApi()
+    const current = createDiffTab(createDiff())
+    const other = createDiffTab({ ...createDiff(), repositoryRootPath: 'D:/other',
+      change: { ...change, path: 'D:/other/notes.md' } })
+    useWorkspaceStore.setState({ openTabs: [current, other], activeTabId: current.id })
+    appApi.getGitFileDiff.mockRejectedValue(new Error('No longer changed'))
+    await renderController('C:/workspace').syncOpenDiffTabs('C:/workspace')
+    expect(appApi.getGitFileDiff).toHaveBeenCalledTimes(1)
+    expect(useWorkspaceStore.getState().openTabs).toEqual([other])
+  })
+
+  it('refreshes from the owning repository when the project is a subdirectory', async () => {
+    const appApi = stubWorkspaceApi()
+    const tab = createDiffTab(createDiff())
+    useWorkspaceStore.setState({ openTabs: [tab], activeTabId: tab.id })
+    appApi.getGitFileDiff.mockResolvedValue(createDiff('refreshed'))
+    await renderController('c:/workspace/subdir').syncOpenDiffTabs('c:/workspace/subdir')
+    expect(appApi.getGitFileDiff).toHaveBeenCalledWith(tab.diff.repositoryRootPath, change.path, change.scope)
+    expect(useWorkspaceStore.getState().openTabs[0]).toMatchObject({ diff: { modifiedContent: 'refreshed' } })
+  })
+
   it('uses live tab state when a diff refresh settles', async () => {
     const appApi = stubWorkspaceApi()
     const diffTab = createDiffTab(createDiff('first version'))

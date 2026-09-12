@@ -1,4 +1,5 @@
 import { AppDialog } from '@/components/app-dialog'
+import { SETTINGS_SECTIONS, type SettingsSectionId } from '@/features/settings/lib/settings-sections'
 import { AppearanceSettingsSection } from '@/features/settings/components/settings-dialog/appearance-settings-section/appearance-settings-section'
 import { ConversationSettingsSection } from '@/features/settings/components/settings-dialog/conversation-settings-section/conversation-settings-section'
 import { EditorSettingsSection } from '@/features/settings/components/settings-dialog/editor-settings-section/editor-settings-section'
@@ -11,8 +12,6 @@ import type {
   WorkspaceIconThemesByMode,
 } from '@/features/workspace/types'
 import './styles.css'
-
-export type SettingsSectionId = 'appearance' | 'conversation' | 'editor' | 'providers'
 
 type SettingsViewProps = {
   activeSection: SettingsSectionId
@@ -36,32 +35,6 @@ type SettingsDialogProps = SettingsViewProps & {
   onOpenChange: (isOpen: boolean) => void
 }
 
-const SETTINGS_SECTIONS: ReadonlyArray<{
-  id: SettingsSectionId
-  label: string
-}> = [
-  {
-    id: 'appearance',
-    label: '外观',
-  },
-  {
-    id: 'conversation',
-    label: '对话',
-  },
-  {
-    id: 'editor',
-    label: '编辑器',
-  },
-  {
-    id: 'providers',
-    label: '服务提供商',
-  },
-]
-
-function getSectionTitle(section: SettingsSectionId) {
-  return SETTINGS_SECTIONS.find((item) => item.id === section)?.label ?? '设置'
-}
-
 function SettingsView({
   activeSection,
   agentState,
@@ -75,6 +48,8 @@ function SettingsView({
   resolvedTheme,
   workspacePath,
 }: SettingsViewProps) {
+  const section = SETTINGS_SECTIONS.find((item) => item.id === activeSection)!
+
   return (
     <div className={`settings-page ${resolvedTheme === 'dark' ? 'dark theme-dark' : 'theme-light'}`}>
       <aside className='settings-sidebar'>
@@ -99,7 +74,7 @@ function SettingsView({
 
       <section className='settings-panel'>
         <div className='settings-panel-header'>
-          <h3 className='settings-panel-title'>{getSectionTitle(activeSection)}</h3>
+          <h3 className='settings-panel-title'>{section.label}</h3>
         </div>
 
         <div className='flex-1 min-h-0 flex flex-col overflow-hidden'>

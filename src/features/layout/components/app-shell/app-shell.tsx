@@ -52,7 +52,6 @@ type AppShellProps = {
   isDarkTheme: boolean
   isModalLayerOpen: boolean
   layout: AppShellLayout
-  layoutModeSwitch: ReactNode
   leftChromeSearchAction: ReactNode
   leftChromeSidebarAction: ReactNode
   onRequestWindowClose: () => void
@@ -70,7 +69,6 @@ export function AppShell({
   isDarkTheme,
   isModalLayerOpen,
   layout,
-  layoutModeSwitch,
   leftChromeSearchAction,
   leftChromeSidebarAction,
   onRequestWindowClose,
@@ -151,7 +149,6 @@ export function AppShell({
       data-overlay-elevated={shellChromeOverlayState.leftControlsElevated ? 'true' : 'false'}
       data-react-aria-top-layer={shellChromeOverlayState.leftControlsTopLayer ? 'true' : undefined}
     >
-      {layoutModeSwitch}
       {!isLeftDrawerOpen ? (
         <>
           {isLeftSidebarVisible ? <div className='left-chrome-drag-spacer' aria-hidden='true' /> : null}

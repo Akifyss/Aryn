@@ -81,7 +81,7 @@ describe('shared icon-size tokens', () => {
     expect(projectIconSource).toContain("size = 'md'")
     expect(projectIconSource).toContain('data-size={size}')
     expect(projectIconCss).toContain(".project-icon[data-size='xl']")
-    expect(promptSource).toContain("iconSize='xl'")
+    expect(promptSource).toContain("triggerIconSize='xl'")
     expect(promptCss).not.toMatch(/\.project-icon\s*\{[^}]*(?:width|height):/)
     expect(nativeIconSource).toContain(
       "const COMPACT_ICON_STYLE = 'width:var(--icon-size-md);height:var(--icon-size-md)'",

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { CloseLine, MinimizeLine, RestoreLine, SquareLine } from '@mingcute/react'
+import { resolveLayoutPlatformPreview, useLayoutPlatformPreview } from '@/features/layout/hooks/use-layout-platform-preview'
 
 export function AppTitlebar({
   isDrawerOpen = false,
@@ -14,7 +15,8 @@ export function AppTitlebar({
   onRequestClose?: () => void
 }) {
   const platform = window.appApi.platform
-  const isMac = platform === 'darwin'
+  const platformPreview = useLayoutPlatformPreview()
+  const isMac = resolveLayoutPlatformPreview(platform, false, platformPreview).shellPlatform === 'macos'
   const [isMaximized, setIsMaximized] = useState(false)
 
   useEffect(() => {
@@ -23,6 +25,9 @@ export function AppTitlebar({
     }
 
     let mounted = true
+    const unsubscribe = window.appApi.onWindowStateChanged(({ isMaximized: nextState }) => {
+      setIsMaximized(nextState)
+    })
 
     void window.appApi.isWindowMaximized().then(({ isMaximized: nextState }) => {
       if (mounted) {
@@ -32,6 +37,7 @@ export function AppTitlebar({
 
     return () => {
       mounted = false
+      unsubscribe()
     }
   }, [isMac])
 
@@ -41,9 +47,16 @@ export function AppTitlebar({
       data-drawer-open={isDrawerOpen ? 'true' : 'false'}
       data-left-drawer-open={isLeftDrawerOpen ? 'true' : 'false'}
       data-react-aria-top-layer='true'
+      data-platform-preview={platformPreview === 'system' ? undefined : platformPreview}
     >
       {leftControls}
-      <div className='titlebar-side titlebar-side-left' />
+      <div className='titlebar-side titlebar-side-left'>
+        {platform !== 'darwin' && platformPreview === 'macos' ? (
+          <span className='titlebar-preview-traffic-lights' role='img' aria-label='macOS 红绿灯占位（布局预览）'>
+            <span /><span /><span />
+          </span>
+        ) : null}
+      </div>
       <div className='titlebar-spacer' />
 
       <div className='titlebar-side titlebar-side-right'>

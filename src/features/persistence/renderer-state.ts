@@ -43,6 +43,14 @@ export function readStoredLeftSidebarTab(): LeftSidebarTab {
   return initialLayoutState?.activeLeftSidebarTab === 'git' ? 'git' : 'file'
 }
 
+export function readStoredDuoLayout() {
+  return initialLayoutState?.duo
+}
+
+export function readStoredDuoProjects() {
+  return initialLayoutState?.duoProjects
+}
+
 export function getPersistedWorkspaceTabState(workspacePath: string) {
   return persistedWorkspaceTabState.get(workspacePath)
 }

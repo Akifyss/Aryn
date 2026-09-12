@@ -41,6 +41,8 @@ export function handleAppKeyboardShortcut(
     return true
   }
 
+  if (options.isShortcutBlockingLayerOpen) return false
+
   if (standardModifier && key === 's') {
     event.preventDefault()
     void options.onSaveActiveTab()

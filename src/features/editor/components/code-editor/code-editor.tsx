@@ -1,5 +1,6 @@
 import * as React from 'react'
 import * as monaco from 'monaco-editor'
+import type { EditorViewHandle } from '@/features/editor/lib/editor-view-handle'
 import { getCodeLanguage } from '@/features/workspace/lib/file-types'
 import {
   Editor,
@@ -12,6 +13,7 @@ import { EDITOR_FONT_FAMILY } from '@/features/editor/lib/editor-font-family'
 import './styles.css'
 
 type CodeEditorProps = {
+  viewHandleRef?: React.Ref<EditorViewHandle>
   disabled?: boolean
   filePath: string
   onCompositionChange?: (isComposing: boolean) => void
@@ -52,6 +54,7 @@ export function CodeEditor({
   onChange,
   value,
   theme = "auto",
+  viewHandleRef,
 }: CodeEditorProps) {
   const monacoTheme = React.useMemo(() => resolveMonacoTheme(theme), [theme])
   const editorRef = React.useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
@@ -65,6 +68,15 @@ export function CodeEditor({
   const onSaveRef = React.useRef(onSave)
   const pendingValueRef = React.useRef<string | null>(null)
   const [isFocused, setIsFocused] = React.useState(false)
+  const [mountedEditor, setMountedEditor] = React.useState<monaco.editor.IStandaloneCodeEditor | null>(null)
+  React.useImperativeHandle<EditorViewHandle | null, EditorViewHandle | null>(viewHandleRef, () => mountedEditor ? {
+    capture: () => {
+      const view = mountedEditor.saveViewState()
+      return view ? { kind: 'code' as const, view } : null
+    },
+    restore: (state) => { if (state.kind === 'code') mountedEditor.restoreViewState(state.view) },
+    focus: () => mountedEditor.focus(),
+  } : null, [mountedEditor])
 
   const emitChange = React.useCallback((nextValue: string) => {
     if (nextValue === lastForwardedValueRef.current) {
@@ -93,6 +105,7 @@ export function CodeEditor({
     })
     disposablesRef.current = []
     editorRef.current = editor
+    setMountedEditor(editor)
 
     editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
       onSaveRef.current?.(editor.getValue())
@@ -174,6 +187,7 @@ export function CodeEditor({
   }, [isFocused, value])
 
   React.useEffect(() => () => {
+    const model = editorRef.current?.getModel()
     disposablesRef.current.forEach((disposable) => {
       disposable.dispose()
     })
@@ -184,11 +198,17 @@ export function CodeEditor({
     isComposingRef.current = false
     isApplyingExternalValueRef.current = false
     onCompositionChangeRef.current?.(false)
+    // Monaco shares models by URI. Let the React wrapper dispose this editor,
+    // then release the model only if no peer is still displaying it.
+    queueMicrotask(() => {
+      if (model && !model.isDisposed() && !model.isAttachedToEditor()) model.dispose()
+    })
   }, [])
 
   return (
     <div className='code-editor-shell'>
       <Editor
+        keepCurrentModel
         defaultValue={value}
         height='100%'
         language={getCodeLanguage(filePath)}

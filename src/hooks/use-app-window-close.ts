@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 
 type AppWindowCloseOptions = {
   confirmDiscardDirtyTabs: (reason: 'close') => Promise<boolean>
+  beforeClose?: () => Promise<void>
 }
 
 export type AppWindowCloseRequestState = {
@@ -32,9 +33,12 @@ export async function requestAppWindowClose(
 
 export function useAppWindowClose({
   confirmDiscardDirtyTabs,
+  beforeClose,
 }: AppWindowCloseOptions) {
   const confirmDiscardDirtyTabsRef = useRef(confirmDiscardDirtyTabs)
   const requestStateRef = useRef<AppWindowCloseRequestState>({ isInFlight: false })
+  const beforeCloseRef = useRef(beforeClose)
+  beforeCloseRef.current = beforeClose
 
   useEffect(() => {
     confirmDiscardDirtyTabsRef.current = confirmDiscardDirtyTabs
@@ -45,7 +49,10 @@ export function useAppWindowClose({
       await requestAppWindowClose(
         requestStateRef.current,
         () => confirmDiscardDirtyTabsRef.current('close'),
-        () => window.appApi.closeWindow(),
+        async () => {
+          await beforeCloseRef.current?.()
+          await window.appApi.closeWindow()
+        },
       )
     } catch (error) {
       console.error('[window] Failed to close the application window.', error)

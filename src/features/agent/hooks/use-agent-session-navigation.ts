@@ -286,8 +286,12 @@ export function useAgentSessionNavigation({
     })
   }, [workspacePath])
 
-  useEffect(() => () => {
+  useLayoutEffect(() => () => {
     openSessionRequestIdRef.current += 1
+    // Cancellation and deduplication share a lifetime. StrictMode replays a
+    // newly mounted tab's effects; retaining the handled target would skip
+    // its replacement request and leave snapshot validation pending forever.
+    handledNavigationTargetRef.current = null
   }, [])
 
   // A conversation whose workspace or session is unavailable still owns an

@@ -25,13 +25,12 @@ export const AGENT_RUNNING_PROMPT_BEHAVIOR_LABELS: Record<AgentRunningPromptEnte
 }
 
 interface SettingsState extends PersistedAppSettings {
-  setLayoutPreference: (layoutPreference: AppLayoutPreference) => void
   updateAgentSettings: (patch: Partial<AgentSettings>) => void
   updateMeoSettings: (patch: Partial<MeoSettings>) => void
   setTheme: (theme: AppTheme) => void
 }
 
-export const DEFAULT_APP_LAYOUT_PREFERENCE: AppLayoutPreference = 'agent'
+export const DEFAULT_APP_LAYOUT_PREFERENCE: AppLayoutPreference = 'duo'
 
 const DEFAULT_MEO_SETTINGS: MeoSettings = {
   focusedLineHighlight: false,
@@ -96,10 +95,6 @@ function sanitizeMeoSettings(value: Partial<MeoSettings> | undefined): MeoSettin
   }
 }
 
-function sanitizeLayoutPreference(value: unknown): AppLayoutPreference {
-  return value === 'editor' || value === 'agent' ? value : DEFAULT_APP_LAYOUT_PREFERENCE
-}
-
 function sanitizeTheme(value: unknown): AppTheme {
   return value === 'light' || value === 'dark' || value === 'auto' ? value : DEFAULT_APP_SETTINGS.theme
 }
@@ -114,11 +109,6 @@ function persistSettingsPatch(patch: Partial<PersistedAppSettings>) {
 
 export const useSettingsStore = create<SettingsState>()((set, get) => ({
   ...DEFAULT_APP_SETTINGS,
-  setLayoutPreference: (layoutPreference) => {
-    const nextLayoutPreference = sanitizeLayoutPreference(layoutPreference)
-    set({ layoutPreference: nextLayoutPreference })
-    persistSettingsPatch({ layoutPreference: nextLayoutPreference })
-  },
   setTheme: (theme) => {
     const nextTheme = sanitizeTheme(theme)
     set({ theme: nextTheme })
@@ -145,7 +135,8 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 export function initializeSettingsStore(settings: PersistedAppSettings) {
   useSettingsStore.setState({
     agent: sanitizeAgentSettings(settings.agent),
-    layoutPreference: sanitizeLayoutPreference(settings.layoutPreference),
+    // Retain the persisted field for old installs; the only layout is now Duo.
+    layoutPreference: DEFAULT_APP_LAYOUT_PREFERENCE,
     meo: sanitizeMeoSettings(settings.meo),
     theme: sanitizeTheme(settings.theme),
   })

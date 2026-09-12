@@ -21,6 +21,7 @@ import {
   type AgentSessionTreeProps,
 } from '@/features/agent/components/agent-session-tree/agent-session-tree'
 import { useAgentContext } from '@/features/agent/components/agent-sidebar/agent-sidebar-context'
+import { AppButton } from '@/components/app-button'
 import {
   isAgentVisibleWorkspaceOperational,
   resolveAgentThreadbarSessionPresentation,
@@ -81,7 +82,6 @@ export function AgentChatSurface() {
     piWebNativeSession,
     piWebOptimisticUserMessages,
     panelError,
-    projectState,
     renderedMessages,
     roundFileChangesByMessageId,
     sessionControlTarget,
@@ -96,6 +96,8 @@ export function AgentChatSurface() {
     visibleSessionSelection,
     visibleWorkspacePath,
     workspacePath,
+    workspaceLoadError,
+    retryWorkspaceLoad,
   } = useAgentContext()
   const isNewConversation = isConversationMaterializing
     || shouldShowAgentNewConversationPrompt(
@@ -110,11 +112,6 @@ export function AgentChatSurface() {
     isConversationMaterializing,
     selection: sessionControlSelection,
   })
-  const activeProject = activeWorkspaceContext.kind === 'project'
-    ? projectState.projects.find((project) => (
-        project.id === activeWorkspaceContext.projectId
-      )) ?? null
-    : null
   const showProjectSessionMenu = shouldShowAgentProjectSessionMenu(activeWorkspaceContext)
   const activeConversation = activeWorkspaceContext.kind === 'conversation'
     ? conversationState.conversations.find((conversation) => (
@@ -338,6 +335,13 @@ export function AgentChatSurface() {
       </div>
       <div ref={handleLocalOverlayRootRef} className='agent-local-overlay-root' />
 
+      {workspaceLoadError ? (
+        <div className='agent-status-inline' role='alert'>
+          <p>无法准备对话：{workspaceLoadError}</p>
+          <AppButton variant='ghost' onClick={retryWorkspaceLoad}>重试</AppButton>
+        </div>
+      ) : null}
+
       {!isConversationMaterializing && showSessionLoadingIndicator ? (
         <AppLoadingState
           className='agent-session-loading-state'
@@ -395,7 +399,6 @@ export function AgentChatSurface() {
         </>
       )}
       <AgentComposerSurface
-        activeProject={activeProject}
         isNewConversation={isNewConversation}
         localOverlayRoot={localOverlayRoot}
       />

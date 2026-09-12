@@ -203,6 +203,8 @@ export type AgentContextValue = {
   thinkingLevelLabel: string
   theme: BbTheme
   workspacePath: string | null
+  workspaceLoadError: string | null
+  retryWorkspaceLoad: () => void
   workspaceTree: WorkspaceNode[]
 }
 

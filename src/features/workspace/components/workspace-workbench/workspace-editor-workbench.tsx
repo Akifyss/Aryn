@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react'
+import { useId, type ComponentProps, type ReactNode } from 'react'
 import { FileTabs } from '@/features/workspace/components/file-tabs/file-tabs'
 import { WorkspaceEditorContent } from '@/features/workspace/components/workspace-editor-content/workspace-editor-content'
 import {
@@ -18,6 +18,11 @@ import {
 } from './workspace-navigation-panels'
 
 type WorkspaceEditorWorkbenchProps = {
+  directorySidebarContent?: ReactNode
+  directorySidebarSide?: 'left' | 'right'
+  directorySidebarId?: string
+  auxiliaryContent?: ReactNode
+  fixedPanelContent?: ReactNode
   activeFixedPanelTab: WorkspaceFixedPanelTab | null
   editorContent: Omit<
     ComponentProps<typeof WorkspaceEditorContent>,
@@ -36,6 +41,11 @@ type WorkspaceEditorWorkbenchProps = {
 const directoryToggleSpacer = <WorkspaceEditorDirectoryToggleSpacer />
 
 export function WorkspaceEditorWorkbench({
+  directorySidebarContent,
+  directorySidebarSide = 'left',
+  directorySidebarId,
+  auxiliaryContent,
+  fixedPanelContent,
   activeFixedPanelTab,
   editorContent,
   emptyState,
@@ -47,6 +57,7 @@ export function WorkspaceEditorWorkbench({
   navigation,
   onToggleDirectorySidebar,
 }: WorkspaceEditorWorkbenchProps) {
+  const contentPanelId = useId()
   const directorySidebarToggle = isDirectorySidebarAvailable ? (
     <WorkspaceEditorDirectoryToggle
       isVisible={isDirectorySidebarVisible}
@@ -59,40 +70,46 @@ export function WorkspaceEditorWorkbench({
   const hasActiveDocument = Boolean(
     editorContent.activeFileTab || editorContent.activeDiffTab,
   )
+  const directorySidebar = isDirectorySidebarVisible ? (
+    <WorkspaceEditorDirectorySidebar side={directorySidebarSide} id={directorySidebarId}>
+      {directorySidebarContent ?? <WorkspaceNavigationPanels
+        configuration={navigation}
+        fileClickMode='replace-active-tab'
+        surfaceMode='docked'
+        tabListAction={directorySidebarToggle}
+      />}
+    </WorkspaceEditorDirectorySidebar>
+  ) : null
 
   return (
     <WorkspaceEditorSurface
-      tabs={<FileTabs {...fileTabs} />}
+      contentPanelId={contentPanelId}
+      tabs={<FileTabs {...fileTabs} contentPanelId={contentPanelId} />}
     >
-      {activeFixedPanelTab?.fixedTabKind === 'file-panel' ? (
+      {directorySidebarSide === 'left' ? directorySidebar : null}
+      {fixedPanelContent}
+      {fixedPanelContent === undefined && activeFixedPanelTab?.fixedTabKind === 'file-panel' ? (
         <WorkspaceFileSystemPanel {...fileSystemPanel} />
       ) : null}
-      {activeFixedPanelTab?.fixedTabKind === 'git-panel' ? (
+      {fixedPanelContent === undefined && activeFixedPanelTab?.fixedTabKind === 'git-panel' ? (
         <WorkspaceGitPane configuration={navigation} />
-      ) : null}
-      {isDirectorySidebarVisible ? (
-        <WorkspaceEditorDirectorySidebar>
-          <WorkspaceNavigationPanels
-            configuration={navigation}
-            fileClickMode='replace-active-tab'
-            surfaceMode='docked'
-            tabListAction={directorySidebarToggle}
-          />
-        </WorkspaceEditorDirectorySidebar>
       ) : null}
       {isDirectoryToggleSlotVisible ? (
         <WorkspaceEditorDirectoryToggleSlot>
           {directorySidebarToggle}
         </WorkspaceEditorDirectoryToggleSlot>
       ) : null}
-      {!activeFixedPanelTab && !hasActiveDocument ? (
+      {!activeFixedPanelTab && !hasActiveDocument && !auxiliaryContent ? (
         <WorkspaceEditorEmptyState {...emptyState} />
       ) : null}
+
+      {auxiliaryContent}
 
       <WorkspaceEditorContent
         {...editorContent}
         leadingToolbarAction={leadingToolbarAction}
       />
+      {directorySidebarSide === 'right' ? directorySidebar : null}
     </WorkspaceEditorSurface>
   )
 }

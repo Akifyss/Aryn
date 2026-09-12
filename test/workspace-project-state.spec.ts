@@ -131,7 +131,7 @@ describe('workspace project controller ownership', () => {
     expect(projectSessionSource).toMatch(/onAccepted: \(acceptedIntent\) => \{[\s\S]*?setPendingAgentProjectSessionRequest\(nextRequest\)/)
     expect(appSource).toContain('const handleOpenSession = useCallback((sessionPath: string, sessionLabel: string) => {')
     expect(appSource).toContain('navigationCoordinator: workspaceNavigationCoordinator')
-    expect(appSource).toMatch(/queueCurrentProjectSession\(\s*sessionPath,[\s\S]*?sessionLabel,/)
+    expect(appSource).toMatch(/openDuoProjectSession\(useDuoStore.getState\(\).focusedPane, activeProject,[\s\S]*?sessionPath,[\s\S]*?sessionLabel,/)
     const setActiveProjectHandler = mainSource.slice(
       mainSource.indexOf("ipcMain.handle('project:set-active'"),
       mainSource.indexOf("ipcMain.handle('project:remove'"),

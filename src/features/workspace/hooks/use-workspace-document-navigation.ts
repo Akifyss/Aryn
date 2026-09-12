@@ -38,7 +38,10 @@ import {
 } from '@/features/workspace/store/use-workspace-store'
 import { getOpenFileProfileDuration, recordOpenFileProfile } from '@/lib/open-file-profile'
 
+export type WorkspaceDocumentTarget = ((tabId: string) => void) & { isCurrent?: () => boolean }
+
 type UseWorkspaceDocumentNavigationOptions = {
+  captureDocumentTarget?: () => WorkspaceDocumentTarget | undefined
   captureActiveMeoViewPosition: () => void
   closeLeftDrawer: () => void
   closeRightDrawer: () => void
@@ -56,6 +59,7 @@ type UseWorkspaceDocumentNavigationOptions = {
 }
 
 export function useWorkspaceDocumentNavigation({
+  captureDocumentTarget,
   captureActiveMeoViewPosition,
   closeLeftDrawer,
   closeRightDrawer,
@@ -81,7 +85,9 @@ export function useWorkspaceDocumentNavigation({
     filePath: string,
     workspacePath: string | null = currentPath,
     preferredViewMode?: LegacyWorkspaceFileViewMode,
+    target?: WorkspaceDocumentTarget,
   ) => {
+    const opened = target ?? captureDocumentTarget?.()
     const openStartedAt = performance.now()
     recordOpenFileProfile('app:open-file:start', {
       filePath,
@@ -129,10 +135,13 @@ export function useWorkspaceDocumentNavigation({
         ),
       )
 
+      if (opened?.isCurrent && !opened.isCurrent()) return
+
       if (existingTab) {
         const activateStartedAt = performance.now()
         recordOpenFileProfile('app:open-file:existing-tab:activate:start', { tabId: existingTab.id })
         activateTab(existingTab.id)
+        opened?.(existingTab.id)
         recordOpenFileProfile('app:open-file:existing-tab:activate:end', {
           durationMs: getOpenFileProfileDuration(activateStartedAt),
         })
@@ -171,6 +180,7 @@ export function useWorkspaceDocumentNavigation({
         })
         return content
       })()
+      if (opened?.isCurrent && !opened.isCurrent()) return
       const openTabStartedAt = performance.now()
       recordOpenFileProfile('app:open-file:open-tab:start', {
         editorKind,
@@ -182,7 +192,9 @@ export function useWorkspaceDocumentNavigation({
         content: fileContent,
         editorKind,
         viewMode: targetViewMode,
+        workspacePath,
       })
+      opened?.(createWorkspaceFileTabId(filePath, targetViewMode))
       recordOpenFileProfile('app:open-file:open-tab:end', {
         durationMs: getOpenFileProfileDuration(openTabStartedAt),
         elapsedMs: getOpenFileProfileDuration(openStartedAt),
@@ -216,6 +228,7 @@ export function useWorkspaceDocumentNavigation({
       elapsedMs: getOpenFileProfileDuration(openStartedAt),
     })
   }, [
+    captureDocumentTarget,
     activateTab,
     captureActiveMeoViewPosition,
     currentPath,
@@ -395,6 +408,7 @@ export function useWorkspaceDocumentNavigation({
     change: GitChangeItem,
     diff: GitFileDiffResult,
     gitDiffRequest: WorkspaceFileGitDiffRequest,
+    isCurrent?: () => boolean,
   ) => {
     const targetViewMode: WorkspaceFileViewMode = 'meo'
     const existingTab = useWorkspaceStore.getState().openTabs.find(
@@ -416,6 +430,7 @@ export function useWorkspaceDocumentNavigation({
       }
     }
 
+    if (isCurrent && !isCurrent()) return
     openTab({
       content: fileContent,
       editorKind: diff.editorKind,
@@ -452,7 +467,9 @@ export function useWorkspaceDocumentNavigation({
       source?: 'revision' | 'worktree'
       view?: 'meo' | 'monaco'
     },
+    target?: WorkspaceDocumentTarget,
   ) => {
+    const opened = target ?? captureDocumentTarget?.()
     if (!currentPath) {
       return
     }
@@ -461,6 +478,7 @@ export function useWorkspaceDocumentNavigation({
 
     try {
       const diff = await window.appApi.getGitFileDiff(currentPath, change.path, change.scope)
+      if (opened?.isCurrent && !opened.isCurrent()) return
       const navigationSource = options?.source ?? 'worktree'
 
       if (!shouldOpenGitDiffForLine(diff, navigationSource, options?.lineNumber)) {
@@ -477,7 +495,9 @@ export function useWorkspaceDocumentNavigation({
             options?.lineNumber,
             options?.mode ?? 'split',
           ),
+          opened?.isCurrent,
         )
+        opened?.(createWorkspaceFileTabId(change.path, 'meo'))
         return
       }
 
@@ -488,7 +508,9 @@ export function useWorkspaceDocumentNavigation({
           source: navigationSource,
         } satisfies WorkspaceDiffNavigationRequest
         : null
-      openDiffTab(createDiffTab(diff, navigationRequest))
+      const tab = createDiffTab(diff, navigationRequest)
+      openDiffTab(tab)
+      opened?.(tab.id)
       setIsAgentLayoutFixedTabActive(false)
 
       if (isLeftSidebarDrawer) {
@@ -502,6 +524,7 @@ export function useWorkspaceDocumentNavigation({
       setStatusMessage(message)
     }
   }, [
+    captureDocumentTarget,
     captureActiveMeoViewPosition,
     currentPath,
     isLeftSidebarDrawer,
@@ -515,7 +538,9 @@ export function useWorkspaceDocumentNavigation({
   const openGitCommitFileDiff = useCallback(async (
     commitHash: string,
     change: GitCommitFileChange,
+    target?: WorkspaceDocumentTarget,
   ) => {
+    const opened = target ?? captureDocumentTarget?.()
     if (!currentPath) {
       return
     }
@@ -524,8 +549,11 @@ export function useWorkspaceDocumentNavigation({
 
     try {
       const diff = await window.appApi.getGitCommitFileDiff(currentPath, commitHash, change.path)
+      if (opened?.isCurrent && !opened.isCurrent()) return
 
-      openDiffTab(createDiffTab(diff))
+      const tab = createDiffTab(diff)
+      openDiffTab(tab)
+      opened?.(tab.id)
       setIsAgentLayoutFixedTabActive(false)
 
       if (isLeftSidebarDrawer) {
@@ -539,6 +567,7 @@ export function useWorkspaceDocumentNavigation({
       setStatusMessage(message)
     }
   }, [
+    captureDocumentTarget,
     captureActiveMeoViewPosition,
     currentPath,
     isLeftSidebarDrawer,

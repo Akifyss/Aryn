@@ -382,6 +382,10 @@ describe('shell layout helpers', () => {
     expect(fileTabsCss).toContain(`.app-shell[data-app-layout='editor']
   .panel-editor
   > .editor-frame
+  > .file-tabs-shell,
+.app-shell[data-app-layout='duo']
+  .duo-pane
+  > .editor-frame
   > .file-tabs-shell {
   --file-tabs-rail-surface: var(--sidebar);
 }`)
@@ -423,12 +427,12 @@ describe('shell layout helpers', () => {
     ])
 
     expect(fileTabsCss).toContain(`.file-tab:hover .file-tab-actions,
-.file-tab:focus-within .file-tab-actions,
+.file-tab:has(:focus-visible) .file-tab-actions,
 .file-tab.is-dirty .file-tab-actions {
   opacity: 1;
   pointer-events: auto;
 }`)
-    expect(fileTabsCss).toContain(`.file-tab.is-dirty:not(:hover):not(:focus-within) .file-tab-close svg {
+    expect(fileTabsCss).toContain(`.file-tab.is-dirty:not(:hover):not(:has(:focus-visible)) .file-tab-close svg {
   opacity: 0;
   pointer-events: none;
 }`)
@@ -548,7 +552,7 @@ describe('shell layout helpers', () => {
     expect(fileTabsCss).not.toContain('var(--chrome-height) - var(--tabs-chrome-height)')
     expect(fileTabsCss).toContain('padding: var(--file-tabs-top-gap) var(--file-tab-shoulder-size) 0 0;')
     expect(fileTabsCss).toContain('padding: 0 24px var(--file-tab-content-bottom-inset) 8px;')
-    expect(fileTabsCss).toContain('padding: 0 0 var(--file-tab-content-bottom-inset) 12px;')
+    expect(fileTabsCss).toContain('padding: 0 0 var(--file-tab-content-bottom-inset);')
     expect(fileTabsCss).toContain('border-radius: var(--file-tab-radius) var(--file-tab-radius) 0 0;')
     expect(fileTabsCss).not.toContain('box-shadow: inset 0 -1px 0 var(--separator);')
     expect(fileTabsCss).toContain(`.file-tab.is-active {
@@ -671,11 +675,8 @@ describe('shell layout helpers', () => {
     expect(fileTabsCss).toContain('.file-tab-trigger::before {')
     expect(fileTabsCss).toContain('.file-tab:hover + .file-tab .file-tab-trigger::before {')
     expect(fileTabsCss).not.toContain('.file-tab:hover + .file-tab::before')
-    expect(fileTabsCss).toContain('.file-tab.is-dirty:not(:hover):not(:focus-within) .file-tab-actions {')
-    expect(fileTabsCss).toContain('.file-tab.is-dirty:focus-within .file-tab-dirty-indicator,')
-    expect(fileTabsCss).toMatch(
-      /\.file-tab-actions\s*\{[^}]*transparent calc\(100% - 1px\)/s,
-    )
+    expect(fileTabsCss).toContain('.file-tab.is-dirty:not(:hover):not(:has(:focus-visible)) .file-tab-actions {')
+    expect(fileTabsCss).toContain('.file-tab.is-dirty:has(:focus-visible) .file-tab-dirty-indicator,')
     expect(fileTabsCss).not.toContain('.file-tabs-leading-corner')
     expect(fileTabsCss).not.toContain('.panel-resize-handle')
     expect(fileTabsCss).not.toContain(".app-shell[data-left-collapsed='true'] .file-tabs-scroller")
@@ -856,8 +857,10 @@ describe('shell layout helpers', () => {
     ].join('\n')
     const appShellRule = appShellCss.match(/\.app-shell \{([\s\S]*?)\n\}/)?.[1]
 
-    expect(appSource).toContain('<AppWorkspaceShell')
-    expect(appSource).toContain('layout={shellLayout}')
+    expect(appSource).toContain('<DuoWorkspaceShell')
+    expect(appSource).toContain('chromeVars={shellLayout.shellChromeVars}')
+    expect(appSource).not.toContain('<AppWorkspaceShell')
+    expect(appSource).not.toContain('AppLayoutModeChrome')
     expect(appSource).not.toContain('<AppShell')
     expect(appWorkspaceShellSource).toContain('<AppShell')
     expect(appWorkspaceShellSource).toContain('layout={layout}')

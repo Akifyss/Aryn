@@ -218,7 +218,7 @@ describe('agent session loading state', () => {
     expect(sidebarSource).toContain('hasPendingProjectSessionRequest: Boolean(activeProjectSessionRequest)')
     expect(projectTreeSource).toMatch(/canOpenAgentProjectSessionInPlace\(\s*isCurrentActiveProject,\s*isWorkspaceContextPreparing,\s*\)\s*\? handleOpenSession\([\s\S]*?: onOpenProjectSession/)
     expect(flatTreeSource).toMatch(/const isCurrentProjectWorkspace = Boolean\(\s*isProjectContext\s*&& currentProject/)
-    expect(flatTreeSource).toMatch(/if \(canOpenAgentProjectSessionInPlace\(\s*isCurrentProjectWorkspace,\s*isWorkspaceContextPreparing,\s*\)\) \{[\s\S]*?handleOpenSession\([\s\S]*?return[\s\S]*?onOpenProjectSession/)
+    expect(flatTreeSource).toMatch(/if \(openSessionsInPlace && canOpenAgentProjectSessionInPlace\(\s*isCurrentProjectWorkspace,\s*isWorkspaceContextPreparing,\s*\)\) \{[\s\S]*?handleOpenSession\([\s\S]*?return[\s\S]*?onOpenProjectSession/)
   })
 
   it('preloads the unified surface and does not add a second visual loading gate', async () => {

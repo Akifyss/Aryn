@@ -1,7 +1,5 @@
 import { AgentTypeSwitch } from '@/features/agent/components/agent-type-switch/agent-type-switch'
-import {
-  AgentProjectSwitchTrigger,
-} from '@/features/agent/components/agent-session-tree/agent-session-tree'
+import { AgentProjectSwitchTrigger } from '@/features/agent/components/agent-session-tree/agent-session-tree'
 import { useAgentContext } from '@/features/agent/components/agent-sidebar/agent-sidebar-context'
 import './styles.css'
 
