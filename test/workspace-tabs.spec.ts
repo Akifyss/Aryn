@@ -113,37 +113,15 @@ describe('workspace tab helpers', () => {
     expect(isWorkspaceFileTab(filePanel)).toBe(false)
   })
 
-  it('derives fixed and file tab view state for each layout', () => {
+  it('derives document state without adding panel tabs', () => {
     const fileTab = createFileTab('meo')
-    const agentState = deriveWorkspaceTabViewState({
-      activeAgentLayoutFixedTab: 'file',
-      activeTabId: fileTab.id,
-      isAgentLayout: true,
-      isAgentLayoutFixedTabActive: true,
-      openTabs: [fileTab],
-    })
-
-    expect(agentState.displayTabs.map((tab) => tab.id)).toEqual([
-      FIXED_GIT_TAB_ID,
-      FIXED_FILE_TAB_ID,
-      fileTab.id,
-    ])
-    expect(agentState.displayActiveTabId).toBe(FIXED_FILE_TAB_ID)
-    expect(agentState.activeFixedPanelTab?.fixedTabKind).toBe('file-panel')
-    expect(agentState.shouldRenderWorkspaceEditor).toBe(false)
-
-    const editorState = deriveWorkspaceTabViewState({
-      activeAgentLayoutFixedTab: 'git',
-      activeTabId: fileTab.id,
-      isAgentLayout: false,
-      isAgentLayoutFixedTabActive: false,
-      openTabs: [fileTab],
-    })
-
-    expect(editorState.activeFileTab).toBe(fileTab)
-    expect(editorState.currentFileContent).toBe('# Readme')
-    expect(editorState.activeWorkspaceAutosaveTab).toBe(fileTab)
-    expect(editorState.shouldRenderWorkspaceEditor).toBe(true)
+    const state = deriveWorkspaceTabViewState({ activeTabId: fileTab.id, openTabs: [fileTab] })
+    expect(state.displayTabs).toEqual([fileTab])
+    expect(state.displayActiveTabId).toBe(fileTab.id)
+    expect(state.activeFileTab).toBe(fileTab)
+    expect(state.currentFileContent).toBe('# Readme')
+    expect(state.activeWorkspaceAutosaveTab).toBe(fileTab)
+    expect(deriveWorkspaceTabViewState({ activeTabId: null, openTabs: [] }).displayTabs).toEqual([])
   })
 
   it('detects dirty file tabs related to the active diff across path formats', () => {
@@ -153,10 +131,7 @@ describe('workspace tab helpers', () => {
       isDirty: true,
     })
     const state = deriveWorkspaceTabViewState({
-      activeAgentLayoutFixedTab: 'file',
       activeTabId: diffTab.id,
-      isAgentLayout: false,
-      isAgentLayoutFixedTabActive: false,
       openTabs: [dirtyFileTab, diffTab],
     })
 

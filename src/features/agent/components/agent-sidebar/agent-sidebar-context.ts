@@ -104,7 +104,6 @@ export type AgentContextValue = {
   hasConfiguredProviders: boolean
   hasProviderStatePresentation: boolean
   iconTheme?: WorkspaceIconTheme | null
-  isAgentLayout: boolean
   isViewingActiveRuntime: boolean
   isProjectAddMenuOpen: boolean
   isLoading: boolean

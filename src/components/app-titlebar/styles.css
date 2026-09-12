@@ -1,5 +1,4 @@
 .titlebar {
-  --titlebar-left-control-reserved-width: 0px;
 
   position: absolute;
   inset: 0 0 auto 0;
@@ -52,33 +51,10 @@
 .titlebar-preview-traffic-lights > span:nth-child(2) { background: #febc2e; }
 .titlebar-preview-traffic-lights > span:nth-child(3) { background: #28c840; }
 
-.titlebar.is-macos {
-  --titlebar-left-control-reserved-width: max(68px, calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width)));
-}
-
-.titlebar[data-left-drawer-open='true'] {
-  --titlebar-left-control-reserved-width: calc(var(--left-panel-toggle-anchor) + var(--layout-mode-switch-width));
-}
-
 .titlebar-side-right {
   right: 0;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.titlebar-spacer {
-  position: relative;
-  z-index: var(--app-z-window-chrome);
-  flex: 1;
-  min-width: 0;
-  margin-left: var(--titlebar-left-control-reserved-width);
-  pointer-events: auto;
-  app-region: drag;
-  -webkit-app-region: drag;
-}
-
-.titlebar-spacer[data-sidebar-transition='true'] {
-  transition: margin-left var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
 }
 
 .titlebar-controls {

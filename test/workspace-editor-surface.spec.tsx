@@ -4,8 +4,6 @@ import { describe, expect, it } from 'vitest'
 import {
   WorkspaceEditorDirectorySidebar,
   WorkspaceEditorDirectoryToggle,
-  WorkspaceEditorDirectoryToggleSlot,
-  WorkspaceEditorEmptyState,
   WorkspaceEditorLoadingState,
   WorkspaceEditorSurface,
   WorkspaceEditorView,
@@ -20,9 +18,7 @@ describe('WorkspaceEditorSurface', () => {
         <WorkspaceEditorDirectorySidebar>
           <div data-slot='directory'>Directory</div>
         </WorkspaceEditorDirectorySidebar>
-        <WorkspaceEditorDirectoryToggleSlot>
           <WorkspaceEditorDirectoryToggle isVisible onToggle={noop} />
-        </WorkspaceEditorDirectoryToggleSlot>
         <WorkspaceEditorView leadingToolbarAction={<button type='button'>Toggle</button>}>
           <div data-slot='editor'>Editor</div>
         </WorkspaceEditorView>
@@ -35,7 +31,6 @@ describe('WorkspaceEditorSurface', () => {
     expect(markup).toContain('aria-label="Editor content"')
     expect(markup).toContain('role="tabpanel"')
     expect(markup).toContain('class="editor-directory-sidebar"')
-    expect(markup).toContain('class="editor-directory-toggle-slot"')
     expect(markup).toContain('class="app-icon-button editor-directory-toggle"')
     expect(markup).not.toContain('data-active="true"')
     expect(markup).toContain('aria-pressed="true"')
@@ -44,37 +39,6 @@ describe('WorkspaceEditorSurface', () => {
     expect(markup).toContain('aria-orientation="horizontal"')
     expect(markup).toContain('aria-label="编辑器工具栏"')
     expect(markup).toContain('data-slot="editor"')
-  })
-
-  it('renders the appropriate empty state for workspace presence', () => {
-    const missingWorkspaceMarkup = renderToStaticMarkup(
-      <WorkspaceEditorEmptyState
-        hasWorkspace={false}
-        isPickingWorkspace={false}
-        onOpenWorkspaceSwitch={noop}
-      />,
-    )
-    const unopenedFileMarkup = renderToStaticMarkup(
-      <WorkspaceEditorEmptyState
-        hasWorkspace
-        isPickingWorkspace={false}
-        onOpenWorkspaceSwitch={noop}
-      />,
-    )
-
-    expect(missingWorkspaceMarkup).toContain(
-      'class="app-empty-state is-fill editor-workspace-empty-state"',
-    )
-    expect(missingWorkspaceMarkup).toContain('选择工作目录')
-    expect(missingWorkspaceMarkup).toContain('连接一个文件夹后')
-    expect(missingWorkspaceMarkup).toContain(
-      'data-size="md" data-tone="default" data-variant="primary" class="app-button"',
-    )
-    expect(missingWorkspaceMarkup).toMatch(
-      /<button[^>]*class="app-button"[^>]*><svg[^>]*aria-hidden="true"/,
-    )
-    expect(unopenedFileMarkup).toContain('未打开文件')
-    expect(unopenedFileMarkup).not.toContain('选择工作目录')
   })
 
   it('uses the shared loading state for lazy editor surfaces', () => {

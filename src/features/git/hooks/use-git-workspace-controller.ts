@@ -58,9 +58,13 @@ export function useGitWorkspaceController({
   const [isLoading, setIsLoading] = useState(false)
   const [busyLabel, setBusyLabel] = useState<string | null>(null)
   const [commitMessage, setCommitMessage] = useState('')
-  const [panelLayout, setPanelLayout] = useState<GitPanelLayout>(
+  const [panelLayout, setPanelLayoutState] = useState<GitPanelLayout>(
     () => readStoredGitPanelLayout(DEFAULT_GIT_PANEL_LAYOUT),
   )
+  const setPanelLayout = useCallback((layout: GitPanelLayout) => {
+    setPanelLayoutState(layout)
+    void window.appApi.updateLayoutState({ gitPanelLayout: layout }).catch(() => undefined)
+  }, [])
   const [historyRefreshVersion, setHistoryRefreshVersion] = useState(0)
   const repositoryStateRef = useRef<GitRepositoryState | null>(repositoryState)
   const repositoryWorkspacePathRef = useRef<string | null>(null)

@@ -3,9 +3,6 @@ import {
   getPersistedWorkspaceTabState,
   initializeRendererPersistentState,
   readStoredGitPanelLayout,
-  readStoredLayoutBoolean,
-  readStoredLayoutNumber,
-  readStoredLeftSidebarTab,
 } from '../src/features/persistence/renderer-state'
 import type { PersistentClientStateSnapshot } from '../src/features/persistence/types'
 import {
@@ -34,21 +31,12 @@ function createSnapshot(): PersistentClientStateSnapshot {
   return {
     app: {
       layout: {
-        activeLeftSidebarTab: 'git',
-        agentChatWidth: 420,
-        agentRightSidebarCollapsed: true,
-        editorRightSidebarCollapsed: false,
-        editorRightSidebarWidth: 360,
-        gitPanelHeight: 280,
         gitPanelLayout: 'tree',
-        leftSidebarCollapsed: false,
-        leftSidebarWidth: 300,
       },
       settings: {
         agent: {
           runningPromptEnterBehavior: 'steer',
         },
-        layoutPreference: 'editor',
         meo: {
           focusedLineHighlight: true,
           gitDiffLineHighlights: true,
@@ -90,10 +78,7 @@ describe('renderer persistence helpers', () => {
   })
 
   it('reads initialized layout values and applies typed fallbacks', () => {
-    expect(readStoredLayoutNumber('leftSidebarWidth', 240)).toBe(300)
-    expect(readStoredLayoutBoolean('agentRightSidebarCollapsed', false)).toBe(true)
     expect(readStoredGitPanelLayout('list')).toBe('tree')
-    expect(readStoredLeftSidebarTab()).toBe('git')
 
     const invalidSnapshot = createSnapshot()
     initializeRendererPersistentState({
@@ -103,12 +88,10 @@ describe('renderer persistence helpers', () => {
         layout: {
           ...invalidSnapshot.app.layout,
           gitPanelLayout: 'invalid',
-          leftSidebarWidth: Number.NaN,
         } as PersistentClientStateSnapshot['app']['layout'],
       },
     })
 
-    expect(readStoredLayoutNumber('leftSidebarWidth', 240)).toBe(240)
     expect(readStoredGitPanelLayout('list')).toBe('list')
   })
 

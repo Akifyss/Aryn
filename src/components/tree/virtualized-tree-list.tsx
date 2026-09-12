@@ -143,7 +143,7 @@ export function VirtualizedTreeList<Row extends KeyedTreeRow>({
     },
     measureElement: (element, entry, instance) => {
       const size = measureVirtualElement(element, entry, instance)
-      // Retained panes (e.g. Duo) report zero-sized rows while display:none.
+      // Retained panes (e.g. Workbench) report zero-sized rows while display:none.
       // Caching those zeros makes restoration look like rows grew above the
       // viewport, so scroll compensation can discard the visible top rows.
       if (size === 0 && element.getClientRects().length === 0) {

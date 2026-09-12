@@ -6,26 +6,24 @@ describe('useSettingsStore', () => {
     vi.unstubAllGlobals()
   })
 
-  it('defaults new installs to the Duo layout', async () => {
+  it('defaults settings without a layout mode', async () => {
     const {
       DEFAULT_AGENT_SETTINGS,
-      DEFAULT_APP_LAYOUT_PREFERENCE,
       useSettingsStore,
     } = await import('../src/hooks/use-settings-store')
 
-    expect(DEFAULT_APP_LAYOUT_PREFERENCE).toBe('duo')
     expect(DEFAULT_AGENT_SETTINGS.runningPromptEnterBehavior).toBe('followUp')
-    expect(useSettingsStore.getState().layoutPreference).toBe('duo')
+    expect(useSettingsStore.getState()).not.toHaveProperty('layoutPreference')
     expect(useSettingsStore.getState().agent.runningPromptEnterBehavior).toBe('followUp')
   })
 
-  it.each(['agent', 'editor', 'duo', 'invalid', undefined])('migrates %s to the only supported layout in both processes', async (layoutPreference) => {
+  it.each(['agent', 'editor', 'duo', 'invalid', undefined])('ignores retired %s mode in both processes', async (layoutPreference) => {
     const { initializeSettingsStore, useSettingsStore } = await import('../src/hooks/use-settings-store')
     const { normalizeAppSettings } = await import('../electron/main/app-state')
     const settings = normalizeAppSettings({ layoutPreference, theme: 'dark' })
-    expect(settings.layoutPreference).toBe('duo')
+    expect(settings).not.toHaveProperty('layoutPreference')
     initializeSettingsStore(settings)
-    expect(useSettingsStore.getState().layoutPreference).toBe('duo')
+    expect(useSettingsStore.getState()).not.toHaveProperty('layoutPreference')
     expect(useSettingsStore.getState().theme).toBe('dark')
   })
 
@@ -36,7 +34,6 @@ describe('useSettingsStore', () => {
       agent: {
         runningPromptEnterBehavior: 'steer',
       },
-      layoutPreference: 'editor',
       meo: {
         focusedLineHighlight: true,
         gitDiffLineHighlights: false,
@@ -46,7 +43,7 @@ describe('useSettingsStore', () => {
       theme: 'dark',
     })
 
-    expect(useSettingsStore.getState().layoutPreference).toBe('duo')
+    expect(useSettingsStore.getState()).not.toHaveProperty('layoutPreference')
     expect(useSettingsStore.getState().theme).toBe('dark')
     expect(useSettingsStore.getState().agent.runningPromptEnterBehavior).toBe('steer')
     expect(useSettingsStore.getState().meo.outlinePosition).toBe('left')

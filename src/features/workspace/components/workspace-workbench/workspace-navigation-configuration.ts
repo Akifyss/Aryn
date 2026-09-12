@@ -50,34 +50,29 @@ type WorkspaceFileOperationsView = Pick<
 >
 
 type CreateWorkspaceNavigationConfigurationOptions = {
-  activeTab: WorkspaceNavigationPanelConfiguration['activeTab']
   activeTreePath: string | null
   currentPath: string | null
   fileOperations: WorkspaceFileOperationsView
   git: GitWorkspaceView
   iconTheme: WorkspaceNavigationPanelConfiguration['gitPanel']['iconTheme']
   navigation: WorkspaceDocumentNavigationView
-  setActiveTab: WorkspaceNavigationPanelConfiguration['onActiveTabChange']
   tree: WorkspaceNode[]
   workspaceLabel: string
   workspaceUnavailableMessage: string | null
 }
 
 export function createWorkspaceNavigationConfiguration({
-  activeTab,
   activeTreePath,
   currentPath,
   fileOperations,
   git,
   iconTheme,
   navigation,
-  setActiveTab,
   tree,
   workspaceLabel,
   workspaceUnavailableMessage,
 }: CreateWorkspaceNavigationConfigurationOptions): WorkspaceNavigationPanelConfiguration {
   return {
-    activeTab,
     activeTreePath,
     gitPanel: {
       busyLabel: git.busyLabel,
@@ -140,7 +135,6 @@ export function createWorkspaceNavigationConfiguration({
       onToggleFileTreeExpansion: fileOperations.toggleTreeExpansion,
     },
     workspaceLabel,
-    onActiveTabChange: setActiveTab,
     onOpenFile: (filePath) => {
       void navigation.openFile(filePath)
     },

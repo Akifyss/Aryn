@@ -2,7 +2,6 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type {
   AppTheme,
-  LeftSidebarTab,
   PersistedAgentSettings,
   PersistedAppSettings,
   PersistedLayoutState,
@@ -11,7 +10,7 @@ import type {
 } from '../shared/contracts/persistence'
 import type { WorkspaceIconThemeMode } from '../shared/contracts/workspace'
 import { AtomicJsonStore, type AtomicJsonStoreMissingResult } from './json-file-store'
-import { normalizeDuoLayout, normalizeDuoProjects } from '../shared/contracts/duo-layout'
+import { normalizeWorkbenchLayout, normalizeProjectWorkspaces } from '../shared/contracts/workbench-layout'
 
 export const APP_STATE_SCHEMA_VERSION = 3
 export const DEFAULT_WINDOW_WIDTH = 1440
@@ -19,10 +18,6 @@ export const DEFAULT_WINDOW_HEIGHT = 900
 export const MIN_WINDOW_WIDTH = 1080
 export const MIN_WINDOW_HEIGHT = 720
 export const DEFAULT_AGENT_COMPOSER_HEIGHT = 172
-export const DEFAULT_LEFT_SIDEBAR_WIDTH = 320
-export const DEFAULT_EDITOR_RIGHT_SIDEBAR_WIDTH = 368
-export const DEFAULT_AGENT_CHAT_WIDTH = 376
-export const DEFAULT_GIT_PANEL_HEIGHT = 292
 
 export type PersistedWorkspaceIconThemeSelection = {
   activeThemeId: string | null
@@ -101,7 +96,6 @@ const DEFAULT_MEO_SETTINGS: PersistedMeoSettings = {
 
 const DEFAULT_APP_SETTINGS: PersistedAppSettings = {
   agent: DEFAULT_AGENT_SETTINGS,
-  layoutPreference: 'duo',
   meo: DEFAULT_MEO_SETTINGS,
   theme: 'auto',
 }
@@ -122,15 +116,7 @@ function createDefaultWorkspaceIconThemeSelections(): PersistedWorkspaceIconThem
 }
 
 const DEFAULT_LAYOUT_STATE: PersistedLayoutState = {
-  activeLeftSidebarTab: 'file',
-  agentChatWidth: DEFAULT_AGENT_CHAT_WIDTH,
-  agentRightSidebarCollapsed: false,
-  editorRightSidebarCollapsed: false,
-  editorRightSidebarWidth: DEFAULT_EDITOR_RIGHT_SIDEBAR_WIDTH,
-  gitPanelHeight: DEFAULT_GIT_PANEL_HEIGHT,
   gitPanelLayout: 'list',
-  leftSidebarCollapsed: false,
-  leftSidebarWidth: DEFAULT_LEFT_SIDEBAR_WIDTH,
 }
 
 const DEFAULT_APP_STATE: PersistedAppState = {
@@ -210,10 +196,6 @@ function readMeoOutlinePosition(value: unknown): MeoOutlinePosition {
   return value === 'left' ? 'left' : DEFAULT_MEO_SETTINGS.outlinePosition
 }
 
-function readLeftSidebarTab(value: unknown): LeftSidebarTab {
-  return value === 'git' ? 'git' : DEFAULT_LAYOUT_STATE.activeLeftSidebarTab
-}
-
 function readGitPanelLayout(value: unknown) {
   return value === 'tree' ? 'tree' : DEFAULT_LAYOUT_STATE.gitPanelLayout
 }
@@ -254,8 +236,6 @@ export function normalizeAppSettings(value: unknown): PersistedAppSettings {
     agent: {
       runningPromptEnterBehavior: readRunningPromptEnterBehavior(agentCandidate.runningPromptEnterBehavior),
     },
-    // Migrate legacy Agent/Editor preferences without altering saved pane state.
-    layoutPreference: DEFAULT_APP_SETTINGS.layoutPreference,
     meo: {
       focusedLineHighlight: meoCandidate.focusedLineHighlight === true,
       gitDiffLineHighlights: readBoolean(meoCandidate.gitDiffLineHighlights, DEFAULT_MEO_SETTINGS.gitDiffLineHighlights),
@@ -270,21 +250,14 @@ export function normalizeLayoutState(value: unknown): PersistedLayoutState {
   const candidate = value && typeof value === 'object'
     ? value as Record<string, unknown>
     : {}
-  const duo = normalizeDuoLayout(candidate.duo)
-  const duoProjects = normalizeDuoProjects(candidate.duoProjects)
+  // Legacy names are read only; all subsequent writes use the workspace schema.
+  const legacyWorkspaceLayout = normalizeWorkbenchLayout(candidate.legacyWorkspaceLayout) ?? normalizeWorkbenchLayout(candidate.duo)
+  const projectWorkspaces = normalizeProjectWorkspaces(candidate.projectWorkspaces) ?? normalizeProjectWorkspaces(candidate.duoProjects)
 
   return {
-    ...(duo ? { duo } : {}),
-    ...(duoProjects ? { duoProjects } : {}),
-    activeLeftSidebarTab: readLeftSidebarTab(candidate.activeLeftSidebarTab),
-    agentChatWidth: readNumber(candidate.agentChatWidth, DEFAULT_LAYOUT_STATE.agentChatWidth, 1),
-    agentRightSidebarCollapsed: readBoolean(candidate.agentRightSidebarCollapsed, DEFAULT_LAYOUT_STATE.agentRightSidebarCollapsed),
-    editorRightSidebarCollapsed: readBoolean(candidate.editorRightSidebarCollapsed, DEFAULT_LAYOUT_STATE.editorRightSidebarCollapsed),
-    editorRightSidebarWidth: readNumber(candidate.editorRightSidebarWidth, DEFAULT_LAYOUT_STATE.editorRightSidebarWidth, 1),
-    gitPanelHeight: readNumber(candidate.gitPanelHeight, DEFAULT_LAYOUT_STATE.gitPanelHeight, 1),
+    ...(legacyWorkspaceLayout ? { legacyWorkspaceLayout } : {}),
+    ...(projectWorkspaces ? { projectWorkspaces } : {}),
     gitPanelLayout: readGitPanelLayout(candidate.gitPanelLayout),
-    leftSidebarCollapsed: readBoolean(candidate.leftSidebarCollapsed, DEFAULT_LAYOUT_STATE.leftSidebarCollapsed),
-    leftSidebarWidth: readNumber(candidate.leftSidebarWidth, DEFAULT_LAYOUT_STATE.leftSidebarWidth, 1),
   }
 }
 

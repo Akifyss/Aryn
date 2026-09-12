@@ -101,7 +101,7 @@ describe('workspace project controller ownership', () => {
     expect(controllerSource).toContain('async function connectWorkspace')
     expect(controllerSource).toContain('async function requestAgentProjectSession')
     expect(controllerSource).toMatch(/setActiveWorkspaceContext\(\{ kind: 'project', projectId: project\.id \}\)[\s\S]*?navigationCoordinator\.run\(intent/)
-    expect(controllerSource).toContain("scope: isAgentLayout ? 'root' : 'recursive'")
+    expect(controllerSource).toContain("scope: 'recursive'")
     expect(controllerSource).toContain('watchedWorkspacePathRef.current = null')
     expect(controllerSource).toContain('isWorkspaceSurfaceConnected(project.path)')
     expect(controllerSource).not.toContain('setProjectState(await window.appApi.getProjectState())')
@@ -131,7 +131,7 @@ describe('workspace project controller ownership', () => {
     expect(projectSessionSource).toMatch(/onAccepted: \(acceptedIntent\) => \{[\s\S]*?setPendingAgentProjectSessionRequest\(nextRequest\)/)
     expect(appSource).toContain('const handleOpenSession = useCallback((sessionPath: string, sessionLabel: string) => {')
     expect(appSource).toContain('navigationCoordinator: workspaceNavigationCoordinator')
-    expect(appSource).toMatch(/openDuoProjectSession\(useDuoStore.getState\(\).focusedPane, activeProject,[\s\S]*?sessionPath,[\s\S]*?sessionLabel,/)
+    expect(appSource).toMatch(/openWorkbenchProjectSession\(useWorkbenchStore.getState\(\).focusedPane, activeProject,[\s\S]*?sessionPath,[\s\S]*?sessionLabel,/)
     const setActiveProjectHandler = mainSource.slice(
       mainSource.indexOf("ipcMain.handle('project:set-active'"),
       mainSource.indexOf("ipcMain.handle('project:remove'"),

@@ -101,7 +101,7 @@ describe('workspace editor content ownership', () => {
       ),
       readFile(
         new URL(
-          '../src/features/layout/components/app-workspace-shell/app-workspace-panels.tsx',
+          '../src/features/workbench/workbench-pane.tsx',
           import.meta.url,
         ),
         'utf8',

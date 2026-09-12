@@ -63,7 +63,6 @@ export function AgentChatSurface() {
     draftThinking,
     handleStartNewSession,
     iconTheme,
-    isAgentLayout,
     isConversationMaterializing,
     isSessionLoading,
     isWorkspaceContextPreparing,
@@ -246,7 +245,7 @@ export function AgentChatSurface() {
     <div className={`agent-shell${isNewConversation ? ' is-new-conversation' : ''}`}>
       <div className='agent-threadbar'>
         <div className='agent-threadbar-leading'>
-          {isAgentLayout ? threadbarNewButton : null}
+          {threadbarNewButton}
 
           {threadbarSessionPresentation.showSessionControl ? (
             <div className='agent-session-select'>
@@ -328,7 +327,6 @@ export function AgentChatSurface() {
             </div>
           ) : null}
 
-          {isAgentLayout ? null : threadbarNewButton}
         </div>
 
         <div className='agent-threadbar-drag-spacer' aria-hidden='true' />

@@ -349,7 +349,7 @@ describe('App lifecycle ownership', () => {
     expect(appSource).toContain('useAppBootstrap({')
     expect(appSource).toContain('useAppKeyboardShortcuts({')
     expect(appSource).toContain('useAppWindowClose({')
-    expect(appSource).toContain('useWorkspaceSyncController(currentPath, isAgentLayout)')
+    expect(appSource).toContain('useWorkspaceSyncController(currentPath)')
     expect(appSource).not.toContain('getWorkspaceFileTabIdsForPath')
     expect(appSource).toContain('<AppOverlayLayer')
     expect(appSource).not.toContain('<AppConfirmDialog')

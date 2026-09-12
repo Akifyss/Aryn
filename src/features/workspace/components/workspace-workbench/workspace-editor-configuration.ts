@@ -3,30 +3,26 @@ import type { useGitWorkspaceController } from '@/features/git/hooks/use-git-wor
 import { findGitChangeByFilePath } from '@/features/git/lib/repository-state'
 import type { useWorkspaceDocumentNavigation } from '@/features/workspace/hooks/use-workspace-document-navigation'
 import type { useWorkspaceDocumentPersistence } from '@/features/workspace/hooks/use-workspace-document-persistence'
-import type { useWorkspaceEditorSurfaceController } from '@/features/workspace/hooks/use-workspace-editor-surface-controller'
+import type { useWorkspaceTabViewState } from '@/features/workspace/hooks/use-workspace-tab-view-state'
 import type { useWorkspaceFileSystemState } from '@/features/workspace/hooks/use-workspace-file-system-state'
 import type { WorkspaceNode } from '@/features/workspace/types'
+import type { WorkspaceFileSystemPanel } from '@/features/workspace/components/workspace-file-system-panel/workspace-file-system-panel'
 import type { WorkspaceEditorWorkbench } from './workspace-editor-workbench'
 import type { WorkspaceNavigationPanelConfiguration } from './workspace-navigation-panels'
 
-type WorkspaceEditorWorkbenchConfiguration = ComponentProps<
-  typeof WorkspaceEditorWorkbench
->
+export type WorkspaceEditorConfiguration = Pick<ComponentProps<typeof WorkspaceEditorWorkbench>, 'editorContent' | 'fileTabs'> & {
+  fileSystemPanel: ComponentProps<typeof WorkspaceFileSystemPanel>
+  navigation: WorkspaceNavigationPanelConfiguration
+}
 
 type WorkspaceEditorSurfaceView = Pick<
-  ReturnType<typeof useWorkspaceEditorSurfaceController>,
+  ReturnType<typeof useWorkspaceTabViewState>,
   | 'activeDiffDraftContent'
   | 'activeDiffHasDirtyRelatedFileTab'
   | 'activeDiffTab'
   | 'activeFileTab'
-  | 'activeFixedPanelTab'
   | 'displayActiveTabId'
   | 'displayTabs'
-  | 'isDirectorySidebarAvailable'
-  | 'isDirectorySidebarVisible'
-  | 'isDirectoryToggleSlotVisible'
-  | 'shouldRenderWorkspaceEditor'
-  | 'toggleDirectorySidebar'
 >
 
 type GitWorkspaceEditorView = Pick<
@@ -53,21 +49,19 @@ type WorkspaceFileSystemView = ReturnType<typeof useWorkspaceFileSystemState>
 
 type CreateWorkspaceEditorConfigurationOptions = {
   currentPath: string | null
-  editorHostRef: WorkspaceEditorWorkbenchConfiguration['editorContent']['meoEditorHostRef']
+  editorHostRef: WorkspaceEditorConfiguration['editorContent']['meoEditorHostRef']
   editorSurface: WorkspaceEditorSurfaceView
   fileSystem: WorkspaceFileSystemView
   git: GitWorkspaceEditorView
-  iconTheme: WorkspaceEditorWorkbenchConfiguration['fileTabs']['iconTheme']
-  isPickingWorkspace: boolean
-  meoSettings: WorkspaceEditorWorkbenchConfiguration['editorContent']['meoSettings']
-  moveTab: WorkspaceEditorWorkbenchConfiguration['fileTabs']['onMoveTab']
+  iconTheme: WorkspaceEditorConfiguration['fileTabs']['iconTheme']
+  meoSettings: WorkspaceEditorConfiguration['editorContent']['meoSettings']
+  moveTab: WorkspaceEditorConfiguration['fileTabs']['onMoveTab']
   navigation: WorkspaceDocumentNavigationView
   navigationConfiguration: WorkspaceNavigationPanelConfiguration
-  onActiveEditorCompositionChange: WorkspaceEditorWorkbenchConfiguration['editorContent']['fileActions']['compositionChange']
-  onOpenMeoEditorGitDiff: WorkspaceEditorWorkbenchConfiguration['editorContent']['fileActions']['openGitDiff']
-  onOpenWorkspaceSwitch: WorkspaceEditorWorkbenchConfiguration['emptyState']['onOpenWorkspaceSwitch']
+  onActiveEditorCompositionChange: WorkspaceEditorConfiguration['editorContent']['fileActions']['compositionChange']
+  onOpenMeoEditorGitDiff: WorkspaceEditorConfiguration['editorContent']['fileActions']['openGitDiff']
   persistence: WorkspaceDocumentPersistenceView
-  theme: WorkspaceEditorWorkbenchConfiguration['editorContent']['theme']
+  theme: WorkspaceEditorConfiguration['editorContent']['theme']
   tree: WorkspaceNode[]
   workspaceLabel: string
   workspaceUnavailableMessage: string | null
@@ -80,22 +74,19 @@ export function createWorkspaceEditorConfiguration({
   fileSystem,
   git,
   iconTheme,
-  isPickingWorkspace,
   meoSettings,
   moveTab,
   navigation,
   navigationConfiguration,
   onActiveEditorCompositionChange,
   onOpenMeoEditorGitDiff,
-  onOpenWorkspaceSwitch,
   persistence,
   theme,
   tree,
   workspaceLabel,
   workspaceUnavailableMessage,
-}: CreateWorkspaceEditorConfigurationOptions): WorkspaceEditorWorkbenchConfiguration {
+}: CreateWorkspaceEditorConfigurationOptions): WorkspaceEditorConfiguration {
   return {
-    activeFixedPanelTab: editorSurface.activeFixedPanelTab,
     editorContent: {
       activeDiffTab: editorSurface.activeDiffTab,
       activeFileTab: editorSurface.activeFileTab,
@@ -126,16 +117,11 @@ export function createWorkspaceEditorConfiguration({
       },
       gitRepositoryState: git.repositoryState,
       iconTheme,
-      isVisible: editorSurface.shouldRenderWorkspaceEditor,
+      isVisible: Boolean(editorSurface.activeFileTab || editorSurface.activeDiffTab),
       meoEditorHostRef: editorHostRef,
       meoSettings,
       theme,
       workspacePath: currentPath,
-    },
-    emptyState: {
-      hasWorkspace: Boolean(currentPath),
-      isPickingWorkspace,
-      onOpenWorkspaceSwitch,
     },
     fileSystemPanel: {
       fileSystemState: fileSystem.workspaceFileSystemState,
@@ -175,10 +161,6 @@ export function createWorkspaceEditorConfiguration({
         }
       },
     },
-    isDirectorySidebarAvailable: editorSurface.isDirectorySidebarAvailable,
-    isDirectorySidebarVisible: editorSurface.isDirectorySidebarVisible,
-    isDirectoryToggleSlotVisible: editorSurface.isDirectoryToggleSlotVisible,
     navigation: navigationConfiguration,
-    onToggleDirectorySidebar: editorSurface.toggleDirectorySidebar,
   }
 }

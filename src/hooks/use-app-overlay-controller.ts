@@ -42,12 +42,9 @@ type UseAppOverlayControllerOptions = Pick<
   | 'isGlobalProjectMenuOpen'
   | 'isNewProjectDialogOpen'
   | 'isProjectMenuOpen'
-> & {
-  closeDrawers: () => void
-}
+>
 
 export function useAppOverlayController({
-  closeDrawers,
   hasConfirmation,
   isGlobalProjectMenuOpen,
   isNewProjectDialogOpen,
@@ -75,9 +72,8 @@ export function useAppOverlayController({
     setIsCommandPaletteOpen(false)
   }, [])
   const openCommandPaletteFromChrome = useCallback(() => {
-    closeDrawers()
     setIsCommandPaletteOpen(true)
-  }, [closeDrawers])
+  }, [])
   // Opening is a no-argument UI action; navigation requires a section explicitly.
   // An optional section would survive () => void props and receive DOM click events.
   const openSettings = useCallback(() => {

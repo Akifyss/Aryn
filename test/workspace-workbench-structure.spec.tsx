@@ -12,14 +12,11 @@ const noop = () => {}
 function createProjectMenuConfiguration(): ProjectMenuLayerConfiguration {
   return {
     activeProjectId: null,
-    activeSurface: 'global',
     anchorRect: null,
     canUseNoProject: false,
     isBusy: false,
-    leftDrawerPortal: null,
     mode: null,
     projects: [],
-    rightDrawerPortal: null,
     onAddExistingProject: noop,
     onClose: noop,
     onCreateProject: noop,
@@ -57,44 +54,14 @@ describe('workspace workbench behavior', () => {
     })).toBe(false)
   })
 
-  it('renders a project menu only on its active surface', () => {
-    const closedMarkup = renderToStaticMarkup(
-      <ProjectMenuLayer
-        configuration={createProjectMenuConfiguration()}
-        surface='global'
-      />,
-    )
-    const mismatchedMarkup = renderToStaticMarkup(
-      <ProjectMenuLayer
-        configuration={{
-          ...createProjectMenuConfiguration(),
-          mode: 'editor-switch',
-        }}
-        surface='left-drawer'
-      />,
-    )
-    const detachedDrawerMarkup = renderToStaticMarkup(
-      <ProjectMenuLayer
-        configuration={{
-          ...createProjectMenuConfiguration(),
-          activeSurface: 'left-drawer',
-          mode: 'editor-switch',
-        }}
-        surface='left-drawer'
-      />,
-    )
-
-    expect(closedMarkup).toBe('')
-    expect(mismatchedMarkup).toBe('')
-    expect(detachedDrawerMarkup).toBe('')
+  it('does not mount a closed project menu', () => {
+    expect(renderToStaticMarkup(<ProjectMenuLayer configuration={createProjectMenuConfiguration()} />)).toBe('')
   })
 })
 
 describe('workspace workbench ownership', () => {
   it('keeps navigation and editor composition out of App without creating new large files', async () => {
     const extractedModuleUrls = [
-      '../src/features/layout/components/app-workspace-shell/app-workspace-panels.tsx',
-      '../src/features/layout/components/app-workspace-shell/app-workspace-shell.tsx',
       '../src/features/layout/components/app-overlay-layer/app-overlay-layer.tsx',
       '../src/features/workspace/components/workspace-workbench/workspace-editor-configuration.ts',
       '../src/features/workspace/components/workspace-workbench/workspace-navigation-configuration.ts',
@@ -106,14 +73,12 @@ describe('workspace workbench ownership', () => {
 
     expect(appSource).toContain('createWorkspaceNavigationConfiguration({')
     expect(appSource).toContain('createWorkspaceEditorConfiguration({')
-    expect(appSource).toContain('<DuoWorkspaceShell')
+    expect(appSource).toContain('<WorkspaceShell')
     expect(appSource).not.toContain('<WorkspaceNavigationSurface')
     expect(appSource).not.toContain('<WorkspaceEditorWorkbench')
     expect(appSource).not.toContain('function renderWorkspaceTreePanel')
     expect(appSource).not.toContain('function renderGitPanel')
     expect(appSource).not.toContain('function renderDirectorySidebar')
-    expect(extractedModuleSources[0]).toContain('<WorkspaceNavigationSurface')
-    expect(extractedModuleSources[0]).toContain('<WorkspaceEditorWorkbench')
     expect(appSource.split(/\r?\n/).length).toBeLessThan(750)
 
     for (const source of extractedModuleSources) {

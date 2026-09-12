@@ -1,13 +1,10 @@
 import type { ReactNode } from 'react'
-import { useEffect, useRef } from 'react'
-import { FolderOpenLine } from '@mingcute/react'
+import { useEffect } from 'react'
 import menuFoldIcon from '@iconify-icons/ri/menu-fold-line'
 import menuUnfoldIcon from '@iconify-icons/ri/menu-unfold-line'
 import { Icon as OfflineIcon } from '@iconify/react/offline'
-import { AppButton } from '@/components/app-button'
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppLoadingState } from '@/components/app-loading-state'
-import { EMPTY_STATE_ICONS, EmptyState } from '@/components/empty-state'
 import {
   ViewerToolbar,
   ViewerToolbarGroup,
@@ -26,12 +23,6 @@ type WorkspaceEditorDirectoryToggleProps = {
   controls?: string
   isVisible: boolean
   onToggle: () => void
-}
-
-type WorkspaceEditorEmptyStateProps = {
-  hasWorkspace: boolean
-  isPickingWorkspace: boolean
-  onOpenWorkspaceSwitch: (anchorRect?: DOMRect) => void
 }
 
 type WorkspaceEditorViewProps = {
@@ -82,49 +73,6 @@ export function WorkspaceEditorDirectoryToggle({
         icon={isVisible ? menuFoldIcon : menuUnfoldIcon}
       />
     </AppIconButton>
-  )
-}
-
-export function WorkspaceEditorDirectoryToggleSlot({ children }: { children: ReactNode }) {
-  return <div className='editor-directory-toggle-slot'>{children}</div>
-}
-
-export function WorkspaceEditorDirectoryToggleSpacer() {
-  return <span className='editor-directory-toggle-spacer' aria-hidden='true' />
-}
-
-export function WorkspaceEditorEmptyState({
-  hasWorkspace,
-  isPickingWorkspace,
-  onOpenWorkspaceSwitch,
-}: WorkspaceEditorEmptyStateProps) {
-  const workspaceTriggerRef = useRef<HTMLButtonElement | null>(null)
-
-  if (hasWorkspace) {
-    return <EmptyState fill title='未打开文件' />
-  }
-
-  return (
-    <EmptyState
-      fill
-      className='editor-workspace-empty-state'
-      description='当前对话会保留在右侧。连接一个文件夹后，可以在这里浏览、搜索和编辑文件。'
-      icon={EMPTY_STATE_ICONS.newFolder}
-      title='选择工作目录'
-      actions={(
-        <AppButton
-          ref={workspaceTriggerRef}
-          variant='primary'
-          onClick={() => {
-            onOpenWorkspaceSwitch(workspaceTriggerRef.current?.getBoundingClientRect())
-          }}
-          disabled={isPickingWorkspace}
-        >
-          <FolderOpenLine aria-hidden='true' />
-          选择工作目录
-        </AppButton>
-      )}
-    />
   )
 }
 

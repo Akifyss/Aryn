@@ -838,8 +838,7 @@ function FileTabsBoundaryChromeController({
     }
 
     const isLayoutChanging = () => Boolean(
-      appShellElement?.hasAttribute('data-sidebar-transition')
-      || appShellElement?.dataset.resizing === 'true',
+      appShellElement?.dataset.resizing === 'true',
     )
     const syncBoundaryGeometry = () => {
       const frameRect = frameElement.getBoundingClientRect()
@@ -850,33 +849,12 @@ function FileTabsBoundaryChromeController({
       const radius = Number.parseFloat(computedStyle.getPropertyValue('--file-tab-radius')) || 0
       const panelElement = frameElement.parentElement
       const panelRect = panelElement?.getBoundingClientRect() ?? null
-      const appLayout = appShellElement?.dataset.appLayout
-      const isEditorPanel = panelElement?.classList.contains('panel-editor') ?? false
-      const isAgentPanel = panelElement?.classList.contains('panel-agent') ?? false
-      const hasLeftBoundary = (
-        appLayout === 'duo'
-        ||
-        (appLayout === 'agent' && isAgentPanel)
-        || (appLayout === 'editor' && isEditorPanel)
-      )
+      const hasLeftBoundary = true
       const hasBottomBoundary = Boolean(
         panelRect
         && panelRect.bottom - frameRect.bottom > FILE_TAB_BOUNDARY_EDGE_GAP_EPSILON,
       )
-      const hasRightBoundary = (
-        appLayout === 'duo'
-        ||
-        (
-          appLayout === 'editor'
-          && isEditorPanel
-          && appShellElement?.dataset.rightCollapsed === 'false'
-        )
-        || Boolean(
-          panelRect
-          && panelRect.right - frameRect.right > FILE_TAB_BOUNDARY_EDGE_GAP_EPSILON,
-        )
-        || hasBottomBoundary
-      )
+      const hasRightBoundary = true
       const frameIsChanging = isLayoutChanging()
       let nextGeometry: FileTabsBoundaryGeometry
 
@@ -989,12 +967,7 @@ function FileTabsBoundaryChromeController({
     if (mutationObserver && appShellElement) {
       mutationObserver.observe(appShellElement, {
         attributeFilter: [
-          'data-app-layout',
-          'data-layout',
-          'data-left-collapsed',
           'data-resizing',
-          'data-right-collapsed',
-          'data-sidebar-transition',
         ],
         attributes: true,
       })

@@ -8,7 +8,7 @@ const STATIC_SHELL_ICON_SOURCES = [
   'src/features/command-palette/components/command-palette/command-palette.tsx',
   'src/features/layout/components/app-chrome-controls/app-chrome-controls.tsx',
   'src/features/workspace/components/workspace-editor-surface/workspace-editor-surface.tsx',
-  'src/features/workspace/components/workspace-sidebar/workspace-sidebar.tsx',
+  'src/features/workbench/workspace-shell.tsx',
   'src/features/workspace/components/workspace-tree-panel/workspace-tree-panel.tsx',
 ]
 

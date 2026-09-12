@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from 'react'
+import { useCallback } from 'react'
 import { toast } from '@heroui/react'
 import type { AgentMessageFileChangeKind } from '@/features/agent/types'
 import type {
@@ -21,11 +21,8 @@ import {
 import {
   createDiffTab,
   createWorkspaceFileGitDiffRequest,
-  FIXED_FILE_TAB_ID,
-  FIXED_GIT_TAB_ID,
   isWorkspaceAutosaveTab,
   shouldOpenGitDiffForLine,
-  type AgentLayoutFixedTab,
 } from '@/features/workspace/lib/workspace-tabs'
 import {
   createWorkspaceFileTabId,
@@ -43,36 +40,22 @@ export type WorkspaceDocumentTarget = ((tabId: string) => void) & { isCurrent?: 
 type UseWorkspaceDocumentNavigationOptions = {
   captureDocumentTarget?: () => WorkspaceDocumentTarget | undefined
   captureActiveMeoViewPosition: () => void
-  closeLeftDrawer: () => void
-  closeRightDrawer: () => void
   currentPath: string | null
   displayActiveTabId: string | null
   displayTabs: WorkspaceDisplayTab[]
-  expandAgentEditorSurface: () => void
   flushWorkspaceAutosave: (filePath?: string) => Promise<boolean>
   isActiveEditorComposing: boolean
-  isLeftSidebarDrawer: boolean
-  isRightSidebarDrawer: boolean
-  setActiveAgentLayoutFixedTab: Dispatch<SetStateAction<AgentLayoutFixedTab>>
-  setIsAgentLayoutFixedTabActive: Dispatch<SetStateAction<boolean>>
   setStatusMessage: (message: string) => void
 }
 
 export function useWorkspaceDocumentNavigation({
   captureDocumentTarget,
   captureActiveMeoViewPosition,
-  closeLeftDrawer,
-  closeRightDrawer,
   currentPath,
   displayActiveTabId,
   displayTabs,
-  expandAgentEditorSurface,
   flushWorkspaceAutosave,
   isActiveEditorComposing,
-  isLeftSidebarDrawer,
-  isRightSidebarDrawer,
-  setActiveAgentLayoutFixedTab,
-  setIsAgentLayoutFixedTabActive,
   setStatusMessage,
 }: UseWorkspaceDocumentNavigationOptions) {
   const activateTab = useWorkspaceStore((state) => state.activateTab)
@@ -98,7 +81,6 @@ export function useWorkspaceDocumentNavigation({
     recordOpenFileProfile('app:open-file:capture-active-position:end', {
       elapsedMs: getOpenFileProfileDuration(openStartedAt),
     })
-    setIsAgentLayoutFixedTabActive(false)
 
     const editorKindStartedAt = performance.now()
     recordOpenFileProfile('app:open-file:resolve-editor-kind:start', { filePath })
@@ -118,8 +100,6 @@ export function useWorkspaceDocumentNavigation({
       })
       return
     }
-
-    expandAgentEditorSurface()
 
     try {
       const targetViewMode = normalizeWorkspaceFileViewMode(filePath, editorKind, preferredViewMode)
@@ -145,10 +125,6 @@ export function useWorkspaceDocumentNavigation({
         recordOpenFileProfile('app:open-file:existing-tab:activate:end', {
           durationMs: getOpenFileProfileDuration(activateStartedAt),
         })
-
-        if (isLeftSidebarDrawer) {
-          closeLeftDrawer()
-        }
 
         if (workspacePath) {
           const updateStateStartedAt = performance.now()
@@ -219,10 +195,6 @@ export function useWorkspaceDocumentNavigation({
       })
     }
 
-    if (isLeftSidebarDrawer) {
-      closeLeftDrawer()
-    }
-
     setStatusMessage(`${getBaseName(filePath)} opened`)
     recordOpenFileProfile('app:open-file:end', {
       elapsedMs: getOpenFileProfileDuration(openStartedAt),
@@ -232,11 +204,7 @@ export function useWorkspaceDocumentNavigation({
     activateTab,
     captureActiveMeoViewPosition,
     currentPath,
-    expandAgentEditorSurface,
-    isLeftSidebarDrawer,
     openTab,
-    setIsAgentLayoutFixedTabActive,
-    closeLeftDrawer,
     setStatusMessage,
   ])
 
@@ -252,7 +220,6 @@ export function useWorkspaceDocumentNavigation({
     })
 
     if (currentActiveFileTab && normalizeFilePath(currentActiveFileTab.filePath) === normalizeFilePath(filePath)) {
-      setIsAgentLayoutFixedTabActive(false)
       activateTab(currentActiveFileTab.id)
       setStatusMessage(`${getBaseName(filePath)} focused`)
       return
@@ -287,7 +254,6 @@ export function useWorkspaceDocumentNavigation({
     }
 
     captureActiveMeoViewPosition()
-    setIsAgentLayoutFixedTabActive(false)
 
     const editorKind = await window.appApi.resolveWorkspaceEditorKind(filePath)
     if (!editorKind) {
@@ -300,8 +266,6 @@ export function useWorkspaceDocumentNavigation({
       })
       return
     }
-
-    expandAgentEditorSurface()
 
     try {
       const targetViewMode = normalizeWorkspaceFileViewMode(filePath, editorKind, currentActiveFileTab?.viewMode)
@@ -345,11 +309,9 @@ export function useWorkspaceDocumentNavigation({
     activateTab,
     captureActiveMeoViewPosition,
     currentPath,
-    expandAgentEditorSurface,
     flushWorkspaceAutosave,
     isActiveEditorComposing,
     replaceActiveFileTab,
-    setIsAgentLayoutFixedTabActive,
     setStatusMessage,
   ])
 
@@ -363,13 +325,7 @@ export function useWorkspaceDocumentNavigation({
 
     if (existingFileTab) {
       captureActiveMeoViewPosition()
-      setIsAgentLayoutFixedTabActive(false)
-      expandAgentEditorSurface()
       activateTab(existingFileTab.id)
-
-      if (isRightSidebarDrawer) {
-        closeRightDrawer()
-      }
 
       if (currentPath) {
         void window.appApi.updateWorkspaceState(currentPath, { lastFilePath: filePath })
@@ -388,19 +344,11 @@ export function useWorkspaceDocumentNavigation({
     }
 
     await openFile(filePath)
-
-    if (isRightSidebarDrawer) {
-      closeRightDrawer()
-    }
   }, [
     activateTab,
     captureActiveMeoViewPosition,
     currentPath,
-    expandAgentEditorSurface,
-    isRightSidebarDrawer,
     openFile,
-    setIsAgentLayoutFixedTabActive,
-    closeRightDrawer,
     setStatusMessage,
   ])
 
@@ -439,23 +387,15 @@ export function useWorkspaceDocumentNavigation({
       gitDiffRequest,
       viewMode: targetViewMode,
     })
-    setIsAgentLayoutFixedTabActive(false)
 
     if (currentPath) {
       await window.appApi.updateWorkspaceState(currentPath, { lastFilePath: change.path })
     }
 
-    if (isLeftSidebarDrawer) {
-      closeLeftDrawer()
-    }
-
     setStatusMessage(`${getBaseName(change.path)} diff opened`)
   }, [
     currentPath,
-    isLeftSidebarDrawer,
     openTab,
-    setIsAgentLayoutFixedTabActive,
-    closeLeftDrawer,
     setStatusMessage,
   ])
 
@@ -511,11 +451,6 @@ export function useWorkspaceDocumentNavigation({
       const tab = createDiffTab(diff, navigationRequest)
       openDiffTab(tab)
       opened?.(tab.id)
-      setIsAgentLayoutFixedTabActive(false)
-
-      if (isLeftSidebarDrawer) {
-        closeLeftDrawer()
-      }
 
       setStatusMessage(`${getBaseName(change.path)} diff opened`)
     } catch (error) {
@@ -527,11 +462,8 @@ export function useWorkspaceDocumentNavigation({
     captureDocumentTarget,
     captureActiveMeoViewPosition,
     currentPath,
-    isLeftSidebarDrawer,
     openDiffTab,
     openMeoGitDiff,
-    setIsAgentLayoutFixedTabActive,
-    closeLeftDrawer,
     setStatusMessage,
   ])
 
@@ -554,11 +486,6 @@ export function useWorkspaceDocumentNavigation({
       const tab = createDiffTab(diff)
       openDiffTab(tab)
       opened?.(tab.id)
-      setIsAgentLayoutFixedTabActive(false)
-
-      if (isLeftSidebarDrawer) {
-        closeLeftDrawer()
-      }
 
       setStatusMessage(`已打开 ${getBaseName(change.path)} 的提交差异`)
     } catch (error) {
@@ -570,10 +497,7 @@ export function useWorkspaceDocumentNavigation({
     captureDocumentTarget,
     captureActiveMeoViewPosition,
     currentPath,
-    isLeftSidebarDrawer,
     openDiffTab,
-    setIsAgentLayoutFixedTabActive,
-    closeLeftDrawer,
     setStatusMessage,
   ])
 
@@ -607,7 +531,6 @@ export function useWorkspaceDocumentNavigation({
       }
 
       replaceTabs([], null)
-      setIsAgentLayoutFixedTabActive(false)
       return
     }
 
@@ -645,7 +568,6 @@ export function useWorkspaceDocumentNavigation({
     }
 
     replaceTabs(nextTabs, nextActiveId)
-    setIsAgentLayoutFixedTabActive(false)
     const nextActiveFileTab = nextTabs.find((tab) => tab.id === nextActiveId && tab.kind === 'file')
 
     if (options.shouldApply && !options.shouldApply()) {
@@ -655,20 +577,12 @@ export function useWorkspaceDocumentNavigation({
     await window.appApi.updateWorkspaceState(workspacePath, {
       lastFilePath: nextActiveFileTab?.filePath ?? null,
     })
-  }, [replaceTabs, setIsAgentLayoutFixedTabActive])
+  }, [replaceTabs])
 
   const activateFileTab = useCallback((tabId: string) => {
     if (tabId !== displayActiveTabId) {
       captureActiveMeoViewPosition()
     }
-
-    if (tabId === FIXED_FILE_TAB_ID || tabId === FIXED_GIT_TAB_ID) {
-      setActiveAgentLayoutFixedTab(tabId === FIXED_GIT_TAB_ID ? 'git' : 'file')
-      setIsAgentLayoutFixedTabActive(true)
-      return
-    }
-
-    setIsAgentLayoutFixedTabActive(false)
     activateTab(tabId)
 
     const targetTab = displayTabs.find((tab) => tab.id === tabId)
@@ -682,8 +596,6 @@ export function useWorkspaceDocumentNavigation({
     currentPath,
     displayActiveTabId,
     displayTabs,
-    setActiveAgentLayoutFixedTab,
-    setIsAgentLayoutFixedTabActive,
   ])
 
   const cycleTabs = useCallback((direction: 1 | -1) => {

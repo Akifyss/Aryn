@@ -20,13 +20,10 @@ import type {
 export const FIXED_FILE_TAB_ID = 'app://fixed/files'
 export const FIXED_GIT_TAB_ID = 'app://fixed/git'
 
-export type AgentLayoutFixedTab = 'file' | 'git'
+export type WorkspacePanelKind = 'file' | 'git'
 
 export type WorkspaceTabViewStateOptions = {
-  activeAgentLayoutFixedTab: AgentLayoutFixedTab
   activeTabId: string | null
-  isAgentLayout: boolean
-  isAgentLayoutFixedTabActive: boolean
   openTabs: WorkspaceTab[]
 }
 
@@ -103,7 +100,7 @@ export function createWorkspaceFileGitDiffRequest(
   }
 }
 
-export function getFixedPanelTab(tab: AgentLayoutFixedTab): WorkspaceFixedPanelTab {
+export function getFixedPanelTab(tab: WorkspacePanelKind): WorkspaceFixedPanelTab {
   if (tab === 'git') {
     return {
       content: '',
@@ -140,10 +137,7 @@ export function getActiveWorkspaceFilePath(
 }
 
 export function deriveWorkspaceTabViewState({
-  activeAgentLayoutFixedTab,
   activeTabId,
-  isAgentLayout,
-  isAgentLayoutFixedTabActive,
   openTabs,
 }: WorkspaceTabViewStateOptions) {
   const activeTab = openTabs.find((tab) => tab.id === activeTabId) ?? null
@@ -158,30 +152,18 @@ export function deriveWorkspaceTabViewState({
     && tab.isDirty
     && normalizeFilePath(tab.filePath) === activeDiffPath
   ))
-  const fixedTabs: WorkspaceDisplayTab[] = isAgentLayout
-    ? [getFixedPanelTab('git'), getFixedPanelTab('file')]
-    : []
-  const displayTabs: WorkspaceDisplayTab[] = [...fixedTabs, ...openTabs]
-  const displayActiveTabId = isAgentLayout && (isAgentLayoutFixedTabActive || !activeTabId)
-    ? (activeAgentLayoutFixedTab === 'git' ? FIXED_GIT_TAB_ID : FIXED_FILE_TAB_ID)
-    : activeTabId
-  const displayActiveTab = displayTabs.find((tab) => tab.id === displayActiveTabId) ?? null
-  const activeFixedPanelTab = isWorkspaceFixedPanelTab(displayActiveTab) ? displayActiveTab : null
-
   return {
     activeDiffDraftContent,
     activeDiffHasDirtyRelatedFileTab,
     activeDiffTab,
     activeFileTab,
-    activeFixedPanelTab,
     activeWorkspaceAutosaveTab: isWorkspaceAutosaveTab(activeFileTab) ? activeFileTab : null,
     currentEditorKind: activeFileTab?.editorKind ?? null,
     currentFileContent: activeFileTab?.content ?? '',
     currentFilePath: activeFileTab?.filePath ?? null,
     currentFileViewMode: activeFileTab?.viewMode ?? null,
-    displayActiveTabId,
-    displayTabs,
-    shouldRenderWorkspaceEditor: !activeFixedPanelTab,
+    displayActiveTabId: activeTabId,
+    displayTabs: openTabs,
   }
 }
 

@@ -10,10 +10,10 @@ it.each([true, false])('provides temporary, reactive layout preview only in deve
     stdin: { resolveDir: process.cwd(), loader: 'tsx', contents: `
       import React from 'react'
       import {createRoot} from 'react-dom/client'
-      import {useShellLayoutController} from './src/features/layout/hooks/use-shell-layout-controller'
+      import {useWindowChrome} from './src/features/layout/hooks/use-window-chrome'
       import {AppTitlebar} from './src/components/app-titlebar'
       import './src/features/layout/components/app-shell/styles.css'
-      import './src/features/duo/styles.css'
+      import './src/features/workbench/styles.css'
       const listeners = new Set()
       window.calls={native:0,writes:[],project:0}
       window.nativeFullScreen=false
@@ -23,8 +23,8 @@ it.each([true, false])('provides temporary, reactive layout preview only in deve
         minimizeWindow:async()=>{window.calls.native++},toggleMaximizeWindow:async()=>{window.calls.native++;return {isMaximized:false}},
         closeWindow:async()=>{window.calls.native++},updateLayoutState:async patch=>{window.calls.writes.push(patch);return {ok:true}}}
       function App() {
-        const layout=useShellLayoutController({platform:window.appApi.platform,gitPanelLayout:'list',isAgentLayout:true,shouldExposeRightSidebar:true})
-        return <div ref={layout.appShellRef} className='app-shell duo-shell' data-app-layout='duo'
+        const layout=useWindowChrome(window.appApi.platform)
+        return <div className='app-shell'
           data-platform={layout.shellPlatform} data-window-fullscreen={layout.isWindowFullScreen} style={layout.shellChromeVars}>
           <input aria-label='草稿' style={{marginTop:100}} />
           <AppTitlebar leftControls={<div className='left-chrome-actions'><button onClick={()=>window.calls.project++}>项目</button></div>} />
@@ -60,7 +60,7 @@ it.each([true, false])('provides temporary, reactive layout preview only in deve
       expect(await page.locator('[data-platform-preview]').count()).toBe(0)
     } else {
       const preview = (mode: 'macos' | 'macos-fullscreen' | 'windows' | 'system') => page.evaluate(mode => window.arynLayoutPreview!(mode), mode)
-      await expect.poll(() => page.evaluate(() => (window as any).calls.writes.length)).toBe(1)
+      await expect.poll(() => page.evaluate(() => (window as any).calls.writes.length)).toBe(0)
       await preview('macos')
       await expect.poll(leftEdge).toBe(84)
       expect(await page.getByRole('img', {name:'macOS 红绿灯占位（布局预览）'}).count()).toBe(1)
@@ -82,7 +82,7 @@ it.each([true, false])('provides temporary, reactive layout preview only in deve
       await preview('system')
       await expect.poll(() => page.locator('.app-shell').getAttribute('data-window-fullscreen')).toBe('true')
       expect(await page.evaluate(() => (window as any).calls)).toMatchObject({native:0,project:2})
-      expect(await page.evaluate(() => (window as any).calls.writes.length)).toBe(1)
+      expect(await page.evaluate(() => (window as any).calls.writes.length)).toBe(0)
       await preview('macos')
       await page.reload()
       await page.waitForFunction(() => typeof window.arynLayoutPreview === 'function')

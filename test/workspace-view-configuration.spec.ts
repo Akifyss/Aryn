@@ -10,7 +10,6 @@ describe('workspace navigation configuration', () => {
     const setActiveTab = vi.fn()
     const createDirectory = vi.fn()
     const configuration = createWorkspaceNavigationConfiguration({
-      activeTab: 'file',
       activeTreePath: 'C:\\workspace\\notes.md',
       currentPath: 'C:\\workspace',
       fileOperations: {
@@ -65,7 +64,6 @@ describe('workspace navigation configuration', () => {
     configuration.gitPanel.onOpenMeoDiff(change)
     configuration.treePanel.onOpenInCodeEditor('C:\\workspace\\code.ts')
     configuration.onReplaceActiveFile('C:\\workspace\\next.md')
-    configuration.onActiveTabChange('git')
     configuration.treePanel.onCreateDirectory()
 
     expect(openGitDiff).toHaveBeenCalledWith(change, {
@@ -80,13 +78,12 @@ describe('workspace navigation configuration', () => {
     expect(replaceActiveFileWithPath).toHaveBeenCalledWith(
       'C:\\workspace\\next.md',
     )
-    expect(setActiveTab).toHaveBeenCalledWith('git')
     expect(createDirectory).toHaveBeenCalledOnce()
   })
 })
 
 describe('workspace editor configuration', () => {
-  it('preserves save, close, MEO open, and workspace-switch callbacks', () => {
+  it('preserves save, close and MEO open callbacks', () => {
     type EditorConfigurationOptions = Parameters<
       typeof createWorkspaceEditorConfiguration
     >[0]
@@ -96,7 +93,6 @@ describe('workspace editor configuration', () => {
     const moveTab = vi.fn()
     const openFile = vi.fn()
     const openGitDiff = vi.fn()
-    const onOpenWorkspaceSwitch = vi.fn()
     const saveWorkspaceFile = vi.fn()
     const navigationConfiguration = {
       marker: 'navigation',
@@ -109,14 +105,8 @@ describe('workspace editor configuration', () => {
         activeDiffHasDirtyRelatedFileTab: false,
         activeDiffTab: null,
         activeFileTab: null,
-        activeFixedPanelTab: null,
         displayActiveTabId: null,
         displayTabs: [],
-        isDirectorySidebarAvailable: true,
-        isDirectorySidebarVisible: false,
-        isDirectoryToggleSlotVisible: true,
-        shouldRenderWorkspaceEditor: true,
-        toggleDirectorySidebar: vi.fn(),
       },
       fileSystem: {
         handleWorkspaceFileSystemNavigationChange: vi.fn(),
@@ -137,7 +127,6 @@ describe('workspace editor configuration', () => {
         unstagePaths: vi.fn(),
       },
       iconTheme: null,
-      isPickingWorkspace: false,
       meoSettings: {
         focusedLineHighlight: false,
         gitDiffLineHighlights: true,
@@ -153,7 +142,6 @@ describe('workspace editor configuration', () => {
       navigationConfiguration,
       onActiveEditorCompositionChange: vi.fn(),
       onOpenMeoEditorGitDiff: vi.fn(),
-      onOpenWorkspaceSwitch,
       persistence: {
         closeEditorTab,
         saveDiffFile: vi.fn(),
@@ -174,7 +162,6 @@ describe('workspace editor configuration', () => {
     configuration.fileTabs.onActivate('tab-1')
     configuration.fileTabs.onClose?.('tab-1')
     configuration.fileTabs.onMoveTab?.('tab-1', 'tab-2', 'after')
-    configuration.emptyState.onOpenWorkspaceSwitch()
 
     expect(openFile).toHaveBeenCalledWith(
       'C:\\workspace\\next.md',
@@ -188,7 +175,6 @@ describe('workspace editor configuration', () => {
     expect(activateFileTab).toHaveBeenCalledWith('tab-1')
     expect(closeEditorTab).toHaveBeenCalledWith('tab-1')
     expect(moveTab).toHaveBeenCalledWith('tab-1', 'tab-2', 'after')
-    expect(onOpenWorkspaceSwitch).toHaveBeenCalledOnce()
     expect(configuration.navigation).toBe(navigationConfiguration)
   })
 })

@@ -13,23 +13,20 @@ type WorkspaceSyncController = ReturnType<typeof useWorkspaceSyncController>
 
 function ControllerProbe({
   currentPath,
-  isAgentLayout,
   onController,
 }: {
   currentPath: string | null
-  isAgentLayout: boolean
   onController: (controller: WorkspaceSyncController) => void
 }) {
-  onController(useWorkspaceSyncController(currentPath, isAgentLayout))
+  onController(useWorkspaceSyncController(currentPath))
   return null
 }
 
-function renderController(currentPath: string | null, isAgentLayout = true) {
+function renderController(currentPath: string | null) {
   let controller: WorkspaceSyncController | null = null
   renderToStaticMarkup(
     <ControllerProbe
       currentPath={currentPath}
-      isAgentLayout={isAgentLayout}
       onController={(nextController) => {
         controller = nextController
       }}
@@ -104,7 +101,7 @@ afterEach(() => {
 })
 
 describe('useWorkspaceSyncController', () => {
-  it('loads only root nodes for the agent surface and hydrates descendants on demand', async () => {
+  it('loads explicitly requested root nodes and hydrates descendants on demand', async () => {
     const appApi = stubWorkspaceApi()
     const rootTree: WorkspaceNode[] = [{
       hasChildren: true,
@@ -141,7 +138,7 @@ describe('useWorkspaceSyncController', () => {
     expect(useWorkspaceStore.getState().tree).toEqual(rootTree)
   })
 
-  it('upgrades a root-only request before publishing it to the editor surface', async () => {
+  it('loads the complete workspace by default', async () => {
     const appApi = stubWorkspaceApi()
     const rootTree: WorkspaceNode[] = [{
       hasChildren: true,
@@ -161,11 +158,11 @@ describe('useWorkspaceSyncController', () => {
     }]
     appApi.loadWorkspaceDirectory.mockResolvedValue(rootTree)
     appApi.loadWorkspaceTree.mockResolvedValue(recursiveTree)
-    const controller = renderController('C:\\workspace', false)
+    const controller = renderController('C:\\workspace')
 
-    await controller.loadTree('C:\\workspace', { scope: 'root' })
+    await controller.loadTree('C:\\workspace')
 
-    expect(appApi.loadWorkspaceDirectory).toHaveBeenCalledOnce()
+    expect(appApi.loadWorkspaceDirectory).not.toHaveBeenCalled()
     expect(appApi.loadWorkspaceTree).toHaveBeenCalledOnce()
     expect(useWorkspaceStore.getState().tree).toEqual(recursiveTree)
   })
@@ -181,7 +178,7 @@ describe('useWorkspaceSyncController', () => {
     appApi.loadWorkspaceTree.mockImplementation(() => new Promise<WorkspaceNode[]>((resolve) => {
       resolveTree = resolve
     }))
-    const controller = renderController('C:\\workspace', false)
+    const controller = renderController('C:\\workspace')
 
     const firstLoad = controller.ensureFullyLoadedWorkspaceTree('C:\\workspace')
     const secondLoad = controller.ensureFullyLoadedWorkspaceTree('c:/workspace')

@@ -1,0 +1,193 @@
+.app-shell {
+  --sidebar: var(--background-tertiary);
+  --workbench-tab-control-gap: 6px;
+  --workbench-left-controls-width: 240px;
+  display: flex;
+  flex-direction: column;
+  background: var(--sidebar);
+}
+
+.workbench-workspace-switch {
+  width: max-content;
+  /* Leave space for the directory toggle and the new-tab button. */
+  max-width: min(240px, max(66px, calc(var(--workbench-left-pane-width) - var(--left-panel-toggle-anchor) - var(--panel-toggle-size) * 2 - 14px)));
+  height: 32px;
+  min-height: 32px;
+  gap: 8px;
+  padding-inline: 8px;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+.workbench-workspace-switch-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workbench-workspace-switch-chevron { color: var(--foreground-secondary); }
+
+.workbench-restore-error {
+  position: absolute;
+  top: calc(var(--file-tabs-height, 48px) + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--app-z-window-controls);
+  max-width: calc(100% - 24px);
+  padding: 8px 12px;
+  border-radius: var(--workspace-surface-radius);
+  background: var(--background-secondary);
+  color: var(--foreground-primary);
+}
+
+.workbench-global-actions {
+  position: absolute;
+  right: var(--right-panel-toggle-anchor);
+  top: 6px;
+  display: flex;
+  gap: var(--panel-toggle-gap);
+  z-index: var(--app-z-window-controls);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.app-shell[data-modal-layer-open='true'] .workbench-global-actions { z-index: var(--app-z-window-chrome); }
+.workbench-panes {
+  display: grid;
+  grid-template-columns: minmax(0, calc(var(--workbench-left-ratio) - 3px)) 6px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: 0 var(--file-tabs-frame-gap);
+}
+.workbench-pane {
+  --fixed-panel-sidebar-width: clamp(280px, 30cqw, 320px);
+  --right-panel-content-inset: 6px;
+  --right-panel-control-inset: 6px;
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  /* Boundary geometry measures the frame against this host to decide whether
+     to close its bottom edge. Keep the gutter on this host. */
+  padding-bottom: var(--file-tabs-frame-gap);
+  container-type: inline-size;
+}
+.workbench-pane > .editor-frame {
+  --editor-frame-bottom-left-radius: var(--workspace-surface-radius);
+  --editor-frame-bottom-right-radius: var(--workspace-surface-radius);
+}
+.workbench-pane .file-tabs-shell { padding-inline: 0; }
+.workbench-pane#workbench-left > .editor-frame > .file-tabs-shell {
+  padding-left: calc(var(--left-panel-toggle-anchor) + var(--workbench-left-controls-width) + var(--left-chrome-action-gap) + var(--panel-toggle-size) + var(--workbench-tab-control-gap) - var(--file-tabs-frame-gap));
+}
+.workbench-pane#workbench-right > .editor-frame > .file-tabs-shell {
+  padding-right: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) * 3 + var(--panel-toggle-gap) * 2 + var(--workbench-tab-control-gap) - var(--file-tabs-frame-gap));
+}
+.workbench-directory-control {
+  position: absolute;
+  top: 6px;
+  z-index: var(--app-z-window-chrome);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+.workbench-directory-control .editor-directory-toggle[aria-expanded='true']:not(:hover):not(:focus-visible):not(:disabled) {
+  /* Expanded state remains accessible without a persistent visual highlight. */
+  background: transparent;
+  color: var(--foreground-secondary);
+}
+.workbench-pane[data-directory-side='left'] .workbench-directory-control {
+  left: calc(var(--left-panel-toggle-anchor) + var(--workbench-left-controls-width) + var(--left-chrome-action-gap) - var(--file-tabs-frame-gap));
+}
+.workbench-pane[data-directory-side='right'] .workbench-directory-control {
+  /* Reserve search and settings, converting their window anchor to pane coordinates. */
+  right: calc(var(--right-panel-toggle-anchor) + var(--panel-toggle-size) * 2 + var(--panel-toggle-gap) * 2 - var(--file-tabs-frame-gap));
+}
+.workbench-pane .editor-directory-sidebar[data-side] {
+  /* Raised appearance, but still part of the pane's horizontal layout. */
+  position: relative;
+  flex: 0 0 min(var(--fixed-panel-sidebar-width), calc(100% - 40px));
+  margin: var(--file-tabs-frame-gap) 0;
+  /* Match AppMenu: its shadow already includes the single hairline ring.
+     Override the shared directory's side borders as well. */
+  border: 0;
+  border-radius: var(--workspace-surface-radius);
+  box-shadow: var(--app-menu-popup-shadow);
+  overflow: hidden;
+  z-index: 1;
+}
+.workbench-pane .editor-directory-sidebar[data-side='left'] { margin-left: var(--file-tabs-frame-gap); }
+.workbench-pane .editor-directory-sidebar[data-side='right'] {
+  margin-left: auto;
+  margin-right: var(--file-tabs-frame-gap);
+}
+.workbench-pane .file-tabs-drag-spacer { min-width: 24px; }
+.workbench-pane .file-tabs-new-action {
+  position: relative;
+  z-index: 2;
+  padding-inline: var(--workbench-tab-control-gap) var(--left-chrome-action-gap);
+}
+.workbench-pane .file-tabs-scroll-frame:not([data-has-overflow-x]) + .file-tabs-new-action {
+  /* Preserve the SVG shoulder, but measure the button gap from the tab body. */
+  margin-inline-start: calc(0px - var(--file-tab-shoulder-size));
+}
+.workbench-pane .file-tabs-actions { padding-right: 4px; }
+.workbench-pane#workbench-left .file-tabs-actions { padding-right: 0; }
+.workbench-pane > .editor-frame > .editor-content-shell {
+  column-gap: var(--file-tabs-frame-gap);
+}
+.workbench-pane .agent-threadbar { padding-inline: 6px; }
+.workbench-pane .agent-threadbar-drag-spacer { app-region: no-drag; -webkit-app-region: no-drag; }
+.workbench-separator {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+.workbench-separator::after {
+  content: '';
+  position: absolute;
+  inset: 8px 2px;
+  border-radius: 2px;
+  background: transparent;
+}
+.workbench-separator:hover::after,
+.workbench-separator:focus-visible::after,
+.app-shell[data-resizing='true'] .workbench-separator::after { background: var(--accent); }
+.app-shell[data-resizing='true'] .workbench-pane { pointer-events: none; user-select: none; }
+.workbench-conversation-list,
+.workbench-conversation-list-host,
+.workbench-conversation-content,
+.workbench-conversation-view { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.workbench-conversation-host { display: contents; }
+.workbench-panel-host { display: contents; }
+.workbench-panel-view, .workbench-panel-content { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.workbench-panel-view[hidden] { display: none; }
+.workbench-conversation-list { flex-direction: column; }
+.workbench-conversation-list-new { align-self: flex-start; flex-shrink: 0; margin: 6px; }
+.workbench-conversation-list-host[hidden],
+.workbench-conversation-view[hidden] { display: none; }
+
+.workbench-start-page { flex: 1; }
+.workbench-start-page-content {
+  display: flex;
+  min-height: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+.workbench-start-page-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.workbench-start-page-action > svg { color: var(--foreground-secondary); }
+
+/* The directory/content gutter already supplies the composer's inner inset. */
+.workbench-pane[data-directory-side='left']:has(.editor-directory-sidebar) .workbench-conversation-view .agent-composer-shell {
+  --agent-composer-padding-inline-start: 0px;
+}
+.workbench-pane[data-directory-side='right']:has(.editor-directory-sidebar) .workbench-conversation-view .agent-composer-shell {
+  --agent-composer-padding-inline-end: 0px;
+}

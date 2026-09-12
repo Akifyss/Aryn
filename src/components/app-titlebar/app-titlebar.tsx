@@ -4,13 +4,9 @@ import { CloseLine, MinimizeLine, RestoreLine, SquareLine } from '@mingcute/reac
 import { resolveLayoutPlatformPreview, useLayoutPlatformPreview } from '@/features/layout/hooks/use-layout-platform-preview'
 
 export function AppTitlebar({
-  isDrawerOpen = false,
-  isLeftDrawerOpen = false,
   leftControls,
   onRequestClose,
 }: {
-  isDrawerOpen?: boolean
-  isLeftDrawerOpen?: boolean
   leftControls?: ReactNode
   onRequestClose?: () => void
 }) {
@@ -44,8 +40,6 @@ export function AppTitlebar({
   return (
     <header
       className={`titlebar ${isMac ? 'is-macos' : 'is-windows'}`}
-      data-drawer-open={isDrawerOpen ? 'true' : 'false'}
-      data-left-drawer-open={isLeftDrawerOpen ? 'true' : 'false'}
       data-react-aria-top-layer='true'
       data-platform-preview={platformPreview === 'system' ? undefined : platformPreview}
     >
@@ -57,7 +51,6 @@ export function AppTitlebar({
           </span>
         ) : null}
       </div>
-      <div className='titlebar-spacer' />
 
       <div className='titlebar-side titlebar-side-right'>
         {!isMac ? (

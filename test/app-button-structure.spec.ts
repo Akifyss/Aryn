@@ -183,9 +183,9 @@ describe('shared text button', () => {
         '/src/features/agent/components/agent-model-cascader/agent-model-cascader.tsx',
       ),
     )?.source
-    const workspaceSidebarSource = sources.find(({ path }) =>
+    const workspaceShellSource = sources.find(({ path }) =>
       path.endsWith(
-        '/src/features/workspace/components/workspace-sidebar/workspace-sidebar.tsx',
+        '/src/features/workbench/workspace-shell.tsx',
       ),
     )?.source
     const nonActionControlClasses = [
@@ -193,7 +193,7 @@ describe('shared text button', () => {
       'agent-model-cascader-trigger',
       'agent-project-switch-trigger',
       'agent-session-new-button',
-      'editor-workspace-switch-button',
+      'workbench-workspace-switch',
     ]
     const nonActionAppButtonUsages = sources.flatMap(({ path, source }) =>
       (source.match(/<AppButton\b[^>]*>/gs) ?? []).flatMap((openingTag) =>
@@ -235,21 +235,13 @@ describe('shared text button', () => {
     expect(agentModelCascaderSource ?? '').toMatch(
       /<Menu\.TriggerSurface[\s\S]{0,300}className='agent-model-cascader-trigger'[\s\S]{0,180}size='md'[\s\S]{0,80}variant='ghost'/,
     )
-    expect(workspaceSidebarSource).toBeDefined()
-    expect(workspaceSidebarSource ?? '').toMatch(
-      /<Menu\.TriggerSurface[\s\S]{0,320}editor-workspace-switch-button[\s\S]{0,120}size='md'[\s\S]{0,80}variant='outline'/,
+    expect(workspaceShellSource).toBeDefined()
+    expect(workspaceShellSource ?? '').toMatch(
+      /<AppMenu\.TriggerSurface[\s\S]{0,320}workbench-workspace-switch[\s\S]{0,120}size='md'[\s\S]{0,80}variant='outline'/,
     )
-    expect(workspaceSidebarSource ?? '').not.toMatch(
-      /<AppButton[\s\S]{0,320}editor-workspace-switch-button/,
+    expect(workspaceShellSource ?? '').not.toMatch(
+      /<AppButton[\s\S]{0,320}workbench-workspace-switch/,
     )
-    expect(workspaceSidebarSource ?? '').toMatch(
-      /<AppItem[\s\S]{0,320}itemAs=\{null\}[\s\S]{0,320}mainButtonProps=\{\{ onClick: onOpenSettings \}\}/,
-    )
-    expect(workspaceSidebarSource ?? '').toContain('<AppItemIcon>')
-    expect(workspaceSidebarSource ?? '').toContain(
-      "rowClassName='sidebar-footer-settings-item'",
-    )
-    expect(workspaceSidebarSource ?? '').not.toContain('sidebar-footer-item')
     expect(nonActionAppButtonUsages).toEqual([])
   })
 })

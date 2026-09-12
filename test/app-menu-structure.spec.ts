@@ -319,7 +319,7 @@ describe('shared application menu', () => {
       documentViewerSource,
       fileSystemSource,
       indexCss,
-      workspaceSidebarSource,
+      workspaceShellSource,
       xlsxViewerSource,
     ] = await Promise.all([
       readFile(new URL('../src/features/agent/components/agent-chat-surface/styles.css', import.meta.url), 'utf8'),
@@ -333,7 +333,7 @@ describe('shared application menu', () => {
       readFile(new URL('../src/components/ui/document-viewer-controls/document-viewer-controls.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/ui/file-system/file-system.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/index.css', import.meta.url), 'utf8'),
-      readFile(new URL('../src/features/workspace/components/workspace-sidebar/workspace-sidebar.tsx', import.meta.url), 'utf8'),
+      readFile(new URL('../src/features/workbench/workspace-shell.tsx', import.meta.url), 'utf8'),
       readFile(new URL('../src/components/ui/xlsx-viewer.tsx', import.meta.url), 'utf8'),
     ])
 
@@ -397,8 +397,8 @@ describe('shared application menu', () => {
     expect(fileSystemSource).toMatch(
       /<DropdownMenuTrigger[\s\S]{0,220}iconVariant="outline"[\s\S]{0,120}size="md"[\s\S]{0,80}variant="icon"/,
     )
-    expect(workspaceSidebarSource).toMatch(
-      /<Menu\.TriggerSurface[\s\S]{0,320}editor-workspace-switch-button[\s\S]{0,160}size='md'[\s\S]{0,80}variant='outline'/,
+    expect(workspaceShellSource).toMatch(
+      /<AppMenu\.TriggerSurface[\s\S]{0,320}workbench-workspace-switch[\s\S]{0,160}size='md'[\s\S]{0,80}variant='outline'/,
     )
     expect(documentViewerSource).toMatch(
       /viewer-toolbar-select[\s\S]{0,220}size="md"[\s\S]{0,80}variant="outline"/,

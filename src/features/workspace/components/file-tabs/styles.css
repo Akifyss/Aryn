@@ -24,39 +24,12 @@
   z-index: 3;
 }
 
-.app-shell[data-app-layout='editor']
-  .panel-editor
-  > .editor-frame
-  > .file-tabs-shell,
-.app-shell[data-app-layout='duo']
-  .duo-pane
-  > .editor-frame
-  > .file-tabs-shell {
+.workbench-pane > .editor-frame > .file-tabs-shell {
   --file-tabs-rail-surface: var(--sidebar);
 }
 
 .file-tabs-shell[data-has-actions='false'] {
   --file-tabs-right-panel-inset: var(--right-panel-content-inset);
-}
-
-.file-tabs-shell[data-sidebar-transition='true'] {
-  transition:
-    padding-left var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing),
-    padding-right var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
-}
-
-.app-shell[data-left-collapsed='true'] .file-tabs-shell {
-  /* The inset editor frame owns the visible workspace gutter. Start the tab
-     rail at the controls' actual end coordinate so chrome spacing is not stacked. */
-  padding-left: var(--left-chrome-controls-end);
-}
-
-.app-shell[data-app-layout='agent'][data-left-collapsed='true'] .panel-agent .file-tabs-shell {
-  padding-left: 0;
-}
-
-.app-shell[data-right-collapsed='true'] .file-tabs-shell {
-  padding-right: var(--file-tabs-right-panel-inset);
 }
 
 .file-tabs-scroll-frame {
@@ -133,12 +106,6 @@
   right: 0;
 }
 
-.app-shell[data-app-layout='agent'] .panel-agent .file-tabs-scroll-edge-left,
-.app-shell[data-app-layout='editor'][data-left-collapsed='false'] .file-tabs-scroll-edge-left,
-.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-shell[data-has-actions='false'] .file-tabs-scroll-edge-right {
-  display: none;
-}
-
 .file-tabs-scroll-frame[data-overflow-x-start] .file-tabs-scroll-edge-left,
 .file-tabs-scroll-frame[data-overflow-x-end] .file-tabs-scroll-edge-right {
   opacity: 1;
@@ -186,10 +153,6 @@
   padding-inline: 4px;
   app-region: no-drag;
   -webkit-app-region: no-drag;
-}
-
-.app-shell[data-app-layout='editor'][data-right-collapsed='false'] .file-tabs-actions {
-  padding: 0 6px;
 }
 
 .file-tabs-scroller::-webkit-scrollbar {

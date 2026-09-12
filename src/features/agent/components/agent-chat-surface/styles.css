@@ -21,12 +21,6 @@
   padding: 0 var(--right-panel-content-inset) 0 6px;
 }
 
-.agent-threadbar[data-sidebar-transition='true'] {
-  transition:
-    padding-left var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing),
-    padding-right var(--sidebar-layout-transition-duration) var(--sidebar-layout-transition-easing);
-}
-
 .agent-threadbar-leading {
   display: flex;
   align-items: center;

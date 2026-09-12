@@ -51,12 +51,12 @@ it('clips both pane surfaces to the tab outline across tab selection, themes and
       import {FileTabs} from './src/features/workspace/components/file-tabs/file-tabs'
       import {WorkspaceEditorSurface} from './src/features/workspace/components/workspace-editor-surface/workspace-editor-surface'
       import './src/features/layout/components/app-shell/styles.css'
-      import './src/features/duo/styles.css'
+      import './src/features/workbench/styles.css'
       const tabs = ['file', 'git'].map(kind => ({id:kind,kind:'fixed-panel',fixedTabKind:kind==='file'?'file-panel':'git-panel',closable:true}))
       function Pane({side}) {
         const [active, setActive] = useState('git')
         const [items, setItems] = useState(tabs)
-        return <section id={'duo-'+side} className='duo-pane'>
+        return <section id={'workbench-'+side} className='workbench-pane'>
           <WorkspaceEditorSurface contentPanelId={side+'-content'} tabs={<FileTabs contentPanelId={side+'-content'}
             activeTabId={active} tabs={items} iconTheme={null} workspacePath='/test' onActivate={setActive}
             onClose={id=>setItems(items.filter(item=>item.id!==id))} onMoveTab={()=>{}} />}>
@@ -67,8 +67,8 @@ it('clips both pane surfaces to the tab outline across tab selection, themes and
         </section>
       }
       createRoot(document.getElementById('root')).render(<React.StrictMode>
-        <div className='app-shell duo-shell' data-app-layout='duo' style={{'--left-panel-toggle-anchor':'6px','--duo-left-controls-width':'80px'}}>
-          <div className='duo-panes' style={{'--duo-left-ratio':'50%'}}><Pane side='left'/><div className='duo-separator'/><Pane side='right'/></div>
+        <div className='app-shell' style={{'--left-panel-toggle-anchor':'6px','--workbench-left-controls-width':'80px'}}>
+          <div className='workbench-panes' style={{'--workbench-left-ratio':'50%'}}><Pane side='left'/><div className='workbench-separator'/><Pane side='right'/></div>
         </div>
       </React.StrictMode>)
     ` },
@@ -88,21 +88,21 @@ it('clips both pane surfaces to the tab outline across tab selection, themes and
     // Exclude the separate shadow from pixel sampling; this checks the surface underneath it.
     await page.addStyleTag({ content: '.file-tabs-boundary-shadow-layer { visibility: hidden; }' })
     await page.addScriptTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.js'))!.text })
-    await page.locator('#duo-right .file-tabs-boundary-outline').waitFor({ state: 'attached' })
+    await page.locator('#workbench-right .file-tabs-boundary-outline').waitFor({ state: 'attached' })
     await checkCorners(page, 'light-interior-tab')
     for (const side of ['left', 'right']) {
-      await page.locator('#duo-'+side).getByRole('tab', {name:'文件',exact:true}).click()
+      await page.locator('#workbench-'+side).getByRole('tab', {name:'文件',exact:true}).click()
       await page.getByRole('textbox', {name:side+' input'}).fill('still interactive')
     }
     await checkCorners(page, 'light-first-tab')
     await page.locator('html').evaluate(element => element.classList.add('dark'))
     await page.setViewportSize({ width: 1100, height: 650 })
-    await expect.poll(() => page.locator('#duo-right .editor-frame').evaluate(frame =>
+    await expect.poll(() => page.locator('#workbench-right .editor-frame').evaluate(frame =>
       Number(frame.querySelector('.file-tabs-boundary-outline-layer')?.getAttribute('width')) === frame.getBoundingClientRect().width,
     )).toBe(true)
     await checkCorners(page, 'dark-resized')
     await page.emulateMedia({ reducedMotion: 'no-preference' })
-    const animation = await page.locator('#duo-right').evaluate(async pane => {
+    const animation = await page.locator('#workbench-right').evaluate(async pane => {
       const snapshots: { outline: string | null; clip: string | null }[] = []
       const tab = [...pane.querySelectorAll<HTMLElement>('[role="tab"]')].find(tab => tab.textContent === '更改')!
       tab.click()
@@ -117,10 +117,10 @@ it('clips both pane surfaces to the tab outline across tab selection, themes and
     for (const frame of animation) expect(frame.clip).toBe(`${frame.outline} Z`)
     await page.emulateMedia({ reducedMotion: 'reduce' })
     for (const label of ['文件', '更改']) {
-      await page.locator('#duo-right').getByRole('tab', { name: label, exact: true }).hover()
-      await page.locator('#duo-right').getByRole('button', { name: `Close ${label}`, exact: true }).click()
+      await page.locator('#workbench-right').getByRole('tab', { name: label, exact: true }).hover()
+      await page.locator('#workbench-right').getByRole('button', { name: `Close ${label}`, exact: true }).click()
     }
-    await page.locator('#duo-right .file-tabs-shell[data-empty="true"]').waitFor()
+    await page.locator('#workbench-right .file-tabs-shell[data-empty="true"]').waitFor()
     await checkCorners(page, 'dark-empty-rail')
     expect(errors).toEqual([])
   } finally { await browser.close() }

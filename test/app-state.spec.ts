@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   AppStateStore,
   APP_STATE_SCHEMA_VERSION,
-  DEFAULT_AGENT_CHAT_WIDTH,
   DEFAULT_AGENT_COMPOSER_HEIGHT,
   DEFAULT_WINDOW_HEIGHT,
   DEFAULT_WINDOW_WIDTH,
@@ -95,7 +94,6 @@ describe('app state persistence', () => {
       agent: {
         runningPromptEnterBehavior: 'followUp',
       },
-      layoutPreference: 'duo',
       meo: {
         focusedLineHighlight: false,
         gitDiffLineHighlights: true,
@@ -105,7 +103,6 @@ describe('app state persistence', () => {
       theme: 'auto',
     })
     expect(state.layout).toMatchObject({
-      activeLeftSidebarTab: 'file',
       gitPanelLayout: 'list',
     })
 
@@ -359,7 +356,7 @@ describe('app state persistence', () => {
         ...state,
         layout: {
           ...state.layout,
-          leftSidebarWidth: 360,
+          gitPanelLayout: 'tree',
         },
       })),
       store.update((state) => ({
@@ -373,7 +370,7 @@ describe('app state persistence', () => {
 
     const state = await store.read()
 
-    expect(state.layout.leftSidebarWidth).toBe(360)
+    expect(state.layout.gitPanelLayout).toBe('tree')
     expect(state.settings.theme).toBe('dark')
   })
 
@@ -479,7 +476,6 @@ describe('app state persistence', () => {
       agent: {
         runningPromptEnterBehavior: 'steer',
       },
-      layoutPreference: 'duo',
       meo: {
         focusedLineHighlight: true,
         gitDiffLineHighlights: false,
@@ -488,17 +484,7 @@ describe('app state persistence', () => {
       },
       theme: 'dark',
     })
-    expect(state.layout).toEqual({
-      activeLeftSidebarTab: 'git',
-      agentChatWidth: 640,
-      agentRightSidebarCollapsed: true,
-      editorRightSidebarCollapsed: true,
-      editorRightSidebarWidth: 420,
-      gitPanelHeight: 360,
-      gitPanelLayout: 'tree',
-      leftSidebarCollapsed: true,
-      leftSidebarWidth: 340,
-    })
+    expect(state.layout).toEqual({ gitPanelLayout: 'tree' })
     expect(state.migrations).toEqual({
       rendererLocalStorage: 2,
     })
@@ -512,7 +498,7 @@ describe('app state persistence', () => {
       },
     })
 
-    expect(state.layout.agentChatWidth).toBe(DEFAULT_AGENT_CHAT_WIDTH)
+    expect(state.layout).not.toHaveProperty('agentChatWidth')
     expect(state.layout).not.toHaveProperty('agentRightSidebarWidth')
     expect(state.layout).not.toHaveProperty('agentRightSidebarWidthMode')
   })

@@ -9,10 +9,7 @@ export function useWorkspaceTabViewState(options: WorkspaceTabViewStateOptions) 
   const state = useMemo(
     () => deriveWorkspaceTabViewState(options),
     [
-      options.activeAgentLayoutFixedTab,
       options.activeTabId,
-      options.isAgentLayout,
-      options.isAgentLayoutFixedTabActive,
       options.openTabs,
     ],
   )

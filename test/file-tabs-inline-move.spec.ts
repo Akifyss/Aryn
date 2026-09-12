@@ -13,7 +13,7 @@ it('keeps compact tabs stable and reveals inline actions only on hover or keyboa
     import {FileTabs} from './src/features/workspace/components/file-tabs/file-tabs'
     import {WorkspaceEditorSurface} from './src/features/workspace/components/workspace-editor-surface/workspace-editor-surface'
     import './src/features/layout/components/app-shell/styles.css'
-    import './src/features/duo/styles.css'
+    import './src/features/workbench/styles.css'
     const base={kind:'conversation',conversationId:null,exists:true,isDirty:false}
     const tabs=[{...base,id:'short',title:'新对话'},
       {...base,id:'greeting',title:'Greeting'},
@@ -21,7 +21,7 @@ it('keeps compact tabs stable and reveals inline actions only on hover or keyboa
       {id:'dirty',kind:'file',filePath:'/qa/Unsaved.md',exists:true,isDirty:true,editorKind:'prose',content:'draft'},
       {id:'files',kind:'fixed-panel',fixedTabKind:'file-panel',closable:true,exists:true,isDirty:false}]
     window.calls={moves:[],activations:[],closes:[]}
-    function App(){const [active,setActive]=useState('short');window.activate=setActive;return <div className='app-shell duo-shell' data-app-layout='duo'><section className='duo-pane' style={{flex:1}}>
+    function App(){const [active,setActive]=useState('short');window.activate=setActive;return <div className='app-shell'><section className='workbench-pane' style={{flex:1}}>
       <WorkspaceEditorSurface contentPanelId='content' tabs={<FileTabs tabs={tabs} activeTabId={active} iconTheme={null} workspacePath='/qa'
         otherPaneAction={{direction:'right',onMove:id=>window.calls.moves.push(id)}}
         onActivate={id=>{window.calls.activations.push(id);setActive(id)}} onClose={id=>window.calls.closes.push(id)} onMoveTab={()=>{}} />}>

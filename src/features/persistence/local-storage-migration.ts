@@ -38,20 +38,20 @@ const TAB_STORAGE_PREFIXES = [
 
 const MEO_STATE_STORAGE_PREFIX = `${APP_STORAGE_PREFIX}:meo-state:`
 
-// Duo was introduced after the JSON-store migration and has no legacy key.
-const LAYOUT_STORAGE_KEYS: Record<Exclude<keyof PersistedLayoutState, 'duo' | 'duoProjects'>, string[]> = {
-  activeLeftSidebarTab: [`${APP_STORAGE_PREFIX}:active-left-sidebar-tab`],
-  agentChatWidth: [`${APP_STORAGE_PREFIX}:agent-chat-width`],
-  agentRightSidebarCollapsed: [`${APP_STORAGE_PREFIX}:agent-right-sidebar-collapsed`],
-  editorRightSidebarCollapsed: [`${APP_STORAGE_PREFIX}:editor-right-sidebar-collapsed`, `${APP_STORAGE_PREFIX}:right-sidebar-collapsed`, `${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-collapsed`],
-  editorRightSidebarWidth: [`${APP_STORAGE_PREFIX}:editor-right-sidebar-width`, `${APP_STORAGE_PREFIX}:right-sidebar-width`, `${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-width`],
-  gitPanelHeight: [`${APP_STORAGE_PREFIX}:git-panel-height`, `${LEGACY_APP_STORAGE_PREFIX}:git-panel-height`],
+// Project layouts were introduced after the JSON-store migration.
+const LAYOUT_STORAGE_KEYS: Record<Exclude<keyof PersistedLayoutState, 'legacyWorkspaceLayout' | 'projectWorkspaces'>, string[]> = {
   gitPanelLayout: [`${APP_STORAGE_PREFIX}:git-panel-layout`, `${LEGACY_APP_STORAGE_PREFIX}:git-panel-layout`],
-  leftSidebarCollapsed: [`${APP_STORAGE_PREFIX}:left-sidebar-collapsed`, `${LEGACY_APP_STORAGE_PREFIX}:left-sidebar-collapsed`],
-  leftSidebarWidth: [`${APP_STORAGE_PREFIX}:left-sidebar-width`, `${LEGACY_APP_STORAGE_PREFIX}:left-sidebar-width`],
 }
 
 const RETIRED_LAYOUT_STORAGE_KEYS = [
+  `${APP_STORAGE_PREFIX}:active-left-sidebar-tab`,
+  `${APP_STORAGE_PREFIX}:agent-chat-width`,
+  `${APP_STORAGE_PREFIX}:agent-right-sidebar-collapsed`,
+  `${APP_STORAGE_PREFIX}:editor-right-sidebar-collapsed`, `${APP_STORAGE_PREFIX}:right-sidebar-collapsed`, `${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-collapsed`,
+  `${APP_STORAGE_PREFIX}:editor-right-sidebar-width`, `${APP_STORAGE_PREFIX}:right-sidebar-width`, `${LEGACY_APP_STORAGE_PREFIX}:right-sidebar-width`,
+  `${APP_STORAGE_PREFIX}:git-panel-height`, `${LEGACY_APP_STORAGE_PREFIX}:git-panel-height`,
+  `${APP_STORAGE_PREFIX}:left-sidebar-collapsed`, `${LEGACY_APP_STORAGE_PREFIX}:left-sidebar-collapsed`,
+  `${APP_STORAGE_PREFIX}:left-sidebar-width`, `${LEGACY_APP_STORAGE_PREFIX}:left-sidebar-width`,
   `${APP_STORAGE_PREFIX}:agent-right-sidebar-width`,
   `${APP_STORAGE_PREFIX}:agent-right-sidebar-width-mode`,
 ]

@@ -10,7 +10,6 @@ import {
   serializeProjectMenuAnchorRect,
   type ProjectMenuAnchorRect,
   type ProjectMenuMode,
-  type ProjectMenuSurface,
 } from '@/features/workspace/components/project-menu/project-menu-positioning'
 import {
   createEmptyProjectState,
@@ -34,10 +33,6 @@ type ConfirmationOptions = {
   title: string
 }
 
-type ProjectMenuOpenOptions = {
-  surface?: ProjectMenuSurface
-}
-
 type WorkspaceSurfaceResetOptions = {
   unavailableMessage?: string | null
 }
@@ -52,8 +47,7 @@ type UseWorkspaceProjectControllerOptions = {
   currentPathRef: { current: string | null }
   flushDiffAutosave: () => Promise<boolean>
   flushWorkspaceAutosave: (filePath?: string) => Promise<boolean>
-  isAgentLayout: boolean
-  // Duo owns project tab restoration; switching filesystem roots must not
+  // Workbench owns project tab restoration; switching filesystem roots must not
   // destroy shared buffers or run the legacy single-pane restore afterwards.
   preserveProjectTabs?: boolean
   loadTree: (
@@ -79,7 +73,6 @@ type UseWorkspaceProjectControllerOptions = {
   ) => Promise<void>
   setActiveWorkspaceContext: Dispatch<SetStateAction<ActiveWorkspaceContext>>
   setAgentWorkspaceState: Dispatch<SetStateAction<AgentWorkspaceState | null>>
-  setIsAgentLayoutFixedTabActive: Dispatch<SetStateAction<boolean>>
   setStatusMessage: (message: string) => void
 }
 
@@ -91,7 +84,6 @@ export function useWorkspaceProjectController({
   currentPathRef,
   flushDiffAutosave,
   flushWorkspaceAutosave,
-  isAgentLayout,
   preserveProjectTabs = false,
   loadTree,
   navigationCoordinator,
@@ -103,7 +95,6 @@ export function useWorkspaceProjectController({
   restoreWorkspaceTabs,
   setActiveWorkspaceContext,
   setAgentWorkspaceState,
-  setIsAgentLayoutFixedTabActive,
   setStatusMessage,
 }: UseWorkspaceProjectControllerOptions) {
   const currentPath = useWorkspaceStore((state) => state.currentPath)
@@ -115,7 +106,6 @@ export function useWorkspaceProjectController({
   const [isPickingWorkspace, setIsPickingWorkspace] = useState(false)
   const [isProjectActionBusy, setIsProjectActionBusy] = useState(false)
   const [projectMenuMode, setProjectMenuMode] = useState<ProjectMenuMode | null>(null)
-  const [projectMenuSurface, setProjectMenuSurface] = useState<ProjectMenuSurface>('global')
   const [projectMenuAnchorRect, setProjectMenuAnchorRect] = useState<ProjectMenuAnchorRect | null>(null)
   const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState(false)
   const [shouldStartAgentSessionAfterProjectCreate, setShouldStartAgentSessionAfterProjectCreate] = useState(false)
@@ -225,7 +215,7 @@ export function useWorkspaceProjectController({
 
     try {
       const didLoadTree = await loadTree(nextPath, {
-        scope: isAgentLayout ? 'root' : 'recursive',
+        scope: 'recursive',
         shouldApply,
       })
 
@@ -237,7 +227,6 @@ export function useWorkspaceProjectController({
       currentPathRef.current = nextPath
       setCurrentPath(nextPath)
       if (!preserveProjectTabs) resetOpenTabs()
-      setIsAgentLayoutFixedTabActive(false)
       prepareGitWorkspace(nextPath)
       await refreshGitState(nextPath, { silent: false })
 
@@ -280,7 +269,6 @@ export function useWorkspaceProjectController({
     setTree([])
     resetExpandedPaths()
     if (!preserveProjectTabs) resetOpenTabs()
-    setIsAgentLayoutFixedTabActive(false)
     resetGitWorkspaceState()
     setAgentWorkspaceState(null)
     setPendingAgentProjectSessionRequest(null)
@@ -385,7 +373,7 @@ export function useWorkspaceProjectController({
         setActiveWorkspaceContext(previousWorkspaceContext)
       }
       if (preserveProjectTabs && previousWorkspaceContext.kind === 'project') {
-        // Failed root preparation must not leave Duo waiting for a CWD that
+        // Failed root preparation must not leave Workbench waiting for a CWD that
         // will never arrive. Roll back the selected project and its surface.
         await navigationCoordinator.run(intent, async (stillCurrent) => {
           if (!stillCurrent()) return
@@ -404,9 +392,7 @@ export function useWorkspaceProjectController({
   function openProjectMenu(
     mode: ProjectMenuMode,
     anchorRect?: ProjectMenuAnchorRect,
-    options: ProjectMenuOpenOptions = {},
   ) {
-    setProjectMenuSurface(options.surface ?? 'global')
     setProjectMenuAnchorRect(anchorRect ? serializeProjectMenuAnchorRect(anchorRect) : null)
     setProjectMenuMode(mode)
   }
@@ -414,12 +400,11 @@ export function useWorkspaceProjectController({
   function closeProjectMenu() {
     setProjectMenuAnchorRect(null)
     setProjectMenuMode(null)
-    setProjectMenuSurface('global')
   }
 
   function shouldStartNewAgentSessionForProjectMenu() {
     return projectMenuMode === 'agent-new-switch'
-      || (projectMenuMode === 'editor-switch' && !isAgentLayout)
+      || projectMenuMode === 'editor-switch'
   }
 
   function openNewProjectDialog() {
@@ -789,7 +774,6 @@ export function useWorkspaceProjectController({
     pendingAgentProjectSessionRequest,
     projectMenuAnchorRect,
     projectMenuMode,
-    projectMenuSurface,
     projectState,
     queueCurrentProjectSession,
     removeProject,

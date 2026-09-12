@@ -362,9 +362,9 @@ describe('agent sidebar structure', () => {
     ])
 
     expect(appSource).toContain(
-      "from '@/features/duo/duo-workspace-shell'",
+      "from '@/features/workbench/workspace-shell'",
     )
-    expect(await readSource('../src/features/duo/duo-conversations.tsx')).toContain(
+    expect(await readSource('../src/features/workbench/workbench-conversations.tsx')).toContain(
       "from '@/features/agent/components/agent-sidebar/agent-sidebar'",
     )
     expect(sidebarSource).not.toContain("import './styles.css'")

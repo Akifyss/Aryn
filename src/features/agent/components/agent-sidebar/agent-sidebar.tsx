@@ -129,7 +129,6 @@ type AgentSidebarProps = {
   onWorkspaceStateChange?: (state: AgentWorkspaceState) => void
   projectState?: ProjectState
   isProjectAddMenuOpen?: boolean
-  isAgentLayout?: boolean
   surfaceMode?: AgentSurfaceMode
   theme?: BbTheme
   workspaceState?: AgentWorkspaceState | null
@@ -167,7 +166,6 @@ type AgentSurfaceProps = {
   onStartProjectSession?: (project: ProjectRecord) => Promise<void> | void
   projectState?: ProjectState
   isProjectAddMenuOpen?: boolean
-  isAgentLayout?: boolean
   surfaceMode?: AgentSurfaceMode
   theme?: BbTheme
   workspaceState?: AgentWorkspaceState | null
@@ -263,7 +261,6 @@ function AgentProvider({
   preserveComposerOnNavigation = false,
   projectState = emptyProjectState,
   isProjectAddMenuOpen = false,
-  isAgentLayout = false,
   surfaceMode = 'docked',
   theme = 'light',
   workspaceState,
@@ -1123,7 +1120,6 @@ function AgentProvider({
     hasConfiguredProviders,
     hasProviderStatePresentation,
     iconTheme,
-    isAgentLayout,
     isViewingActiveRuntime,
     isProjectAddMenuOpen,
     isLoading,
@@ -1242,7 +1238,6 @@ function AgentProvider({
     hasConfiguredProviders,
     hasProviderStatePresentation,
     iconTheme,
-    isAgentLayout,
     isViewingActiveRuntime,
     isProjectAddMenuOpen,
     isLoading,

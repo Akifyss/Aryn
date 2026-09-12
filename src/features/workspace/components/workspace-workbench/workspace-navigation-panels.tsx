@@ -1,10 +1,5 @@
-import type { ComponentProps, ReactNode } from 'react'
+import type { ComponentProps } from 'react'
 import { GitPanel } from '@/features/git/components/git-panel/git-panel'
-import {
-  WorkspaceSidebarTabs,
-  type WorkspaceSidebarTab,
-} from '@/features/workspace/components/workspace-sidebar-tabs/workspace-sidebar-tabs'
-import type { WorkspaceSidebarSurfaceMode } from '@/features/workspace/components/workspace-sidebar/workspace-sidebar'
 import { WorkspaceTreePanel } from '@/features/workspace/components/workspace-tree-panel/workspace-tree-panel'
 import type { WorkspaceTreeActivationEvent } from '@/features/workspace/components/workspace-tree/workspace-tree'
 import { resolveWorkspaceTreeActiveFilePath } from '@/features/workspace/lib/workspace-tree-active-file'
@@ -45,12 +40,10 @@ export function shouldReplaceActiveTreeFile(
 }
 
 export type WorkspaceNavigationPanelConfiguration = {
-  activeTab: WorkspaceSidebarTab
   activeTreePath: string | null
   gitPanel: GitPanelConfiguration
   treePanel: WorkspaceTreePanelConfiguration
   workspaceLabel: string
-  onActiveTabChange: (tab: WorkspaceSidebarTab) => void
   onOpenFile: (filePath: string) => void
   onReplaceActiveFile: (filePath: string) => void
 }
@@ -115,46 +108,5 @@ export function WorkspaceGitPane({
         menuPortalTarget={menuPortalTarget}
       />
     </div>
-  )
-}
-
-type WorkspaceNavigationPanelsProps = {
-  configuration: WorkspaceNavigationPanelConfiguration
-  fileClickMode?: WorkspaceTreeFileClickMode
-  menuPortalTarget?: HTMLElement | null
-  surfaceMode: WorkspaceSidebarSurfaceMode
-  tabListAction?: ReactNode
-}
-
-export function WorkspaceNavigationPanels({
-  configuration,
-  fileClickMode = 'open-tab',
-  menuPortalTarget = null,
-  surfaceMode,
-  tabListAction,
-}: WorkspaceNavigationPanelsProps) {
-  const panelMenuPortalTarget = surfaceMode === 'drawer'
-    ? menuPortalTarget
-    : null
-
-  return (
-    <WorkspaceSidebarTabs
-      activeTab={configuration.activeTab}
-      filePanel={(
-        <WorkspaceTreePane
-          configuration={configuration}
-          fileClickMode={fileClickMode}
-          menuPortalTarget={panelMenuPortalTarget}
-        />
-      )}
-      gitPanel={(
-        <WorkspaceGitPane
-          configuration={configuration}
-          menuPortalTarget={panelMenuPortalTarget}
-        />
-      )}
-      tabListAction={tabListAction}
-      onActiveTabChange={configuration.onActiveTabChange}
-    />
   )
 }

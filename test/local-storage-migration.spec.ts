@@ -95,11 +95,8 @@ describe('local storage migration', () => {
       layoutPreference: 'editor',
       theme: 'dark',
     })
-    expect(snapshot.migration.layout).toMatchObject({
-      agentChatWidth: 456,
-      editorRightSidebarCollapsed: true,
+    expect(snapshot.migration.layout).toEqual({
       gitPanelLayout: 'tree',
-      leftSidebarWidth: 348,
     })
     expect(snapshot.migration.workspaceTabs?.[workspacePath]).toEqual({
       activePath: filePath,

@@ -21,7 +21,6 @@ type AppliedWorkspaceTree = {
 
 export function useWorkspaceSyncController(
   currentPath: string | null,
-  isAgentLayout = true,
 ) {
   const closeTab = useWorkspaceStore((state) => state.closeTab)
   const openDiffTab = useWorkspaceStore((state) => state.openDiffTab)
@@ -29,11 +28,9 @@ export function useWorkspaceSyncController(
   const syncFileTabsWithDisk = useWorkspaceStore((state) => state.syncFileTabsWithDisk)
   const currentPathRef = useRef<string | null>(currentPath)
   const appliedWorkspaceTreeRef = useRef<AppliedWorkspaceTree | null>(null)
-  const isAgentLayoutRef = useRef(isAgentLayout)
   const recursiveTreeLoadsRef = useRef(new Map<string, Promise<WorkspaceNode[]>>())
   const diffSyncRequestIdRef = useRef(0)
   currentPathRef.current = currentPath
-  isAgentLayoutRef.current = isAgentLayout
 
   const isActiveWorkspacePath = useCallback((rootPath: string) => {
     const activePath = currentPathRef.current
@@ -69,8 +66,8 @@ export function useWorkspaceSyncController(
     rootPath: string,
     options: LoadWorkspaceTreeOptions = {},
   ) => {
-    let scope = options.scope ?? 'recursive'
-    let nextTree = scope === 'root'
+    const scope = options.scope ?? 'recursive'
+    const nextTree = scope === 'root'
       ? await window.appApi.loadWorkspaceDirectory(rootPath)
       : await loadRecursiveWorkspaceTree(rootPath)
 
@@ -80,15 +77,6 @@ export function useWorkspaceSyncController(
     )
     if (!shouldPublish()) {
       return false
-    }
-
-    // A root-only request may have started on the agent surface and settle
-    // after the editor becomes active. Upgrade that same request instead of
-    // briefly publishing a shallow tree or letting it overwrite a full tree.
-    if (scope === 'root' && !isAgentLayoutRef.current) {
-      nextTree = await loadRecursiveWorkspaceTree(rootPath)
-      scope = 'recursive'
-      if (!shouldPublish()) return false
     }
 
     setTree(nextTree)

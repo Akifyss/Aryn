@@ -30,7 +30,6 @@ export function AppOverlayLayer({
       <Toast.Provider className='app-toast-region' placement='bottom end' />
       <ProjectMenuLayer
         configuration={projectMenu}
-        surface='global'
       />
       <NewProjectDialog {...newProjectDialog} />
       <SettingsDialog {...settingsDialog} />

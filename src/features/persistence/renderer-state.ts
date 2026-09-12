@@ -1,6 +1,5 @@
 import type { GitPanelLayout } from '@/features/git/types'
 import type {
-  LeftSidebarTab,
   PersistedLayoutState,
   PersistedWorkspaceTabState,
   PersistentClientStateSnapshot,
@@ -14,41 +13,18 @@ export function initializeRendererPersistentState(snapshot: PersistentClientStat
   persistedWorkspaceTabState = new Map(Object.entries(snapshot.workspace.workspaceTabs))
 }
 
-export function readStoredLayoutNumber(
-  key: keyof PersistedLayoutState,
-  fallback: number,
-) {
-  const value = initialLayoutState?.[key]
-  const parsedValue = typeof value === 'number' ? value : NaN
-
-  return Number.isFinite(parsedValue) ? parsedValue : fallback
-}
-
-export function readStoredLayoutBoolean(
-  key: keyof PersistedLayoutState,
-  fallback: boolean,
-) {
-  const value = initialLayoutState?.[key]
-
-  return typeof value === 'boolean' ? value : fallback
-}
-
 export function readStoredGitPanelLayout(fallback: GitPanelLayout) {
   const value = initialLayoutState?.gitPanelLayout
 
   return value === 'list' || value === 'tree' ? value : fallback
 }
 
-export function readStoredLeftSidebarTab(): LeftSidebarTab {
-  return initialLayoutState?.activeLeftSidebarTab === 'git' ? 'git' : 'file'
+export function readStoredLegacyWorkspaceLayout() {
+  return initialLayoutState?.legacyWorkspaceLayout
 }
 
-export function readStoredDuoLayout() {
-  return initialLayoutState?.duo
-}
-
-export function readStoredDuoProjects() {
-  return initialLayoutState?.duoProjects
+export function readStoredProjectWorkspaces() {
+  return initialLayoutState?.projectWorkspaces
 }
 
 export function getPersistedWorkspaceTabState(workspacePath: string) {

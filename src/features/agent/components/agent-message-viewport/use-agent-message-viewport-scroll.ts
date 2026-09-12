@@ -4,7 +4,6 @@ import {
   startAgentMessagesBottomRestore,
   type AgentMessagesBottomRestoreController,
 } from '@/features/agent/lib/message-scroll-restore'
-import { SIDEBAR_RESIZE_END_EVENT } from '@/features/layout/shell-layout'
 import {
   getAgentMessageViewportContentElement,
   isAgentMessageViewportEvent,
@@ -245,7 +244,9 @@ export function useAgentMessageViewportScroll({
 
     const resizeObserver = new ResizeObserver(syncPinnedScrollAfterResize)
     resizeObserver.observe(scrollElement)
-    window.addEventListener(SIDEBAR_RESIZE_END_EVENT, syncPinnedScrollAfterResize)
+    // Pane resizing suppresses intermediate scroll corrections; settle once it ends.
+    const shellObserver = new MutationObserver(syncPinnedScrollAfterResize)
+    if (appShellElement) shellObserver.observe(appShellElement, { attributes: true, attributeFilter: ['data-resizing'] })
 
     const contentElement = getAgentMessageViewportContentElement(scrollElement)
     if (contentElement) {
@@ -254,7 +255,7 @@ export function useAgentMessageViewportScroll({
 
     return () => {
       resizeObserver.disconnect()
-      window.removeEventListener(SIDEBAR_RESIZE_END_EVENT, syncPinnedScrollAfterResize)
+      shellObserver.disconnect()
 
       if (frameId !== null) {
         window.cancelAnimationFrame(frameId)

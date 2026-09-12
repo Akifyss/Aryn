@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import type {
   AgentRunningPromptEnterBehavior,
-  AppLayoutPreference,
   AppTheme,
   PersistedAgentSettings,
   PersistedAppSettings,
@@ -11,7 +10,6 @@ import type {
 
 export type {
   AgentRunningPromptEnterBehavior,
-  AppLayoutPreference,
   AppTheme,
   MeoOutlinePosition,
 }
@@ -29,9 +27,6 @@ interface SettingsState extends PersistedAppSettings {
   updateMeoSettings: (patch: Partial<MeoSettings>) => void
   setTheme: (theme: AppTheme) => void
 }
-
-export const DEFAULT_APP_LAYOUT_PREFERENCE: AppLayoutPreference = 'duo'
-
 const DEFAULT_MEO_SETTINGS: MeoSettings = {
   focusedLineHighlight: false,
   gitDiffLineHighlights: true,
@@ -45,7 +40,6 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
 
 const DEFAULT_APP_SETTINGS: PersistedAppSettings = {
   agent: DEFAULT_AGENT_SETTINGS,
-  layoutPreference: DEFAULT_APP_LAYOUT_PREFERENCE,
   meo: DEFAULT_MEO_SETTINGS,
   theme: 'auto',
 }
@@ -135,8 +129,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 export function initializeSettingsStore(settings: PersistedAppSettings) {
   useSettingsStore.setState({
     agent: sanitizeAgentSettings(settings.agent),
-    // Retain the persisted field for old installs; the only layout is now Duo.
-    layoutPreference: DEFAULT_APP_LAYOUT_PREFERENCE,
     meo: sanitizeMeoSettings(settings.meo),
     theme: sanitizeTheme(settings.theme),
   })
