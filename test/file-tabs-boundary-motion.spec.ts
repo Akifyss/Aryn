@@ -6,7 +6,6 @@ import {
   parseCssTimeInMilliseconds,
   renderFileTabBoundaryMotionFrame,
   resolveFileTabAnimationFrame,
-  resolveFileTabAutoScrollBehavior,
   resolveFileTabShadowSnapshotTransform,
 } from '../src/features/workspace/components/file-tabs/file-tabs-boundary-motion'
 
@@ -83,11 +82,6 @@ describe('file tab boundary motion', () => {
       activeLeft: 300,
       isLayoutChanging: true,
     })).toBe(false)
-  })
-
-  it('does not smooth-scroll hidden tabs when reduced motion is requested', () => {
-    expect(resolveFileTabAutoScrollBehavior(false)).toBe('smooth')
-    expect(resolveFileTabAutoScrollBehavior(true)).toBe('auto')
   })
 
   it('renders each in-flight boundary path in the same animation frame', () => {

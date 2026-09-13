@@ -188,8 +188,6 @@ describe('workspace window chrome', () => {
     expect(fileTabsSource).toContain("import { Tabs } from '@base-ui/react/tabs'")
     expect(fileTabsSource).toContain('<Tabs.Root')
     expect(fileTabsSource).toContain('<Tabs.List')
-    expect(fileTabsSource).toContain('<Tabs.Indicator')
-    expect(fileTabsSource).toContain("className='file-tabs-geometry-indicator'")
     expect(fileTabsSource).toContain('activateOnFocus')
     expect(tabTooltipBlock).toBeDefined()
     expect(tabTooltipBlock).toContain("triggerMode='focusable'")
@@ -198,7 +196,6 @@ describe('workspace window chrome', () => {
     expect(tabTooltipBlock).toContain('draggable={isReorderableTab(tab)}')
     expect(tabTooltipBlock).toContain('onDragStart={(event) => {')
     expect(tabTooltipBlock).not.toContain('<AppTooltipButton')
-    expect(fileTabsSource).not.toContain("event.key === 'ArrowRight'")
   })
 
   it('keeps macOS fullscreen chrome aligned with the screen edge', () => {

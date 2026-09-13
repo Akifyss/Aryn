@@ -142,6 +142,10 @@ it('moves the real conversation provider and composer without interrupting draft
     expect(await editor('left').innerText()).toBe('Independent peer draft')
     const originalId = await page.evaluate(() => (window as any).draftId)
     // The arrow belongs to its tab, including a tab that is not currently active.
+    // Give both tabs room here: the earlier narrow-pane checks cover moving
+    // the selection. A sticky selection no longer scrolls away to expose its
+    // neighbor's entire action group in the fixture's very narrow rail.
+    await page.setViewportSize({ width: 1600, height: 800 })
     const inactive = page.locator('#workbench-left .file-tab').filter({ has: page.locator('.file-tab-move') }).filter({ hasNot: page.locator('[aria-selected="true"]') })
     await inactive.hover()
     await inactive.locator('.file-tab-move').click()

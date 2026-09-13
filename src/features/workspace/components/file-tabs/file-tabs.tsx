@@ -12,7 +12,6 @@ import {
   parseCssTimeInMilliseconds,
   renderFileTabBoundaryMotionFrame,
   resolveFileTabAnimationFrame,
-  resolveFileTabAutoScrollBehavior,
 } from './file-tabs-boundary-motion'
 import {
   createFileTabsBoundaryPaths,
@@ -26,7 +25,7 @@ import {
   type FileTabsShadowSnapshot,
 } from './file-tabs-boundary-shadow'
 import { parseComputedBoxShadow, type FileTabsShadowLayer } from './file-tabs-shadow'
-import { getVisibleFileTabsBoundaryShape } from './file-tabs-boundary-viewport'
+import { getFileTabsAvailableWidth, updateFileTabOverflow } from './file-tabs-scroll-layout'
 import {
   reorderWorkspaceTabs,
   type TabDropPosition,
@@ -63,8 +62,6 @@ type FileTabLabelTooltip = {
 }
 
 type FileTabsBoundaryGeometryBase = {
-  viewportLeft: number
-  viewportRight: number
   frameHeight: number
   frameLeft: number
   frameTop: number
@@ -189,51 +186,6 @@ function resolveDropPosition(event: ReactDragEvent<HTMLElement>, element: HTMLEl
   return event.clientX < left + width / 2 ? 'before' : 'after'
 }
 
-function isTabVisibleInScroller(tabElement: HTMLElement, scrollerElement: HTMLElement) {
-  const tabRect = tabElement.getBoundingClientRect()
-  const scrollerRect = scrollerElement.getBoundingClientRect()
-
-  return tabRect.left >= scrollerRect.left && tabRect.right <= scrollerRect.right
-}
-
-function readBaseTabsIndicatorGeometry(
-  indicatorElement: HTMLSpanElement | null,
-  frameRect: DOMRect,
-) {
-  const listElement = indicatorElement?.parentElement
-  if (!indicatorElement || !listElement) {
-    return null
-  }
-
-  const indicatorStyle = window.getComputedStyle(indicatorElement)
-  const readNumber = (property: string) => Number.parseFloat(
-    indicatorStyle.getPropertyValue(property),
-  )
-  const activeLeft = readNumber('--active-tab-left')
-  const activeTop = readNumber('--active-tab-top')
-  const activeWidth = readNumber('--active-tab-width')
-  const activeHeight = readNumber('--active-tab-height')
-
-  if (
-    !Number.isFinite(activeLeft)
-    || !Number.isFinite(activeTop)
-    || !Number.isFinite(activeWidth)
-    || !Number.isFinite(activeHeight)
-    || activeWidth <= 0
-    || activeHeight <= 0
-  ) {
-    return null
-  }
-
-  const listRect = listElement.getBoundingClientRect()
-  return {
-    activeHeight,
-    activeLeft: listRect.left - frameRect.left + activeLeft,
-    activeTop: listRect.top - frameRect.top + activeTop,
-    activeWidth,
-  }
-}
-
 function getAlternateShadowSlot(slot: FileTabsShadowSlot): FileTabsShadowSlot {
   return slot === 'a' ? 'b' : 'a'
 }
@@ -246,7 +198,7 @@ function createFileTabsBoundaryChromeRenderData(
     frameWidth: geometry.frameWidth,
     hasBottomBoundary: geometry.hasBottomBoundary,
     radius: geometry.radius,
-    shape: getVisibleFileTabsBoundaryShape(geometry.kind === 'active'
+    shape: geometry.kind === 'active'
       ? {
           kind: 'active',
           activeHeight: geometry.activeHeight,
@@ -257,7 +209,7 @@ function createFileTabsBoundaryChromeRenderData(
       : {
           kind: 'empty',
           railHeight: geometry.railHeight,
-        }, geometry.viewportLeft, geometry.viewportRight),
+        },
   })
 
   if (!paths) {
@@ -380,13 +332,13 @@ const FileTabsBoundaryChrome = forwardRef<FileTabsBoundaryChromeHandle, {
         hasLeftBoundary: nextGeometry.hasLeftBoundary,
         hasRightBoundary: nextGeometry.hasRightBoundary,
         radius: nextGeometry.radius,
-        shape: getVisibleFileTabsBoundaryShape({
+        shape: {
           kind: 'active',
           activeHeight: nextGeometry.activeHeight,
           activeLeft: nextGeometry.activeLeft,
           activeTop: nextGeometry.activeTop,
           activeWidth: nextGeometry.activeWidth,
-        }, nextGeometry.viewportLeft, nextGeometry.viewportRight),
+        },
       })
 
       if (!nextRenderablePaths) {
@@ -618,8 +570,6 @@ function areBoundaryGeometriesEqual(
   nextGeometry: FileTabsBoundaryGeometry,
 ) {
   const hasSameFrame = currentGeometry?.kind === nextGeometry.kind
-    && Math.abs(currentGeometry.viewportLeft - nextGeometry.viewportLeft) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
-    && Math.abs(currentGeometry.viewportRight - nextGeometry.viewportRight) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
     && Math.abs(currentGeometry.frameHeight - nextGeometry.frameHeight) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
     && Math.abs(currentGeometry.frameLeft - nextGeometry.frameLeft) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
     && Math.abs(currentGeometry.frameTop - nextGeometry.frameTop) < FILE_TAB_BOUNDARY_GEOMETRY_EPSILON
@@ -672,9 +622,10 @@ function canAnimateActiveBoundaryTransition(
   )
 }
 
-function FileTabsBoundaryChromeController({
+function FileTabsLayoutController({
   activeTabId,
-  indicatorRef,
+  dragTarget,
+  dropIndicatorRef,
   scrollerRef,
   shellRef,
   tabContainerRefs,
@@ -682,7 +633,8 @@ function FileTabsBoundaryChromeController({
   tabGeometryKey,
 }: {
   activeTabId: string | null
-  indicatorRef: RefObject<HTMLSpanElement | null>
+  dragTarget: DragTarget | null
+  dropIndicatorRef: RefObject<HTMLDivElement | null>
   scrollerRef: RefObject<HTMLDivElement | null>
   shellRef: RefObject<HTMLDivElement | null>
   tabContainerRefs: RefObject<Record<string, HTMLDivElement | null>>
@@ -841,10 +793,31 @@ function FileTabsBoundaryChromeController({
       appShellElement?.dataset.resizing === 'true',
     )
     const syncBoundaryGeometry = () => {
+      const availableWidth = `${getFileTabsAvailableWidth(shellElement)}px`
+      if (scrollerElement.style.getPropertyValue('--file-tabs-available-width') !== availableWidth) {
+        scrollerElement.style.setProperty('--file-tabs-available-width', availableWidth)
+      }
       const frameRect = frameElement.getBoundingClientRect()
       const viewportRect = scrollerElement.getBoundingClientRect()
-      const viewportLeft = Math.max(0, viewportRect.left - frameRect.left)
-      const viewportRight = Math.min(frameRect.width, viewportRect.right - frameRect.left)
+      updateFileTabOverflow(scrollerElement, activeTabElement, viewportRect)
+      const dropIndicator = dropIndicatorRef.current
+      const dropTab = dragTarget && tabContainerRefs.current[dragTarget.targetId]
+      if (dropIndicator && dropTab && dragTarget) {
+        const rect = dropTab.getBoundingClientRect()
+        let left = viewportRect.left
+        let right = viewportRect.right
+        if (activeTabElement && dropTab !== activeTabElement) {
+          const activeRect = activeTabElement.getBoundingClientRect()
+          if (dropTab.compareDocumentPosition(activeTabElement) & Node.DOCUMENT_POSITION_FOLLOWING) {
+            right = Math.min(right, activeRect.left)
+          } else {
+            left = Math.max(left, activeRect.right)
+          }
+        }
+        const edge = dragTarget.position === 'before' ? rect.left : rect.right
+        dropIndicator.hidden = right <= left
+        dropIndicator.style.left = `${Math.max(left, Math.min(right, edge)) - shellElement.getBoundingClientRect().left}px`
+      }
       const computedStyle = window.getComputedStyle(shellElement)
       const radius = Number.parseFloat(computedStyle.getPropertyValue('--file-tab-radius')) || 0
       const panelElement = frameElement.parentElement
@@ -861,8 +834,6 @@ function FileTabsBoundaryChromeController({
       if (isEmpty) {
         const shellRect = shellElement.getBoundingClientRect()
         nextGeometry = {
-          viewportLeft,
-          viewportRight,
           frameHeight: frameRect.height,
           frameLeft: frameRect.left,
           frameTop: frameRect.top,
@@ -884,17 +855,11 @@ function FileTabsBoundaryChromeController({
         }
 
         const activeRect = activeTabElement.getBoundingClientRect()
-        const indicatorGeometry = readBaseTabsIndicatorGeometry(
-          indicatorRef.current,
-          frameRect,
-        )
         nextGeometry = {
-          viewportLeft,
-          viewportRight,
-          activeHeight: indicatorGeometry?.activeHeight ?? activeRect.height,
-          activeLeft: indicatorGeometry?.activeLeft ?? activeRect.left - frameRect.left,
-          activeTop: indicatorGeometry?.activeTop ?? activeRect.top - frameRect.top,
-          activeWidth: indicatorGeometry?.activeWidth ?? activeRect.width,
+          activeHeight: activeRect.height,
+          activeLeft: activeRect.left - frameRect.left,
+          activeTop: activeRect.top - frameRect.top,
+          activeWidth: activeRect.width,
           frameHeight: frameRect.height,
           frameLeft: frameRect.left,
           frameTop: frameRect.top,
@@ -990,7 +955,8 @@ function FileTabsBoundaryChromeController({
     activeTabId,
     cancelBoundaryMotion,
     commitBoundaryGeometry,
-    indicatorRef,
+    dragTarget,
+    dropIndicatorRef,
     scrollerRef,
     shellRef,
     tabContainerRefs,
@@ -1033,10 +999,10 @@ export function FileTabs({
 }: FileTabsProps) {
   const shellRef = useRef<HTMLDivElement | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const indicatorRef = useRef<HTMLSpanElement | null>(null)
   const tabRefs = useRef<Record<string, HTMLElement | null>>({})
   const tabContainerRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const dragPreviewRef = useRef<HTMLDivElement | null>(null)
+  const dropIndicatorRef = useRef<HTMLDivElement | null>(null)
   const labelTooltipTimerRef = useRef<number | null>(null)
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null)
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null)
@@ -1071,38 +1037,6 @@ export function FileTabs({
         .map(([baseName]) => baseName),
     )
   }, [tabs])
-
-  useLayoutEffect(() => {
-    if (!activeTabId) {
-      return
-    }
-
-    const activeTabElement = tabRefs.current[activeTabId]
-    const scrollerElement = scrollerRef.current
-
-    if (!activeTabElement || !scrollerElement) {
-      return
-    }
-
-    const revealActiveTab = (behavior: ScrollBehavior) => {
-      if (!isTabVisibleInScroller(activeTabElement, scrollerElement)) {
-        activeTabElement.scrollIntoView({ behavior, block: 'nearest', inline: 'nearest' })
-      }
-    }
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    revealActiveTab(resolveFileTabAutoScrollBehavior(prefersReducedMotion))
-    // Resizing changes the viewport without changing activeTabId. Keep the
-    // selection readable without restarting smooth scrolling on every frame.
-    let previousWidth = scrollerElement.clientWidth
-    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
-      const width = scrollerElement.clientWidth
-      if (width > 0 && width !== previousWidth) revealActiveTab('instant')
-      previousWidth = width
-    })
-    resizeObserver?.observe(scrollerElement)
-    return () => resizeObserver?.disconnect()
-
-  }, [activeTabId])
 
   useLayoutEffect(() => {
     const currentTabIds = new Set(tabs.map((tab) => tab.id))
@@ -1256,6 +1190,10 @@ export function FileTabs({
     }
 
     const sourceRect = sourceElement.getBoundingClientRect()
+    preview.inert = true
+    preview.setAttribute('aria-hidden', 'true')
+    preview.style.clipPath = ''
+    preview.style.maskImage = ''
     preview.style.position = 'fixed'
     preview.style.left = '-9999px'
     preview.style.top = '0'
@@ -1273,27 +1211,6 @@ export function FileTabs({
 
     return preview
   }
-
-  function getDropIndicatorOffset(target: DragTarget | null) {
-    if (!target) {
-      return null
-    }
-
-    const shellElement = shellRef.current
-    const targetElement = tabContainerRefs.current[target.targetId]
-    if (!shellElement || !targetElement) {
-      return null
-    }
-
-    const shellRect = shellElement.getBoundingClientRect()
-    const targetRect = targetElement.getBoundingClientRect()
-
-    return target.position === 'before'
-      ? targetRect.left - shellRect.left
-      : targetRect.right - shellRect.left
-  }
-
-  const dropIndicatorOffset = getDropIndicatorOffset(dragTarget)
 
   return (
     <>
@@ -1329,7 +1246,7 @@ export function FileTabs({
             event.dataTransfer.dropEffect = 'move'
             autoScrollDuringDrag(event.clientX)
 
-            const dragOverElement = event.target instanceof HTMLElement
+            const dragOverElement = event.target instanceof Element
               ? event.target.closest<HTMLElement>('[data-tab-id][data-reorderable="true"]')
               : null
 
@@ -1363,12 +1280,7 @@ export function FileTabs({
             if (target && wouldMoveChangeOrder(target.targetId, target.position)) {
               onMoveTab(draggingTabId, target.targetId, target.position)
               requestAnimationFrame(() => {
-                tabRefs.current[draggingTabId]?.focus()
-                tabRefs.current[draggingTabId]?.scrollIntoView({
-                  behavior: 'smooth',
-                  block: 'nearest',
-                  inline: 'nearest',
-                })
+                tabRefs.current[draggingTabId]?.focus({ preventScroll: true })
               })
             }
 
@@ -1403,6 +1315,25 @@ export function FileTabs({
               aria-label='Open files'
               className='file-tabs-list'
               loopFocus
+              onKeyDown={(event) => {
+                if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+                const target = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('[data-tab-id]') : null
+                const index = tabs.findIndex(tab => tab.id === target?.dataset.tabId)
+                if (index < 0) return
+                // This reorderable list uses stable IDs and current store order.
+                // Base UI's cached index can lag when a focused wrapper moves or
+                // a preceding tab closes. Keep keyboard navigation controlled,
+                // just like selection, instead of blur/refocus synchronization.
+                const rtl = getComputedStyle(event.currentTarget).direction === 'rtl'
+                const step = (event.key === 'ArrowRight' ? 1 : -1) * (rtl ? -1 : 1)
+                const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+                  : (index + step + tabs.length) % tabs.length
+                event.preventDefault()
+                event.preventBaseUIHandler()
+                event.stopPropagation()
+                tabRefs.current[tabs[nextIndex].id]?.focus({ preventScroll: true })
+              }}
             >
               {tabs.length > 0 && tabs.map((tab) => {
                 const baseName = getTabLabel(tab)
@@ -1436,6 +1367,7 @@ export function FileTabs({
                         }}
                         type='button'
                         value={tab.id}
+                        tabIndex={isActive ? 0 : -1}
                         draggable={isReorderableTab(tab)}
                         aria-controls={contentPanelId}
                         aria-grabbed={draggingTabId === tab.id}
@@ -1533,17 +1465,9 @@ export function FileTabs({
                   </div>
                 )
               })}
-
-              <Tabs.Indicator
-                ref={indicatorRef}
-                aria-hidden='true'
-                className='file-tabs-geometry-indicator'
-              />
             </Tabs.List>
           </ScrollArea.Content>
         </ScrollArea.Viewport>
-        <div className='file-tabs-scroll-edge file-tabs-scroll-edge-left' aria-hidden='true' />
-        <div className='file-tabs-scroll-edge file-tabs-scroll-edge-right' aria-hidden='true' />
       </ScrollArea.Root>
 
       {newTabAction ? <div className='file-tabs-new-action'>{newTabAction}</div> : null}
@@ -1580,12 +1504,7 @@ export function FileTabs({
           if (wouldMoveChangeOrder(lastTab.id, 'after')) {
             onMoveTab(draggingTabId, lastTab.id, 'after')
             requestAnimationFrame(() => {
-              tabRefs.current[draggingTabId]?.focus()
-              tabRefs.current[draggingTabId]?.scrollIntoView({
-                behavior: 'smooth',
-                block: 'nearest',
-                inline: 'nearest',
-              })
+              tabRefs.current[draggingTabId]?.focus({ preventScroll: true })
             })
           }
 
@@ -1595,11 +1514,11 @@ export function FileTabs({
         }}
       />
 
-      {dropIndicatorOffset !== null && (
+      {dragTarget && (
         <div
+          ref={dropIndicatorRef}
           className='file-tabs-drop-indicator'
           aria-hidden='true'
-          style={{ left: `${dropIndicatorOffset}px` }}
         />
       )}
       {hasFileTabActions ? (
@@ -1621,9 +1540,10 @@ export function FileTabs({
       ) : null}
       </Tabs.Root>
 
-      <FileTabsBoundaryChromeController
+      <FileTabsLayoutController
         activeTabId={activeTabId}
-        indicatorRef={indicatorRef}
+        dragTarget={dragTarget}
+        dropIndicatorRef={dropIndicatorRef}
         scrollerRef={scrollerRef}
         shellRef={shellRef}
         tabContainerRefs={tabContainerRefs}

@@ -56,10 +56,15 @@ it('clips both pane surfaces to the tab outline across tab selection, themes and
       function Pane({side}) {
         const [active, setActive] = useState('git')
         const [items, setItems] = useState(tabs)
+        window['overflow'+side] = () => {
+          setItems(Array.from({length:8}, (_,i)=>({id:'overflow-'+i,kind:'conversation',title:'Long conversation title '+i,conversationId:null,exists:true,isDirty:false})))
+          setActive('overflow-4')
+        }
         return <section id={'workbench-'+side} className='workbench-pane'>
           <WorkspaceEditorSurface contentPanelId={side+'-content'} tabs={<FileTabs contentPanelId={side+'-content'}
             activeTabId={active} tabs={items} iconTheme={null} workspacePath='/test' onActivate={setActive}
-            onClose={id=>setItems(items.filter(item=>item.id!==id))} onMoveTab={()=>{}} />}>
+            onClose={id=>setItems(items.filter(item=>item.id!==id))} onMoveTab={()=>{}}
+            newTabAction={<button style={{width:32}}>+</button>} />}>
             <div style={{flex:1,background:'var(--background-primary)',display:'grid',placeItems:'center'}}>
               <input aria-label={side+' input'} />
             </div>
@@ -86,7 +91,7 @@ it('clips both pane surfaces to the tab outline across tab selection, themes and
     await page.setContent('<div id="root"></div>')
     await page.addStyleTag({ content: styles.build([]) })
     // Exclude the separate shadow from pixel sampling; this checks the surface underneath it.
-    await page.addStyleTag({ content: '.file-tabs-boundary-shadow-layer { visibility: hidden; }' })
+    const shadowOverride = await page.addStyleTag({ content: '.file-tabs-boundary-shadow-layer { visibility: hidden; }' })
     await page.addScriptTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.js'))!.text })
     await page.locator('#workbench-right .file-tabs-boundary-outline').waitFor({ state: 'attached' })
     await checkCorners(page, 'light-interior-tab')
@@ -122,6 +127,31 @@ it('clips both pane surfaces to the tab outline across tab selection, themes and
     }
     await page.locator('#workbench-right .file-tabs-shell[data-empty="true"]').waitFor()
     await checkCorners(page, 'dark-empty-rail')
+    // The selection remains visible at either scroll extreme, and its full
+    // contour must leave room for both panel corners beside the chrome controls.
+    await page.evaluate(() => (window as any).overflowleft())
+    for (const theme of ['light', 'dark']) {
+      await page.locator('html').evaluate((html, theme) => html.classList.toggle('dark', theme === 'dark'), theme)
+      for (const edge of ['left', 'right']) {
+        await page.locator('#workbench-left .file-tabs-scroller').evaluate(async (scroller, edge) => {
+          for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame)
+          scroller.scrollLeft = edge === 'right' ? 0 : scroller.scrollWidth
+        }, edge)
+        await expect.poll(() => page.locator('#workbench-left .editor-frame').evaluate(frame => {
+          const bounds = frame.getBoundingClientRect()
+          const content = frame.querySelector('.editor-content-shell')!
+          const y = content.getBoundingClientRect().top + 1.5
+          const outline = frame.querySelector<SVGPathElement>('.file-tabs-boundary-outline')!
+          return [bounds.left + 1.5, bounds.right - 1.5].map(x => ({
+            inside: outline.isPointInFill(new DOMPoint(x - bounds.left, y - bounds.top)),
+            hitContent: content.contains(document.elementFromPoint(x, y)),
+          }))
+        })).toEqual([{inside:false,hitContent:false},{inside:false,hitContent:false}])
+        await checkCorners(page, `${theme}-overflow-${edge}`)
+      }
+    }
+    await shadowOverride.evaluate(style => style.remove())
+    await page.screenshot({ path: path.join(os.tmpdir(), 'aryn-pane-corners-overflow-with-shadow.png'), scale: 'css' })
     expect(errors).toEqual([])
   } finally { await browser.close() }
 }, 20000)

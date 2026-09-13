@@ -7,6 +7,8 @@
      The SVG outline owns the final visual pixel; it does not reduce layout height. */
   --file-tab-content-bottom-inset: var(--file-tabs-top-gap);
   --file-tabs-rail-surface: var(--background-primary);
+  --file-tabs-overflow-fade-width: 24px;
+  --file-tab-min-width: 108px;
 
   position: relative;
   display: flex;
@@ -76,43 +78,10 @@
   -webkit-app-region: no-drag;
 }
 
-/* Base UI owns active-tab measurement; the SVG chrome consumes its CSS
-   geometry so the moving outline and the selected tab cannot drift apart. */
-.file-tabs-geometry-indicator {
-  position: absolute;
-  width: 0;
-  height: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.file-tabs-scroll-edge {
-  position: absolute;
-  top: var(--file-tabs-top-gap);
-  bottom: 0;
-  width: 1px;
-  background: color-mix(in oklch, var(--foreground-primary) 9%, transparent);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 140ms ease;
-  z-index: 6;
-}
-
-.file-tabs-scroll-edge-left {
-  left: 0;
-}
-
-.file-tabs-scroll-edge-right {
-  right: 0;
-}
-
-.file-tabs-scroll-frame[data-overflow-x-start] .file-tabs-scroll-edge-left,
-.file-tabs-scroll-frame[data-overflow-x-end] .file-tabs-scroll-edge-right {
-  opacity: 1;
-}
-
-.file-tabs-scroll-frame[data-has-overflow-x] .file-tabs-scroller {
-  clip-path: inset(0 1px 0 0);
+.file-tabs-list:has(> .file-tab + .file-tab) {
+  /* Leave a neighboring tab reachable beside a sticky long title. Apply the
+     same cap to every tab so selecting one cannot change the rail's widths. */
+  --file-tab-neighbor-limit: max(var(--file-tab-min-width), calc(var(--file-tabs-available-width, 100vw) - var(--file-tab-shoulder-size) - var(--file-tab-min-width)));
 }
 
 .file-tabs-scroller[data-dragging='true'] {
@@ -162,6 +131,8 @@
 .file-tab {
   --file-tab-actions-surface: var(--file-tabs-rail-surface);
   --file-tab-actions-fade-width: 16px;
+  --file-tab-max-width: min(288px, 42vw);
+  --file-tab-available-width: max(0px, calc(var(--file-tabs-available-width, 100vw) - var(--file-tab-shoulder-size)));
 
   position: relative;
   display: flex;
@@ -169,7 +140,7 @@
   align-items: stretch;
   height: var(--file-tab-height);
   min-width: 0;
-  max-width: min(288px, 42vw);
+  max-width: min(var(--file-tab-max-width), var(--file-tab-available-width), var(--file-tab-neighbor-limit, 100vw));
   box-sizing: border-box;
   border-radius: var(--file-tab-radius) var(--file-tab-radius) 0 0;
   app-region: no-drag;
@@ -181,14 +152,10 @@
   --file-tab-actions-gap: 2px;
   /* Size to the title. Only keep enough room for the leading icon and hover
      actions; the fade overlays the title tail without changing tab geometry. */
-  min-width: 96px;
+  min-width: min(var(--file-tab-min-width), var(--file-tab-available-width));
 }
 
 .file-tab[data-movable='true'] .file-tab-actions { gap: var(--file-tab-actions-gap); }
-
-.file-tab.is-pinned {
-  max-width: min(288px, 42vw);
-}
 
 .file-tab.is-pinned .file-tab-trigger {
   padding-right: 12px;
@@ -242,6 +209,9 @@
 .file-tab.is-active {
   --file-tab-actions-surface: var(--background-primary);
 
+  position: sticky;
+  left: 0;
+  right: var(--file-tab-shoulder-size);
   z-index: 5;
 }
 
@@ -340,8 +310,8 @@
 .file-tab-trigger {
   position: relative;
   display: flex;
-  /* Base UI measures this trigger for the outline; include the outer tab's
-     minimum width so the outline and absolutely positioned actions agree. */
+  /* Fill the outer tab so its title, focus ring and action area share the
+     same bounds as the measured SVG outline. */
   flex: 1 1 auto;
   align-items: center;
   gap: 4px;
@@ -510,7 +480,7 @@
 
 @media (max-width: 1120px) {
   .file-tab {
-    max-width: min(224px, 52vw);
+    --file-tab-max-width: min(224px, 52vw);
   }
 
   .file-tab-meta {
@@ -524,7 +494,6 @@
   }
 
   .file-tabs-shell,
-  .file-tabs-scroll-edge,
   .file-tab,
   .file-tab-trigger,
   .file-tab-trigger::before,

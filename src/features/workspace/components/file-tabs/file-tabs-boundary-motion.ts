@@ -103,10 +103,6 @@ export function canRetargetFileTabActiveMotion(
     && !nextTarget.isLayoutChanging
 }
 
-export function resolveFileTabAutoScrollBehavior(prefersReducedMotion: boolean) {
-  return prefersReducedMotion ? 'auto' : 'smooth'
-}
-
 /**
  * Applies one in-flight boundary frame outside React's state queue. React owns
  * the start and end states; this narrow writer keeps each requestAnimationFrame
