@@ -6,10 +6,11 @@ import { compile } from '@tailwindcss/node'
 import { chromium } from 'playwright'
 import { expect, it } from 'vitest'
 
-it('keeps tabs and actions reachable across overflow, resizing and list changes', async () => {
+it.each([false, true])('keeps tabs and actions reachable across overflow, resizing and list changes (new-tab action: %s)', async (withNewTabAction) => {
   const bundle = await build({ stdin: { resolveDir: process.cwd(), loader: 'tsx', contents: `
     import React,{useState} from 'react'
     import {createRoot} from 'react-dom/client'
+    import {AppIconButton} from './src/components/app-icon-button'
     import {FileTabs} from './src/features/workspace/components/file-tabs/file-tabs'
     import {reorderWorkspaceTabs} from './src/features/workspace/store/use-workspace-store'
     import {WorkspaceEditorSurface} from './src/features/workspace/components/workspace-editor-surface/workspace-editor-surface'
@@ -24,6 +25,7 @@ it('keeps tabs and actions reachable across overflow, resizing and list changes'
     window.calls={moves:[],activations:[],closes:[]}
     function App(){const [active,setActive]=useState('short');const [items,setItems]=useState(tabs);window.activate=setActive;window.remove=id=>setItems(items=>items.filter(tab=>tab.id!==id));window.insert=()=>setItems(items=>[{...base,id:'inserted',title:'Inserted'},...items]);window.onlyLong=()=>{setItems(tabs.filter(tab=>tab.id==='long'));setActive('long')};return <div className='app-shell'><section className='workbench-pane' style={{flex:1}}>
       <WorkspaceEditorSurface contentPanelId='content' tabs={<FileTabs tabs={items} activeTabId={active} iconTheme={null} workspacePath='/qa'
+        newTabAction={${withNewTabAction} ? <AppIconButton aria-label='New tab'>+</AppIconButton> : undefined}
         otherPaneAction={{direction:'right',onMove:id=>window.calls.moves.push(id)}}
         onActivate={id=>{window.calls.activations.push(id);setActive(id)}} onClose={id=>window.calls.closes.push(id)} onMoveTab={(moving,target,position)=>setItems(items=>reorderWorkspaceTabs(items,moving,target,position))} />}>
         <div style={{padding:24}}>Tab interaction fixture</div>
@@ -235,8 +237,11 @@ it('keeps tabs and actions reachable across overflow, resizing and list changes'
     }
     // A narrow pane inside a wide window must leave another tab reachable,
     // even when the selected title could otherwise consume the entire rail.
+    // Give the additional new-tab control its own 40px in this fixture.
     await page.setViewportSize({ width: 1600, height: 260 })
-    await page.locator('.workbench-pane').evaluate(node => { node.style.width = '260px' })
+    await page.locator('.workbench-pane').evaluate((node, withNewTabAction) => {
+      node.style.width = withNewTabAction ? '300px' : '260px'
+    }, withNewTabAction)
     await page.evaluate(() => (window as any).activate('long'))
     await page.locator('.file-tabs-scroller').evaluate(node => { node.scrollLeft = 0 })
     await expect.poll(() => tab('long').evaluate(active => {

@@ -120,15 +120,16 @@
   margin-left: auto;
   margin-right: var(--file-tabs-frame-gap);
 }
+.workbench-pane .file-tabs-shell:has(> .file-tabs-new-action) {
+  /* The SVG shoulder paints outside the viewport, into the space below the
+     new-tab control. Keep both spacing and width limits tied to tab bodies. */
+  --file-tabs-end-inset: 0px;
+}
 .workbench-pane .file-tabs-drag-spacer { min-width: 24px; }
 .workbench-pane .file-tabs-new-action {
   position: relative;
   z-index: 2;
   padding-inline: var(--workbench-tab-control-gap) var(--left-chrome-action-gap);
-}
-.workbench-pane .file-tabs-scroll-frame:not([data-has-overflow-x]) + .file-tabs-new-action {
-  /* Preserve the SVG shoulder, but measure the button gap from the tab body. */
-  margin-inline-start: calc(0px - var(--file-tab-shoulder-size));
 }
 .workbench-pane .file-tabs-actions { padding-right: 4px; }
 .workbench-pane#workbench-left .file-tabs-actions { padding-right: 0; }

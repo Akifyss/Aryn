@@ -1,7 +1,8 @@
 .file-tabs-shell {
   --file-tabs-right-panel-inset: var(--right-panel-control-inset);
   --file-tab-activation-duration: 180ms;
-  --file-tab-shoulder-size: var(--file-tab-radius);
+  /* Trailing room inside the viewport; the SVG corner radius is independent. */
+  --file-tabs-end-inset: var(--file-tab-radius);
   --file-tab-height: calc(var(--tabs-chrome-height) - var(--file-tabs-top-gap));
   /* Equal top and bottom insets center tab content in the shared chrome row.
      The SVG outline owns the final visual pixel; it does not reduce layout height. */
@@ -73,7 +74,7 @@
   min-width: 100%;
   height: 100%;
   box-sizing: border-box;
-  padding: var(--file-tabs-top-gap) var(--file-tab-shoulder-size) 0 0;
+  padding: var(--file-tabs-top-gap) var(--file-tabs-end-inset) 0 0;
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }
@@ -81,7 +82,7 @@
 .file-tabs-list:has(> .file-tab + .file-tab) {
   /* Leave a neighboring tab reachable beside a sticky long title. Apply the
      same cap to every tab so selecting one cannot change the rail's widths. */
-  --file-tab-neighbor-limit: max(var(--file-tab-min-width), calc(var(--file-tabs-available-width, 100vw) - var(--file-tab-shoulder-size) - var(--file-tab-min-width)));
+  --file-tab-neighbor-limit: max(var(--file-tab-min-width), calc(var(--file-tabs-available-width, 100vw) - var(--file-tabs-end-inset) - var(--file-tab-min-width)));
 }
 
 .file-tabs-scroller[data-dragging='true'] {
@@ -132,7 +133,7 @@
   --file-tab-actions-surface: var(--file-tabs-rail-surface);
   --file-tab-actions-fade-width: 16px;
   --file-tab-max-width: min(200px, 42vw);
-  --file-tab-available-width: max(0px, calc(var(--file-tabs-available-width, 100vw) - var(--file-tab-shoulder-size)));
+  --file-tab-available-width: max(0px, calc(var(--file-tabs-available-width, 100vw) - var(--file-tabs-end-inset)));
 
   position: relative;
   display: flex;
@@ -211,7 +212,7 @@
 
   position: sticky;
   left: 0;
-  right: var(--file-tab-shoulder-size);
+  right: var(--file-tabs-end-inset);
   z-index: 5;
 }
 
