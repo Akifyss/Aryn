@@ -1370,6 +1370,66 @@ describe('OpenCode Aryn session ownership', () => {
     }
   })
 
+  it('prepares retained tabs independently without replacing the latest selected session', async () => {
+    const manager = new OpenCodeAgentManager({
+      agentDir, emitEvent: () => undefined,
+      startServer: async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' }),
+    })
+    const allowHistory = deferred<Array<Record<string, any>>>()
+    try {
+      const drafts = await Promise.allSettled(Array.from({ length: 3 }, () => (
+        manager.loadWorkspaceState(workspacePath, null, { restoreSession: false })
+      )))
+      for (const result of drafts) {
+        expect(result).toMatchObject({ status: 'fulfilled', value: { activeSession: null } })
+      }
+      const first = await manager.createSession(workspacePath, { name: 'First tab' })
+      const second = await manager.createSession(workspacePath, { name: 'Second tab' })
+      const firstID = first.activeSession!.sessionId
+      const secondID = second.activeSession!.sessionId
+      sdkState.messageResponses.push(allowHistory.promise)
+      const earlier = manager.loadWorkspaceState(workspacePath, firstID)
+        .then(state => ({ state }), error => ({ error }))
+      await vi.waitFor(() => expect(sdkState.messageResponses).toHaveLength(0))
+      await expect(manager.loadWorkspaceState(workspacePath, secondID)).resolves.toMatchObject({
+        activeSession: { sessionId: secondID },
+      })
+      allowHistory.resolve([])
+      expect(await earlier).toMatchObject({ state: { activeSession: { sessionId: firstID } } })
+      await expect(manager.loadWorkspaceState(workspacePath, null)).resolves.toMatchObject({
+        activeSession: { sessionId: secondID },
+      })
+    } finally {
+      allowHistory.resolve([])
+      await manager.dispose()
+    }
+  })
+
+  it.each(['open', 'create'] as const)('does not let a tab load cancel another tab\'s %s request', async action => {
+    const manager = new OpenCodeAgentManager({
+      agentDir, emitEvent: () => undefined,
+      startServer: async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' }),
+    })
+    const allowStart = deferred()
+    try {
+      sdkState.createGate = allowStart.promise
+      sdkState.getGate = allowStart.promise
+      const command = (action === 'open'
+        ? manager.openSession(workspacePath, 'foreign-native-session')
+        : manager.createSession(workspacePath, { name: 'Independent creation' }))
+        .then(state => ({ state }), error => ({ error }))
+      await vi.waitFor(() => expect(action === 'open' ? sdkState.getStarted : sdkState.createStarted).toBeGreaterThan(0))
+      sdkState.getGate = null
+      await manager.loadWorkspaceState(workspacePath, null, { restoreSession: false })
+      allowStart.resolve()
+      expect(await command).toMatchObject({ state: { activeSession: { sessionId: expect.any(String) } } })
+      expect(sdkState.deletedSessionIds).toEqual([])
+    } finally {
+      allowStart.resolve()
+      await manager.dispose()
+    }
+  })
+
   it('suppresses an older workspace snapshot that completes after a newer session was opened', async () => {
     const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
     const events: Array<Record<string, any>> = []
@@ -1467,7 +1527,7 @@ describe('OpenCode Aryn session ownership', () => {
     }
   })
 
-  it('rolls back a native creation whose foreground activation was superseded', async () => {
+  it('retains a native creation when another tab wins foreground activation', async () => {
     const startServer = async () => ({ close: () => undefined, url: 'http://127.0.0.1:4096' })
     const manager = new OpenCodeAgentManager({ agentDir, emitEvent: () => undefined, startServer })
     const allowCreate = deferred()
@@ -1486,10 +1546,13 @@ describe('OpenCode Aryn session ownership', () => {
       allowCreate.resolve()
 
       await expect(creation).resolves.toMatchObject({
-        error: expect.objectContaining({ message: expect.stringMatching(/activation was superseded/i) }),
+        state: { activeSession: { sessionId: 'aryn-owned-session-1' } },
       })
-      expect(sdkState.sessions.map((session) => session.id)).toEqual(['foreign-native-session'])
-      expect(sdkState.deletedSessionIds).toEqual(['aryn-owned-session-1'])
+      expect(sdkState.sessions.map((session) => session.id)).toEqual(['foreign-native-session', 'aryn-owned-session-1'])
+      expect(sdkState.deletedSessionIds).toEqual([])
+      await expect(manager.loadWorkspaceState(workspacePath, null)).resolves.toMatchObject({
+        activeSession: { sessionId: 'foreign-native-session' },
+      })
     } finally {
       allowCreate.resolve()
       manager.dispose()

@@ -203,9 +203,9 @@ export class OpenCodeAgentManager {
       }
     }
 
-    if (!this.setWorkspaceActivationTarget(activation, activeSessionID)) {
-      throw new Error('OpenCode workspace activation was superseded.')
-    }
+    // Concurrent tabs each need their requested state; foreground selection
+    // remains a separate, latest-activation-only commit.
+    this.setWorkspaceActivationTarget(activation, activeSessionID)
 
     await this.reconnectReconciler.reconcilePendingInteractions(
       client,
@@ -225,27 +225,32 @@ export class OpenCodeAgentManager {
       }
     })
 
+    this.requireWorkspaceOperationCurrent(workspaceOperation)
+    const binding = activeSessionID ? await this.requireBinding(client, cwd, activeSessionID) : undefined
+    const isRequestCurrent = () => (
+      this.isWorkspaceOperationCurrent(workspaceOperation)
+      && this.isClientCurrent(client, clientGeneration)
+      && (!binding || this.isSessionBindingCurrent(binding))
+    )
     const state = await this.buildWorkspaceState(
       client,
       cwd,
       activeSessionID,
       sessions,
-      activeSessionID ? this.currentSessionBinding(cwd, activeSessionID) ?? undefined : undefined,
-      () => (
-        this.isWorkspaceOperationCurrent(workspaceOperation)
-        && this.isWorkspaceActivationCurrent(activation)
-        && this.isClientCurrent(client, clientGeneration)
-      ),
+      binding,
+      isRequestCurrent,
       clientGeneration,
     )
-    if (!this.commitWorkspaceActivation(activation, activeSessionID)) {
-      throw new Error('OpenCode workspace activation was superseded.')
+    if (!isRequestCurrent()) {
+      throw new Error('OpenCode workspace state request was superseded.')
     }
     // The loaded state is delivered through the request response rather than a
     // workspace_state event. Suppress any background snapshot that began
     // before this activation committed; otherwise it could arrive just after
     // the response and restore the previously active session in the renderer.
-    this.invalidateWorkspaceState(workspaceOperation.identity)
+    if (this.commitWorkspaceActivation(activation, activeSessionID)) {
+      this.invalidateWorkspaceState(workspaceOperation.identity)
+    }
     return state
   }
 
@@ -364,12 +369,9 @@ export class OpenCodeAgentManager {
         )
         binding.selectedModel = record.modelKey
         binding.thinkingLevel = thinkingLevel
-        if (
-          !this.setWorkspaceActivationTarget(activation, session.id)
-          || !this.commitWorkspaceActivation(activation, session.id)
-        ) {
-          throw new Error('OpenCode workspace activation was superseded.')
-        }
+        this.requireWorkspaceOperationCurrent(workspaceOperation)
+        this.setWorkspaceActivationTarget(activation, session.id)
+        this.commitWorkspaceActivation(activation, session.id)
         return await this.broadcastWorkspaceState(cwd, session.id, {
           activation,
           sourceLease: binding.lease,
@@ -413,9 +415,7 @@ export class OpenCodeAgentManager {
     await this.withBinding(cwd, sessionID, (_client, binding) => {
       sourceLease = binding.lease
       this.requireWorkspaceOperationCurrent(workspaceOperation)
-      if (!this.commitWorkspaceActivation(activation, sessionID)) {
-        throw new Error('OpenCode workspace activation was superseded.')
-      }
+      this.commitWorkspaceActivation(activation, sessionID)
     }, workspaceOperation)
     return this.broadcastWorkspaceState(cwd, sessionID, {
       activation,
@@ -1668,11 +1668,13 @@ export class OpenCodeAgentManager {
       throw new Error('OpenCode workspace state request was superseded.')
     }
     const identity = workspaceIdentity(cwd)
-    const activeSessionID = context.sourceLease
+    const activeSessionID = context.sourceLease && !context.activation
       ? this.workspaceIntent.active(identity) ?? requestedActiveSessionID
       : requestedActiveSessionID
     const revision = (this.workspaceStateRevisions.get(identity) ?? 0) + 1
-    this.workspaceStateRevisions.set(identity, revision)
+    // An older request still returns its own state, but must not invalidate a
+    // newer foreground snapshot while doing so.
+    if (this.isWorkspaceStateContextCurrent(context)) this.workspaceStateRevisions.set(identity, revision)
     const providedBinding = activeSessionID && context.sourceLease?.key === runtimeKey(cwd, activeSessionID)
       ? this.currentSessionBinding(cwd, activeSessionID) ?? undefined
       : undefined

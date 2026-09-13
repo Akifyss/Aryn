@@ -178,33 +178,30 @@ export class CodexAgentManager {
       : [preferredSessionPath, this.workspaceIntent.active(activation.identity), records[0]?.id]
           .find((candidate): candidate is string => Boolean(candidate && records.some((record) => record.id === candidate)))
         ?? null
-    if (!this.setWorkspaceActivationTarget(activation, activeId)) {
-      throw new Error('Codex workspace activation was superseded.')
-    }
+    // Preparing a retained tab is independent of which concurrent request
+    // owns foreground selection. Only the latest activation may commit it.
+    this.setWorkspaceActivationTarget(activation, activeId)
     if (activeId) {
       const record = await this.ensureOpenableRecord(cwd, activeId, workspaceOperation)
       activeId = record.id
-      if (!this.setWorkspaceActivationTarget(activation, activeId)) {
-        throw new Error('Codex workspace activation was superseded.')
-      }
+      this.setWorkspaceActivationTarget(activation, activeId)
       let sourceLease!: SessionRuntimeLease
       const state = await this.withBinding(cwd, activeId, async (binding) => {
         sourceLease = binding.lease
         this.requireWorkspaceOperationCurrent(workspaceOperation)
         const nextState = await this.buildWorkspaceState(cwd, activeId, binding, () => (
           this.isWorkspaceOperationCurrent(workspaceOperation)
-          && this.isWorkspaceActivationCurrent(activation)
           && binding.lease.isCurrent()
         ))
-        if (!this.commitWorkspaceActivation(activation, activeId)) {
-          throw new Error('Codex workspace activation was superseded.')
+        if (!this.isWorkspaceOperationCurrent(workspaceOperation) || !binding.lease.isCurrent()) {
+          throw new Error('Codex workspace state request was superseded.')
         }
+        if (this.commitWorkspaceActivation(activation, activeId)) this.invalidateWorkspaceState(activation.identity)
         return nextState
       }, workspaceOperation)
       if (
         !sourceLease.isCurrent()
         || !this.isWorkspaceOperationCurrent(workspaceOperation)
-        || !this.isWorkspaceActivationCurrent(activation)
       ) {
         throw new Error('Codex workspace state request was superseded.')
       }
@@ -212,11 +209,9 @@ export class CodexAgentManager {
     }
     const state = await this.buildWorkspaceState(cwd, null, undefined, () => (
       this.isWorkspaceOperationCurrent(workspaceOperation)
-      && this.isWorkspaceActivationCurrent(activation)
     ))
-    if (!this.commitWorkspaceActivation(activation, null)) {
-      throw new Error('Codex workspace activation was superseded.')
-    }
+    this.requireWorkspaceOperationCurrent(workspaceOperation)
+    if (this.commitWorkspaceActivation(activation, null)) this.invalidateWorkspaceState(activation.identity)
     return state
   }
 
@@ -526,30 +521,25 @@ export class CodexAgentManager {
     }
     let indexed = false
     try {
-      if (!this.setWorkspaceActivationTarget(activation, record.id)) {
-        throw new Error('Codex workspace activation was superseded.')
-      }
+      this.setWorkspaceActivationTarget(activation, record.id)
       this.requireWorkspaceOperationCurrent(workspaceOperation)
       this.sessionStore.install(result.thread)
       await this.sessionCatalog.add(record)
       indexed = true
       this.requireWorkspaceOperationCurrent(workspaceOperation)
       await this.installBinding(record, result.thread.status.type === 'active', client)
-      if (!this.isWorkspaceActivationCurrent(activation)) {
-        throw new Error('Codex workspace activation was superseded.')
-      }
       let sourceLease!: SessionRuntimeLease
       const state = await this.withBinding(cwd, record.id, async (binding) => {
         sourceLease = binding.lease
         this.requireWorkspaceOperationCurrent(workspaceOperation)
         const nextState = await this.buildWorkspaceState(cwd, record.id, binding, () => (
           this.isWorkspaceOperationCurrent(workspaceOperation)
-          && this.isWorkspaceActivationCurrent(activation)
           && binding.lease.isCurrent()
         ))
-        if (!this.commitWorkspaceActivation(activation, record.id)) {
-          throw new Error('Codex workspace activation was superseded.')
+        if (!this.isWorkspaceOperationCurrent(workspaceOperation) || !binding.lease.isCurrent()) {
+          throw new Error('Codex workspace state request was superseded.')
         }
+        this.commitWorkspaceActivation(activation, record.id)
         return nextState
       }, workspaceOperation)
       return await this.broadcastWorkspaceState(cwd, record.id, {
@@ -583,21 +573,19 @@ export class CodexAgentManager {
     this.requireWorkspaceOperationCurrent(workspaceOperation)
     const activation = this.beginWorkspaceActivation(cwd, threadId)
     const record = await this.ensureOpenableRecord(cwd, threadId, workspaceOperation)
-    if (!this.setWorkspaceActivationTarget(activation, record.id)) {
-      throw new Error('Codex workspace activation was superseded.')
-    }
+    this.setWorkspaceActivationTarget(activation, record.id)
     let sourceLease!: SessionRuntimeLease
     const state = await this.withBinding(cwd, record.id, async (binding) => {
       sourceLease = binding.lease
       this.requireWorkspaceOperationCurrent(workspaceOperation)
       const nextState = await this.buildWorkspaceState(cwd, record.id, binding, () => (
         this.isWorkspaceOperationCurrent(workspaceOperation)
-        && this.isWorkspaceActivationCurrent(activation)
         && binding.lease.isCurrent()
       ))
-      if (!this.commitWorkspaceActivation(activation, record.id)) {
-        throw new Error('Codex workspace activation was superseded.')
+      if (!this.isWorkspaceOperationCurrent(workspaceOperation) || !binding.lease.isCurrent()) {
+        throw new Error('Codex workspace state request was superseded.')
       }
+      this.commitWorkspaceActivation(activation, record.id)
       return nextState
     }, workspaceOperation)
     return this.broadcastWorkspaceState(cwd, record.id, {
@@ -1216,10 +1204,10 @@ export class CodexAgentManager {
     context: WorkspaceStateContext = {},
   ) {
     const identity = workspaceIdentity(cwd)
-    if (!this.isWorkspaceStateContextCurrent(context)) {
-      if (context.state) return context.state
+    if (!this.isWorkspaceStateBuildContextCurrent(context)) {
       throw new Error('Codex workspace state request was superseded.')
     }
+    if (context.state && !this.isWorkspaceStateContextCurrent(context)) return context.state
     const activeThreadId = context.sourceLease
       ? this.workspaceIntent.active(identity) ?? requestedActiveThreadId
       : requestedActiveThreadId
@@ -1229,8 +1217,11 @@ export class CodexAgentManager {
       cwd,
       activeThreadId,
       context.providedBinding,
-      () => this.isWorkspaceStateContextCurrent(context),
+      () => this.isWorkspaceStateBuildContextCurrent(context),
     )
+    if (!this.isWorkspaceStateBuildContextCurrent(context)) {
+      throw new Error('Codex workspace state request was superseded.')
+    }
     if (
       this.workspaceStateRevisions.get(identity) === revision
       && this.isWorkspaceStateContextCurrent(context)
@@ -1362,8 +1353,12 @@ export class CodexAgentManager {
   }
 
   private isWorkspaceStateContextCurrent(context: WorkspaceStateContext) {
+    return (!context.activation || this.isWorkspaceActivationCurrent(context.activation))
+      && this.isWorkspaceStateBuildContextCurrent(context)
+  }
+
+  private isWorkspaceStateBuildContextCurrent(context: WorkspaceStateContext) {
     return (!context.sourceLease || context.sourceLease.isCurrent())
-      && (!context.activation || this.isWorkspaceActivationCurrent(context.activation))
       && (!context.workspaceOperation || this.isWorkspaceOperationCurrent(context.workspaceOperation))
   }
 

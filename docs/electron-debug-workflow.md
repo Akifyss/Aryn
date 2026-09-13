@@ -131,6 +131,19 @@ $env:ARYN_ELECTRON_DEBUG_SCENARIO="agent-attachments"
 npm.cmd run debug:electron
 ```
 
+Run concurrent conversation initialization through real PI CLI and Electron IPC:
+
+```powershell
+$env:ARYN_ELECTRON_DEBUG_SCENARIO="workspace-load"
+npm.cmd run debug:electron
+```
+
+This scenario supplies isolated PI configuration with two fixture models and
+makes no model requests. It verifies three concurrent workspace loads, restores
+at least three conversation tabs across both panes through two renderer reloads, and
+checks that both visible composers can accept text and enable Send without an
+initialization error. Rebuild first after changing main-process code.
+
 Run the Agent composer mention-menu scenario:
 
 ```powershell

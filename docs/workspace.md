@@ -56,6 +56,8 @@ Workbench 布局通过现有 `AppStateStore` / `AtomicJsonStore` 写入 `layout.
 
 每个对话 Tab 独立挂载共享 `AgentProvider`。历史快照读取的取消标记与导航去重标记必须一起清理：开发环境 StrictMode 重放挂载时，如果只取消请求却保留“目标已处理”的标记，替代请求会被跳过，`isSessionLoading` 将一直为真，同时禁用输入、发送、模型和附件。共享导航钩子在 layout effect 清理中同时失效旧请求、清空目标标记；保留共享会话的就绪检查。
 
+工作区加载、打开及创建会话返回的是发起请求的 Tab 所需状态，不以项目的全局激活顺序取消其他 Tab 的请求，也不因此回滚其他 Tab 创建的会话。PI CLI、Codex 和 OpenCode 各自保留独立的请求结果，只有最新激活可以更新项目当前会话；工作区释放及运行时失效仍使请求失败。单个 Tab 内的过期请求继续由渲染器加载协调器及会话导航检查丢弃，较早请求的结果不通过全局事件抢占其他 Tab，加载成功后也会作废此前尚未完成的工作区广播快照。
+
 主进程将旧 `layout.duoProjects` 读入 `layout.projectWorkspaces`，将更早的 `layout.duo` 读入仅用于迁移的 `layout.legacyWorkspaceLayout`；新数据优先，即使保存的项目集合为空也不会重新导入旧 Tab。新的写入不再携带旧模式偏好和全局侧栏尺寸。
 
 Git 列表/树形偏好由 `useGitWorkspaceController` 直接保存，继续使用 `layout.gitPanelLayout`，不依赖窗口布局控制器。拖动双栏分隔线结束后，消息视口根据工作区的 `data-resizing` 恢复置底；正在阅读历史消息时保留阅读位置。
@@ -75,6 +77,7 @@ Git 列表/树形偏好由 `useGitWorkspaceController` 直接保存，继续使�
 
 - `test/agent-session-navigation-lifecycle.spec.ts`：真实 React StrictMode 下，首次读取和缓存命中的历史会话均能结束验证，并继续在同一组件内切换会话。隔离的 Windows Electron 使用持久化 PI 历史消息及本地测试模型，验证模型切换、附件添加、发送和回复完整链路。
 - `test/workbench-composer-runtime.spec.ts`：真实 Workbench 宿主、AgentProvider、输入框与生命周期，桥接层模拟原生激活竞争。覆盖恢复新对话时左右对话目录同时挂载、重新展开目录不激活运行时或改写会话偏好、模型切换、附件和发送，以及初始化失败后的错误显示、重试和草稿保留。隔离 Windows Electron + 真实 PI CLI 已复现旧代码的 `PI CLI workspace activation was superseded`，修复后通过模型切换、附件、发送及本地测试服务回复验证。
+- `test/pi-cli-runtime-coordination.spec.ts`、`test/codex-runtime-coordination.spec.ts`、`test/opencode-session-ownership.spec.ts`：真实管理器配合受控原生通信，覆盖多个草稿及历史会话并发加载、加载与打开/创建会话并发、较慢请求及后台快照不覆盖最新选择，以及删除、释放与连接失效期间的处理。`workspace-load` Electron 调试场景使用真实 PI CLI、IPC 与 Workbench，验证至少三个对话 Tab 并发恢复及两次渲染器重载后的全部输入框就绪，不调用模型服务。
 
 - 加号菜单的 Windows Electron 验证：两侧分别打开三类页面、重复打开复用 Tab、逐个关闭至空、关闭互不影响、键盘菜单操作与 Ctrl+W，以及 1100px 窗口下菜单可用均通过。
 

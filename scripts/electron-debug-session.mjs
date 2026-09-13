@@ -39,7 +39,7 @@ function readViewMode(value) {
 }
 
 function readDebugScenario(value) {
-  return ['agent-attachments', 'agent-mention-menu', 'bb-unified-surface', 'terminal'].includes(value ?? '') ? value : null
+  return ['agent-attachments', 'agent-mention-menu', 'bb-unified-surface', 'terminal', 'workspace-load'].includes(value ?? '') ? value : null
 }
 
 function compactText(value, maxLength = 1200) {
@@ -345,8 +345,8 @@ async function restoreWorkspace(page, fixture) {
 
   await page.reload({ waitUntil: 'domcontentloaded', timeout: timeoutMs })
   await waitForAppShell(page)
-  if (debugScenario === 'terminal') {
-    // The terminal scenario starts from the current project Workbench, which
+  if (debugScenario === 'terminal' || debugScenario === 'workspace-load') {
+    // These scenarios start from the current project Workbench, which
     // need not have a document open in either pane.
     await page.getByRole('button', { name: '右侧新建标签页', exact: true }).waitFor()
   } else if (debugScenario === 'agent-attachments' || debugScenario === 'agent-mention-menu' || debugScenario === 'bb-unified-surface') {
@@ -2241,12 +2241,16 @@ async function main() {
   let page = null
 
   try {
+    const scenarioEnvironment = debugScenario === 'workspace-load'
+      ? await (await import('./electron-workspace-load-scenario.mjs')).prepareWorkspaceLoadScenario(runRoot)
+      : {}
     log('launching electron app root', { rootDir })
     app = await electron.launch({
       ...(debugExecutable ? { executablePath: debugExecutable } : {}),
       args: [`--user-data-dir=${userDataRoot}`, ...(debugExecutable ? [] : [rootDir])],
       env: {
         ...process.env,
+        ...scenarioEnvironment,
         APPDATA: appDataRoot,
         ARYN_ELECTRON_DEBUG: '1',
         ARYN_ELECTRON_DEBUG_HOME: homeRoot,
@@ -2268,7 +2272,9 @@ async function main() {
     report.snapshot.afterRestore = await snapshotPage(page)
     report.snapshot.afterScenario = debugScenario === 'terminal'
       ? await (await import('./electron-terminal-scenario.mjs')).runTerminalScenario({ app, page, artifactRoot })
-      : await applyDebugScenario(page)
+      : debugScenario === 'workspace-load'
+        ? await (await import('./electron-workspace-load-scenario.mjs')).runWorkspaceLoadScenario({ page })
+        : await applyDebugScenario(page)
     assertDebugScenarioResult(report.snapshot.afterScenario)
     if (debugScenario && (report.renderer.crashed || report.renderer.pageErrors.length > 0)) {
       throw new Error(`Renderer failed during "${debugScenario}": ${JSON.stringify({

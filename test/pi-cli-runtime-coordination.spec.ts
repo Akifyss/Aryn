@@ -232,6 +232,146 @@ describe('PI CLI runtime coordination', () => {
     }
   })
 
+  it.each(['draft', 'same-session', 'different-session'] as const)(
+    'prepares concurrent tabs independently (%s) without restoring an older foreground selection',
+    async (scenario) => {
+      const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-pi-concurrent-load-'))
+      const workspace = path.join(tempRoot, 'workspace')
+      const sessionDir = path.join(tempRoot, 'sessions')
+      process.env.PI_CODING_AGENT_SESSION_DIR = sessionDir
+      await mkdir(workspace, { recursive: true })
+      const sessionA = createOfficialSession(workspace, sessionDir, 'Session A')
+      const sessionB = createOfficialSession(workspace, sessionDir, 'Session B')
+      const entered = deferred()
+      const allowStart = deferred()
+      const events: AgentClientEventPayload[] = []
+      const manager = new PiCliAgentManager({
+        agentDir: path.join(tempRoot, 'agent-data'),
+        emitEvent: (event) => events.push(event),
+      })
+
+      try {
+        const firstTarget = scenario === 'draft' ? null : sessionA
+        rpcState.getStateGate = allowStart.promise
+        rpcState.onGetState = () => entered.resolve()
+        // Attach handlers immediately: a failing first request must not become
+        // an unhandled rejection while the second tab is still initializing.
+        const earlier = manager.loadWorkspaceState(workspace, firstTarget, {
+          restoreSession: scenario !== 'draft',
+        }).then(state => ({ state }), error => ({ error }))
+        await entered.promise
+        rpcState.getStateGate = null
+        const nextTarget = scenario === 'same-session' ? sessionA : sessionB
+        const newer = manager.loadWorkspaceState(workspace, nextTarget)
+        if (scenario !== 'same-session') await newer
+        allowStart.resolve()
+        const [earlierResult, newerState] = await Promise.all([earlier, newer])
+
+        expect(earlierResult).toMatchObject({ state: {
+          activeSession: firstTarget ? { sessionId: firstTarget } : null,
+          runtime: { workspacePath: workspace },
+        } })
+        expect(newerState.activeSession?.sessionId).toBe(nextTarget)
+        // Implicit restoration still follows the latest request, even though
+        // the slower tab also received its own usable result.
+        const restored = await manager.loadWorkspaceState(workspace, null)
+        expect(restored.activeSession?.sessionId).toBe(nextTarget)
+        expect(events.filter(event => event.type === 'workspace_state')).toEqual([])
+        if (scenario === 'same-session') expect(processInstances(sessionA)).toHaveLength(1)
+      } finally {
+        allowStart.resolve()
+        await manager.dispose()
+        await rm(tempRoot, { force: true, recursive: true })
+      }
+    },
+  )
+
+  it('allows multiple fresh drafts to initialize before session discovery finishes', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-pi-concurrent-drafts-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    process.env.PI_CODING_AGENT_SESSION_DIR = path.join(tempRoot, 'sessions')
+    await mkdir(workspace, { recursive: true })
+    const manager = new PiCliAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: () => undefined,
+    })
+    try {
+      const results = await Promise.allSettled(Array.from({ length: 3 }, () => (
+        manager.loadWorkspaceState(workspace, null, { restoreSession: false })
+      )))
+      for (const result of results) {
+        expect(result).toMatchObject({ status: 'fulfilled', value: { activeSession: null } })
+      }
+      expect(await manager.listSessionItems(workspace)).toEqual([])
+      expect(rpcState.instances.every(instance => instance.stopCount > 0)).toBe(true)
+    } finally {
+      await manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it.each([false, true])('rejects a workspace load released during initialization (restore=%s)', async restoreSession => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-pi-load-release-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    const sessionDir = path.join(tempRoot, 'sessions')
+    process.env.PI_CODING_AGENT_SESSION_DIR = sessionDir
+    await mkdir(workspace, { recursive: true })
+    const sessionID = createOfficialSession(workspace, sessionDir, 'Released tab')
+    const entered = deferred()
+    const allowStart = deferred()
+    const events: AgentClientEventPayload[] = []
+    const manager = new PiCliAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'), emitEvent: event => events.push(event),
+    })
+    try {
+      rpcState.getStateGate = allowStart.promise
+      rpcState.onGetState = () => entered.resolve()
+      const loading = manager.loadWorkspaceState(workspace, sessionID, { restoreSession })
+        .then(state => ({ state }), error => ({ error }))
+      await entered.promise
+      const releasing = manager.releaseWorkspaceRuntime(workspace)
+      allowStart.resolve()
+      expect(await loading).toMatchObject({ error: expect.objectContaining({ message: expect.stringMatching(/superseded|invalidated/) }) })
+      await releasing
+      expect(rpcState.instances.every(instance => instance.stopCount > 0)).toBe(true)
+      expect(events.filter(event => event.type === 'workspace_state')).toEqual([])
+    } finally {
+      allowStart.resolve()
+      await manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
+  it.each(['open', 'create'] as const)('does not let a tab load cancel another tab\'s %s request', async action => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-pi-load-command-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    const sessionDir = path.join(tempRoot, 'sessions')
+    process.env.PI_CODING_AGENT_SESSION_DIR = sessionDir
+    await mkdir(workspace, { recursive: true })
+    const sessionID = createOfficialSession(workspace, sessionDir, 'Existing tab')
+    const entered = deferred()
+    const allowStart = deferred()
+    const events: AgentClientEventPayload[] = []
+    const manager = new PiCliAgentManager({ agentDir: path.join(tempRoot, 'agent-data'), emitEvent: event => events.push(event) })
+    try {
+      rpcState.getStateGate = allowStart.promise
+      rpcState.onGetState = () => entered.resolve()
+      const command = (action === 'open' ? manager.openSession(workspace, sessionID) : manager.createSession(workspace))
+        .then(state => ({ state }), error => ({ error }))
+      await entered.promise
+      rpcState.getStateGate = null
+      await manager.loadWorkspaceState(workspace, null, { restoreSession: false })
+      allowStart.resolve()
+      expect(await command).toMatchObject({ state: { activeSession: { sessionId: expect.any(String) } } })
+      expect(events.filter(event => event.type === 'workspace_state')).toEqual([])
+      expect(await manager.listSessionItems(workspace)).toHaveLength(action === 'create' ? 2 : 1)
+    } finally {
+      allowStart.resolve()
+      await manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
   it('keeps the latest activation when an earlier session finishes opening later', async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-pi-runtime-activation-'))
     const workspace = path.join(tempRoot, 'workspace')
@@ -257,7 +397,7 @@ describe('PI CLI runtime coordination', () => {
       await slowStartEntered.promise
       await manager.openSession(workspace, sessionB)
       allowSlowStart.resolve()
-      await expect(earlierOpen).rejects.toThrow('workspace activation was superseded')
+      await expect(earlierOpen).resolves.toMatchObject({ activeSession: { sessionId: sessionA } })
 
       events.length = 0
       processInstances(sessionB)[0]!.emit({ type: 'queue_update', followUp: ['latest work'], steering: [] })
@@ -274,7 +414,7 @@ describe('PI CLI runtime coordination', () => {
     }
   })
 
-  it('orders deletion behind an in-flight start and does not resurrect the deleted session', async () => {
+  it.each(['open', 'load'] as const)('orders deletion behind an in-flight %s and does not resurrect the deleted session', async (operation) => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-pi-runtime-delete-'))
     const workspace = path.join(tempRoot, 'workspace')
     const sessionDir = path.join(tempRoot, 'sessions')
@@ -294,14 +434,16 @@ describe('PI CLI runtime coordination', () => {
     })
 
     try {
-      const opening = manager.openSession(workspace, sessionID)
+      const opening = operation === 'open'
+        ? manager.openSession(workspace, sessionID)
+        : manager.loadWorkspaceState(workspace, sessionID)
       await startEntered.promise
       const deletion = manager.deleteSession(workspace, sessionID)
       allowStart.resolve()
 
       const [openResult, deleteResult] = await Promise.allSettled([opening, deletion])
       expect(openResult).toMatchObject({
-        reason: expect.objectContaining({ message: expect.stringContaining('workspace activation was superseded') }),
+        reason: expect.objectContaining({ message: expect.stringContaining('workspace state request was superseded') }),
         status: 'rejected',
       })
       expect(deleteResult).toEqual({ status: 'fulfilled', value: expect.any(Object) })
@@ -360,6 +502,39 @@ describe('PI CLI runtime coordination', () => {
     }
   })
 
+  it('does not publish a background snapshot captured before a draft load commits', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-pi-runtime-load-snapshot-'))
+    const workspace = path.join(tempRoot, 'workspace')
+    const sessionDir = path.join(tempRoot, 'sessions')
+    process.env.PI_CODING_AGENT_SESSION_DIR = sessionDir
+    await mkdir(workspace, { recursive: true })
+    const sessionID = createOfficialSession(workspace, sessionDir, 'Previous session')
+    const messagesEntered = deferred()
+    const allowMessages = deferred()
+    const events: AgentClientEventPayload[] = []
+    const manager = new PiCliAgentManager({
+      agentDir: path.join(tempRoot, 'agent-data'),
+      emitEvent: (event) => events.push(event),
+    })
+    try {
+      await manager.openSession(workspace, sessionID)
+      events.length = 0
+      rpcState.getMessagesGate = allowMessages.promise
+      rpcState.onGetMessages = () => messagesEntered.resolve()
+      processInstances(sessionID)[0]!.emit({ type: 'queue_update', followUp: ['background'], steering: [] })
+      await messagesEntered.promise
+      await expect(manager.loadWorkspaceState(workspace, null, { restoreSession: false }))
+        .resolves.toMatchObject({ activeSession: null })
+      allowMessages.resolve()
+      await manager.drainSessionEvents(workspace, sessionID)
+      expect(events.filter(event => event.type === 'workspace_state')).toEqual([])
+    } finally {
+      allowMessages.resolve()
+      await manager.dispose()
+      await rm(tempRoot, { force: true, recursive: true })
+    }
+  })
+
   it('suppresses an in-flight workspace snapshot after the workspace is released', async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'aryn-pi-runtime-workspace-revision-'))
     const workspace = path.join(tempRoot, 'workspace')
@@ -384,7 +559,12 @@ describe('PI CLI runtime coordination', () => {
       await messagesEntered.promise
       const release = manager.releaseWorkspaceRuntime(workspace)
       allowMessages.resolve()
-      await Promise.all([opening, release])
+      const [openResult, releaseResult] = await Promise.allSettled([opening, release])
+      expect(openResult).toMatchObject({
+        reason: expect.objectContaining({ message: expect.stringContaining('workspace state request was superseded') }),
+        status: 'rejected',
+      })
+      expect(releaseResult.status).toBe('fulfilled')
 
       expect(events.filter((event) => event.type === 'workspace_state')).toEqual([])
       expect(processInstances(sessionID)).toHaveLength(1)

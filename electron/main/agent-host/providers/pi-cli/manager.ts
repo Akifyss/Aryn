@@ -110,39 +110,44 @@ export class PiCliAgentManager {
       : [preferredSessionPath, this.workspaceIntent.active(activation.identity), records[0]?.id]
           .find((candidate): candidate is string => Boolean(candidate && records.some((record) => record.id === candidate)))
         ?? null
-    if (!this.setWorkspaceActivationTarget(activation, activeID)) {
-      throw new Error('PI CLI workspace activation was superseded.')
-    }
+    // Each retained tab needs its own prepared state. A newer tab may own
+    // foreground selection without cancelling this tab's initialization.
+    this.setWorkspaceActivationTarget(activation, activeID)
     if (!activeID) {
       const state = await this.buildWorkspaceState(
         cwd,
         null,
         undefined,
-        () => (
-          this.isWorkspaceOperationCurrent(workspaceOperation)
-          && this.isWorkspaceActivationCurrent(activation)
-        ),
+        () => this.isWorkspaceOperationCurrent(workspaceOperation),
       )
-      if (!this.commitWorkspaceActivation(activation, null)) {
-        throw new Error('PI CLI workspace activation was superseded.')
+      if (!this.isWorkspaceOperationCurrent(workspaceOperation)) {
+        throw new Error('PI CLI workspace operation was superseded.')
       }
+      if (this.commitWorkspaceActivation(activation, null)) this.invalidateWorkspaceState(activation.identity)
       return state
     }
-    return this.withRuntime(cwd, activeID, async (runtime) => {
+    let sourceLease!: SessionRuntimeLease
+    const state = await this.withRuntime(cwd, activeID, async (runtime) => {
+      sourceLease = runtime.lease
       const state = await this.buildWorkspaceState(
         cwd,
         activeID,
         runtime,
         () => (
           this.isWorkspaceOperationCurrent(workspaceOperation)
-          && this.isWorkspaceActivationCurrent(activation)
+          && runtime.lease.isCurrent()
         ),
       )
-      if (!this.commitWorkspaceActivation(activation, activeID)) {
-        throw new Error('PI CLI workspace activation was superseded.')
+      if (!this.isWorkspaceOperationCurrent(workspaceOperation) || !runtime.lease.isCurrent()) {
+        throw new Error('PI CLI workspace state request was superseded.')
       }
+      if (this.commitWorkspaceActivation(activation, activeID)) this.invalidateWorkspaceState(activation.identity)
       return state
     })
+    if (!this.isWorkspaceOperationCurrent(workspaceOperation) || !sourceLease.isCurrent()) {
+      throw new Error('PI CLI workspace state request was superseded.')
+    }
+    return state
   }
 
   async listSessionItems(cwd: string) {
@@ -200,14 +205,22 @@ export class PiCliAgentManager {
       if (!this.isWorkspaceOperationCurrent(workspaceOperation)) {
         throw new Error('PI CLI workspace operation was superseded.')
       }
+      let sourceLease!: SessionRuntimeLease
       const state = await this.withRuntime(cwd, record.id, async (runtime) => {
+        sourceLease = runtime.lease
         if (record.name) await runtime.process.request({ type: 'set_session_name', name: record.name })
         if (record.modelKey) await this.setRuntimeModel(runtime, record.modelKey)
         await runtime.process.request({ type: 'set_thinking_level', level: record.thinkingLevel })
+        const state = await this.buildWorkspaceState(cwd, record.id, runtime, () => (
+          this.isWorkspaceOperationCurrent(workspaceOperation) && runtime.lease.isCurrent()
+        ))
+        if (!this.isWorkspaceOperationCurrent(workspaceOperation) || !runtime.lease.isCurrent()) {
+          throw new Error('PI CLI workspace state request was superseded.')
+        }
         this.commitWorkspaceActivation(activation, record.id)
-        return this.buildWorkspaceState(cwd, record.id, runtime)
+        return state
       }, { allowCreate: true })
-      return await this.broadcastWorkspaceState(cwd, record.id, { activation, state, workspaceOperation })
+      return await this.broadcastWorkspaceState(cwd, record.id, { activation, sourceLease, state, workspaceOperation })
     } catch (error) {
       this.rollbackWorkspaceActivation(activation, record.id)
       await this.runtimeCoordinator.retire(runtimeKey(cwd, record.id)).catch(() => undefined)
@@ -219,13 +232,19 @@ export class PiCliAgentManager {
   async openSession(cwd: string, sessionID: string) {
     const workspaceOperation = this.captureWorkspaceOperation(cwd)
     const activation = this.beginWorkspaceActivation(cwd, sessionID)
-    const state = await this.withRuntime(cwd, sessionID, (runtime) => {
-      if (!this.commitWorkspaceActivation(activation, sessionID)) {
-        throw new Error('PI CLI workspace activation was superseded.')
+    let sourceLease!: SessionRuntimeLease
+    const state = await this.withRuntime(cwd, sessionID, async (runtime) => {
+      sourceLease = runtime.lease
+      const state = await this.buildWorkspaceState(cwd, sessionID, runtime, () => (
+        this.isWorkspaceOperationCurrent(workspaceOperation) && runtime.lease.isCurrent()
+      ))
+      if (!this.isWorkspaceOperationCurrent(workspaceOperation) || !runtime.lease.isCurrent()) {
+        throw new Error('PI CLI workspace state request was superseded.')
       }
-      return this.buildWorkspaceState(cwd, sessionID, runtime)
+      this.commitWorkspaceActivation(activation, sessionID)
+      return state
     })
-    return this.broadcastWorkspaceState(cwd, sessionID, { activation, state, workspaceOperation })
+    return this.broadcastWorkspaceState(cwd, sessionID, { activation, sourceLease, state, workspaceOperation })
   }
 
   async deleteSession(cwd: string, sessionID: string) {
@@ -587,10 +606,10 @@ export class PiCliAgentManager {
     context: WorkspaceStateContext = {},
   ) {
     const identity = workspaceIdentity(cwd)
-    if (!this.isWorkspaceStateContextCurrent(context)) {
-      if (context.state) return context.state
+    if (!this.isWorkspaceStateBuildContextCurrent(context)) {
       throw new Error('PI CLI workspace state request was superseded.')
     }
+    if (context.state && !this.isWorkspaceStateContextCurrent(context)) return context.state
     const activeSessionID = context.sourceLease
       ? this.workspaceIntent.active(identity)
       : requestedActiveSessionID
@@ -600,8 +619,11 @@ export class PiCliAgentManager {
       cwd,
       activeSessionID,
       context.providedRuntime,
-      () => this.isWorkspaceStateContextCurrent(context),
+      () => this.isWorkspaceStateBuildContextCurrent(context),
     )
+    if (!this.isWorkspaceStateBuildContextCurrent(context)) {
+      throw new Error('PI CLI workspace state request was superseded.')
+    }
     if (
       this.workspaceStateRevisions.get(identity) === revision
       && this.isWorkspaceStateContextCurrent(context)
@@ -616,8 +638,12 @@ export class PiCliAgentManager {
   }
 
   private isWorkspaceStateContextCurrent(context: WorkspaceStateContext) {
+    return (!context.activation || this.isWorkspaceActivationCurrent(context.activation))
+      && this.isWorkspaceStateBuildContextCurrent(context)
+  }
+
+  private isWorkspaceStateBuildContextCurrent(context: WorkspaceStateContext) {
     return (!context.sourceLease || context.sourceLease.isCurrent())
-      && (!context.activation || this.isWorkspaceActivationCurrent(context.activation))
       && (!context.workspaceOperation || this.isWorkspaceOperationCurrent(context.workspaceOperation))
   }
 
