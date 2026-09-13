@@ -8,6 +8,7 @@ export type PersistedWorkbenchTab = { id: string } & (
   | { kind: 'file'; path: string; workspacePath: string | null; viewMode: WorkspaceFileViewMode; gitDiff?: PersistedWorkbenchFileDiff }
   | { kind: 'diff'; path: string; workspacePath: string; scope: GitChangeScope; commitHash: string | null }
   | { kind: 'panel'; panel: 'files' | 'git' | 'conversations' }
+  | { kind: 'terminal'; projectId: string; title: string }
   | { kind: 'conversation'; conversationId: string | null; projectId: string | null;
       session: { agentId: AgentId; path: string; label: string } | null }
 )
@@ -49,6 +50,9 @@ function normalizeTab(value: unknown): PersistedWorkbenchTab | null {
   const tab = record(value)
   const id = text(tab.id)
   if (!id) return null
+  if (tab.kind === 'terminal' && id.startsWith('terminal://') && id.length <= 256 && text(tab.projectId)) {
+    return { id, kind: 'terminal', projectId: text(tab.projectId)!, title: (text(tab.title) ?? '终端').slice(0, 80) }
+  }
   if (tab.kind === 'panel' && (tab.panel === 'files' || tab.panel === 'git' || tab.panel === 'conversations')) {
     return { id, kind: 'panel', panel: tab.panel }
   }
@@ -83,12 +87,17 @@ export function normalizeWorkbenchLayout(value: unknown): PersistedWorkbenchLayo
   const panes = record(state.panes)
   if (state.version !== 1 || !panes.left || !panes.right) return undefined
   const conversations = new Set<string>()
+  const terminals = new Set<string>()
   const normalizePane = (value: unknown): PersistedWorkbenchPane => {
     const pane = record(value)
     const ids = new Set<string>()
     const tabs = (Array.isArray(pane.tabs) ? pane.tabs : []).flatMap((value) => {
       const tab = normalizeTab(value)
       if (!tab || ids.has(tab.id)) return []
+      if (tab.kind === 'terminal') {
+        if (terminals.has(tab.id)) return []
+        terminals.add(tab.id)
+      }
       const identity = tab.kind === 'conversation' ? tab.conversationId
         ? `conversation:${tab.conversationId}` : tab.projectId && tab.session
         ? `project:${tab.projectId}:${tab.session.agentId}:${tab.session.path}` : null : null

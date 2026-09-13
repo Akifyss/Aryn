@@ -10,6 +10,7 @@ import { createWorkbenchPane, createWorkbenchPanel, WORKBENCH_PANE_IDS, getWorkb
 export function createWorkbenchLayoutSnapshot(state: Pick<WorkbenchState, 'panes' | 'ratio' | 'focusedPane'>, documents: WorkspaceTab[], workspacePath: string | null): PersistedWorkbenchLayout {
   const byId = new Map(documents.map((tab) => [tab.id, tab]))
   const serialize = (tab: WorkbenchTab): PersistedWorkbenchTab | null => {
+    if (tab.kind === 'terminal') return { id: tab.id, kind: 'terminal', projectId: tab.projectId, title: tab.title }
     if (tab.kind === 'panel') return { id: tab.id, kind: 'panel', panel: tab.panel }
     if (tab.kind === 'conversation') {
       const request = tab.projectSession?.request
@@ -40,6 +41,7 @@ export async function loadWorkbenchLayout(snapshot: PersistedWorkbenchLayout, ap
   const loads = new Map<string, Promise<WorkbenchTab | null>>()
   const panelIds = new Set<string>()
   const loadTab = (tab: PersistedWorkbenchTab): Promise<WorkbenchTab | null> => {
+    if (tab.kind === 'terminal') return Promise.resolve(projects.some(project => project.id === tab.projectId) ? { ...tab } : null)
     if (tab.kind === 'panel') {
       if (tab.panel === 'conversations') return Promise.resolve(null)
       // Old layouts could use one fixed ID in both panes. Preserve both views,

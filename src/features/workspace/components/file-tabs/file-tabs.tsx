@@ -2,7 +2,7 @@ import { forwardRef, type AnimationEvent as ReactAnimationEvent, type DragEvent 
 import { createPortal } from 'react-dom'
 import { ScrollArea } from '@base-ui/react/scroll-area'
 import { Tabs } from '@base-ui/react/tabs'
-import { ArrowLeftLine, ArrowRightLine, Chat3Line, CloseLine, FolderLine, GitBranchLine, GitCompareLine, Home3Line } from '@mingcute/react'
+import { ArrowLeftLine, ArrowRightLine, Chat3Line, CloseLine, FolderLine, GitBranchLine, GitCompareLine, Home3Line, TerminalBoxLine } from '@mingcute/react'
 import { WorkspaceFileIcon } from '@/components/file-change-visuals'
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppTooltip } from '@/components/app-tooltip'
@@ -116,7 +116,7 @@ function getTabLabel(tab: WorkspaceDisplayTab) {
     return tab.fixedTabKind === 'file-panel' ? '文件' : '更改'
   }
 
-  return tab.kind === 'diff' || tab.kind === 'conversation' || tab.kind === 'fallback'
+  return tab.kind === 'diff' || tab.kind === 'conversation' || tab.kind === 'fallback' || tab.kind === 'terminal'
     ? tab.title
     : getBaseName(tab.filePath)
 }
@@ -130,7 +130,7 @@ function getFileIconName(tab: WorkspaceDisplayTab) {
 }
 
 function getTabMetaLabel(workspacePath: string | null, tab: WorkspaceDisplayTab, hasDuplicateName: boolean) {
-  if (tab.kind === 'fixed-panel' || tab.kind === 'conversation' || tab.kind === 'fallback') {
+  if (tab.kind === 'fixed-panel' || tab.kind === 'conversation' || tab.kind === 'fallback' || tab.kind === 'terminal') {
     return null
   }
 
@@ -1416,6 +1416,8 @@ export function FileTabs({
                       >
                         {tab.kind === 'fallback' ? (
                           <Home3Line aria-hidden='true' className='file-tab-leading-icon' />
+                        ) : tab.kind === 'terminal' ? (
+                          <TerminalBoxLine aria-hidden='true' className='file-tab-leading-icon' />
                         ) : tab.kind === 'conversation' || (tab.kind === 'fixed-panel' && tab.fixedTabKind === 'conversation-panel') ? (
                           <Chat3Line aria-hidden='true' className='file-tab-leading-icon' />
                         ) : tab.kind === 'fixed-panel' ? (

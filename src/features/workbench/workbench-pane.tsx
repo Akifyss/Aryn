@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { toast } from '@heroui/react'
 import type { EditorViewHandle, EditorViewState } from '@/features/editor/lib/editor-view-handle'
 import type { MeoEditorHostHandle } from '@/features/editor/components/meo-editor-host/meo-editor-host'
 import { WorkspaceEditorWorkbench } from '@/features/workspace/components/workspace-workbench/workspace-editor-workbench'
@@ -22,6 +23,7 @@ export type WorkbenchPaneCommands = {
   focus: () => void
   conversationHost: React.RefObject<HTMLDivElement | null>
   panelHost: React.RefObject<HTMLDivElement | null>
+  terminalHost: React.RefObject<HTMLDivElement | null>
   registerConversation: (id: string, handle: WorkbenchConversationHandle | null) => void
   capture: () => void
   close: () => Promise<void>
@@ -79,6 +81,7 @@ export function WorkbenchPane({ pane, configuration, commands }: {
   useLayoutEffect(applyPendingView)
   const conversationHost = useRef<HTMLDivElement>(null)
   const panelHost = useRef<HTMLDivElement>(null)
+  const terminalHost = useRef<HTMLDivElement>(null)
   const conversationHandles = useRef(new Map<string, WorkbenchConversationHandle>())
   const navigationTab = paneState.directoryTab
   const setNavigationTab = (tab: WorkspaceSidebarTabWithConversations) => useWorkbenchStore.getState().setDirectoryTab(pane, tab)
@@ -113,6 +116,8 @@ export function WorkbenchPane({ pane, configuration, commands }: {
         id: tab.id, filePath: tab.id, closable: true,
         fixedTabKind: tab.panel === 'git' ? 'git-panel' : 'file-panel',
       })
+    } else if (tab.kind === 'terminal') {
+      tabs.push({ id: tab.id, kind: 'terminal', title: tab.title, filePath: tab.id, exists: true, isDirty: false })
     } else {
       const projectRequest = tab.projectSession?.request
       const title = projectRequest?.kind === 'session' ? projectRequest.sessionLabel
@@ -156,6 +161,18 @@ export function WorkbenchPane({ pane, configuration, commands }: {
     if (!tab) return
     const conversation = conversationHandles.current.get(id)
     if (tab.kind === 'conversation' && conversation && !await conversation.canClose()) return
+    if (tab.kind === 'terminal') {
+      try {
+        if (!window.appApi?.terminal || await window.appApi.terminal.close(id)) {
+          // The process close has committed. Follow this terminal across a pane
+          // move/project switch instead of leaving a dead tab in its new owner.
+          useWorkbenchStore.getState().removeTerminal(tab.projectId, id)
+        }
+      } catch (error) {
+        toast.danger('关闭终端失败', { description: error instanceof Error ? error.message : String(error) })
+      }
+      return
+    }
     if (!isCurrent()) return
     if (!useWorkbenchStore.getState().panes[pane].tabs.some((item) => item.id === id)) return
     editorRef.current?.captureViewPosition()
@@ -190,6 +207,7 @@ export function WorkbenchPane({ pane, configuration, commands }: {
     focus,
     conversationHost,
     panelHost,
+    terminalHost,
     registerConversation: (id, handle) => {
       if (handle) conversationHandles.current.set(id, handle)
       else conversationHandles.current.delete(id)
@@ -275,6 +293,7 @@ export function WorkbenchPane({ pane, configuration, commands }: {
         auxiliaryContent={<>
           {isEmpty ? <WorkbenchStartPage pane={pane} configuration={configuration.conversations} /> : null}
           <div ref={conversationHost} className='workbench-conversation-host' />
+          <div ref={terminalHost} className='workbench-terminal-host' />
         </>}
       />
     </section>

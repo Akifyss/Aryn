@@ -1,4 +1,5 @@
 import { ipcRenderer, contextBridge, webUtils } from 'electron'
+import type { TerminalApi, TerminalEvent } from '../shared/contracts/terminal'
 import type { AgentClientEvent, AgentInteractionResponse, AgentInteractionTimelineRecord, AgentPromptAttachment, AgentPromptSendOptions, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRequestScope, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState, OpenCodeSurfaceRequest, OpenCodeSurfaceResponse } from '../shared/agent-contracts/types'
 import type { AgentAvailability } from '../shared/agent-contracts/definition'
 import type { ActiveWorkspaceContext, ConversationRecord, ConversationState, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '../shared/contracts/conversations'
@@ -48,6 +49,19 @@ function subscribeWindowLifecycle(channel: WindowLifecycleChannel, listener: () 
 }
 
 contextBridge.exposeInMainWorld('appApi', {
+  terminal: {
+    open: request => ipcRenderer.invoke('terminal:open', request),
+    write: request => ipcRenderer.invoke('terminal:write', request),
+    resize: request => ipcRenderer.invoke('terminal:resize', request),
+    acknowledge: request => ipcRenderer.send('terminal:acknowledge', request),
+    detach: request => ipcRenderer.send('terminal:detach', request),
+    close: (id, action) => ipcRenderer.invoke('terminal:close', id, action),
+    onEvent: listener => {
+      const receive = (_event: Electron.IpcRendererEvent, event: TerminalEvent) => listener(event)
+      ipcRenderer.on('terminal:event', receive)
+      return () => ipcRenderer.off('terminal:event', receive)
+    },
+  } satisfies TerminalApi,
   platform: process.platform,
   getAgentCatalog: (options?: { force?: boolean }) => (
     ipcRenderer.invoke('agent:get-catalog', options) as Promise<AgentAvailability[]>

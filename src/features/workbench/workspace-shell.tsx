@@ -7,6 +7,7 @@ import { AppChromeSearchButton } from '@/features/layout/components/app-chrome-c
 import { WorkbenchPane, type WorkbenchPaneCommands, type WorkbenchPaneConfiguration } from './workbench-pane'
 import { WorkbenchConversationLayer } from './workbench-conversation-layer'
 import { WorkbenchPanelLayer } from './workbench-panel-layer'
+import { WorkbenchTerminalLayer } from './workbench-terminal-layer'
 import { clampWorkbenchRatio, useWorkbenchStore } from './workbench-state'
 import { startWorkbenchProjectConversation } from './workbench-open-actions'
 import type { ProjectRecord } from '@/features/workspace/types'
@@ -124,6 +125,7 @@ export function WorkspaceShell({ configuration, chromeVars, platform, isFullScre
         />
         <WorkbenchPane pane='right' configuration={presentation.configuration} commands={commands} />
         <WorkbenchPanelLayer configuration={presentation.configuration} commands={commands} />
+        <WorkbenchTerminalLayer commands={commands} />
         <WorkbenchConversationLayer configuration={presentation.configuration} commands={commands} />
       </main>
       <AppTitlebar onRequestClose={onRequestClose} leftControls={(

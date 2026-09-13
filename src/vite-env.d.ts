@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import type { TerminalApi } from '../electron/shared/contracts/terminal'
 
 import type { AgentClientEvent, AgentInteractionResponse, AgentInteractionTimelineRecord, AgentPromptAttachment, AgentPromptSendOptions, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRequestScope, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState, OpenCodeSurfaceRequest, OpenCodeSurfaceResponse } from '@/features/agent/types'
 import type { AgentAvailability } from '@/features/agent/agent-definition'
@@ -39,6 +40,7 @@ import type {
 declare global {
   interface Window {
     appApi: {
+      terminal: TerminalApi
       platform: NodeJS.Platform
       getAgentCatalog: (options?: { force?: boolean }) => Promise<AgentAvailability[]>
       pickWorkspace: () => Promise<string | null>

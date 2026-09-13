@@ -7,6 +7,7 @@ import { normalizeFilePath } from '@/features/workspace/lib/workspace-paths'
 export function migrateWorkbenchProjectLayouts(legacy: PersistedWorkbenchLayout | undefined, projects: ProjectRecord[], selected: ProjectRecord | null) {
   if (!legacy || !selected) return {}
   const owner = (tab: PersistedWorkbenchTab) => {
+    if (tab.kind === 'terminal') return tab.projectId
     if (tab.kind === 'conversation') return tab.conversationId ? null : tab.projectId ?? selected.id
     if (tab.kind === 'panel') return null
     const root = tab.workspacePath ? normalizeFilePath(tab.workspacePath) : null
@@ -29,7 +30,7 @@ export function migrateWorkbenchProjectLayouts(legacy: PersistedWorkbenchLayout 
 
 export function scopeWorkbenchLayout(layout: PersistedWorkbenchLayout, project: ProjectRecord): PersistedWorkbenchLayout {
   const pane = (side: 'left' | 'right') => ({ ...layout.panes[side], tabs: layout.panes[side].tabs.filter((tab) =>
-    tab.kind === 'conversation' ? !tab.conversationId && (!tab.projectId || tab.projectId === project.id)
+    tab.kind === 'terminal' ? tab.projectId === project.id : tab.kind === 'conversation' ? !tab.conversationId && (!tab.projectId || tab.projectId === project.id)
       : tab.kind !== 'panel' || tab.panel !== 'conversations')
     .map((tab) => tab.kind === 'conversation' ? { ...tab, projectId: project.id } : tab) })
   return normalizeWorkbenchLayout({ ...layout, panes: { left: pane('left'), right: pane('right') } })!

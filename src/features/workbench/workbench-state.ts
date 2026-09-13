@@ -15,6 +15,7 @@ export type WorkbenchPanelType = 'files' | 'git'
 
 export type WorkbenchTab = { id: string } & (
   | { kind: 'document' }
+  | { kind: 'terminal'; projectId: string; title: string }
   | { kind: 'panel'; panel: WorkbenchPanelType | 'conversations' }
   | { kind: 'conversation'; conversationId: string | null; projectSession?: { project: ProjectRecord; request: AgentProjectSessionRequest } }
 )
@@ -79,7 +80,7 @@ function mapWorkbenchPanes(state: WorkbenchState, update: (pane: WorkbenchPaneSt
 }
 
 export function getWorkbenchProjectTabs(tabs: WorkbenchTab[], project?: ProjectRecord | null) {
-  return tabs.filter((tab) => tab.kind === 'conversation'
+  return tabs.filter((tab) => tab.kind === 'terminal' ? tab.projectId === project?.id : tab.kind === 'conversation'
     ? Boolean(project && tab.projectSession?.project.id === project.id)
     : tab.kind !== 'panel' || tab.panel !== 'conversations')
 }
@@ -125,6 +126,7 @@ export type WorkbenchState = {
   open: (pane: WorkbenchPaneId, tab: WorkbenchTab, focus?: boolean) => void
   moveTab: (from: WorkbenchPaneId, id: string) => void
   close: (pane: WorkbenchPaneId, id: string) => void
+  removeTerminal: (projectId: string, id: string) => void
   reorder: (pane: WorkbenchPaneId, moving: string, target: string, position: TabDropPosition) => void
   toggleDirectory: (pane: WorkbenchPaneId) => void
   setDirectoryTab: (pane: WorkbenchPaneId, tab: WorkbenchDirectoryTab) => void
@@ -198,11 +200,12 @@ export const useWorkbenchStore = create<WorkbenchState>((set) => ({
   }),
   open: (pane, tab, focus = true) => set((state) => {
     if (state.restoring) return state
+    if (tab.kind === 'terminal' && tab.projectId !== state.project?.id) return state
     // Reopening an existing panel instance or conversation focuses its owner.
     // New panel actions allocate another ID, even for the same content type.
     const owner = tab.kind !== 'document'
       ? WORKBENCH_PANE_IDS.find((id) => state.panes[id].tabs.some((item) =>
-        tab.kind === 'panel' ? item.kind === 'panel' && item.id === tab.id : isSameConversation(item, tab)))
+        tab.kind === 'conversation' ? isSameConversation(item, tab) : item.kind === tab.kind && item.id === tab.id))
       : undefined
     const target = owner ?? pane
     const existing = state.panes[target].tabs.find((item) => item.id === tab.id || isSameConversation(item, tab))
@@ -242,6 +245,9 @@ export const useWorkbenchStore = create<WorkbenchState>((set) => ({
     }
   }),
   close: (pane, id) => set((state) => ({ panes: { ...state.panes, [pane]: removeWorkbenchTab(state.panes[pane], id) } })),
+  removeTerminal: (projectId, id) => set((state) => mapWorkbenchPanes(state, (pane) =>
+    pane.tabs.some(tab => tab.kind === 'terminal' && tab.projectId === projectId && tab.id === id)
+      ? removeWorkbenchTab(pane, id) : pane)),
   reorder: (pane, moving, target, position) => set((state) => ({
     panes: { ...state.panes, [pane]: { ...state.panes[pane], tabs: reorderWorkspaceTabs(state.panes[pane].tabs, moving, target, position) } },
   })),

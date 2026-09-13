@@ -44,6 +44,7 @@ import {
 } from './workspace'
 import { createAgentHost } from './composition/create-agent-host'
 import { registerAgentIpc } from './agent-ipc/register-agent-ipc'
+import { registerTerminalIpc } from './terminal/register-terminal-ipc'
 import {
   AppStateStore,
   getWorkspaceEntry,
@@ -423,6 +424,10 @@ const agentManager = createAgentHost({
 const agentIpc = registerAgentIpc({
   agentHost: agentManager,
   getWindow: () => win,
+})
+const terminalManager = registerTerminalIpc({
+  getWindow: () => win,
+  projectPath: async id => (await appStateStore.read()).workspace.projects.find(project => project.id === id)?.path ?? null,
 })
 let agentHostDisposed = false
 let agentHostDisposal: Promise<void> | null = null
@@ -1152,6 +1157,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', (event) => {
+  terminalManager.dispose()
   agentIpc.dispose()
   if (agentHostDisposed) return
   event.preventDefault()
@@ -1404,6 +1410,7 @@ ipcMain.handle('project:remove', async (_event, projectId: string) => {
         },
       }
     })
+    terminalManager.closeProject(normalizedProjectId)
   }
 
   return getVisibleProjectState()

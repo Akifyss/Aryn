@@ -26,6 +26,8 @@ const keepOpen = process.env.ARYN_ELECTRON_DEBUG_KEEP_OPEN === '1'
 const keepOpenMs = readNumberEnv('ARYN_ELECTRON_DEBUG_KEEP_OPEN_MS', 10 * 60_000)
 const viewMode = readViewMode(process.env.ARYN_ELECTRON_DEBUG_VIEW_MODE)
 const debugScenario = readDebugScenario(process.env.ARYN_ELECTRON_DEBUG_SCENARIO)
+const debugExecutable = process.env.ARYN_ELECTRON_DEBUG_EXECUTABLE
+  ? path.resolve(process.env.ARYN_ELECTRON_DEBUG_EXECUTABLE) : undefined
 
 function readNumberEnv(name, fallback) {
   const value = Number.parseInt(process.env[name] ?? '', 10)
@@ -37,7 +39,7 @@ function readViewMode(value) {
 }
 
 function readDebugScenario(value) {
-  return ['agent-attachments', 'agent-mention-menu', 'bb-unified-surface'].includes(value ?? '') ? value : null
+  return ['agent-attachments', 'agent-mention-menu', 'bb-unified-surface', 'terminal'].includes(value ?? '') ? value : null
 }
 
 function compactText(value, maxLength = 1200) {
@@ -343,7 +345,11 @@ async function restoreWorkspace(page, fixture) {
 
   await page.reload({ waitUntil: 'domcontentloaded', timeout: timeoutMs })
   await waitForAppShell(page)
-  if (debugScenario === 'agent-attachments' || debugScenario === 'agent-mention-menu' || debugScenario === 'bb-unified-surface') {
+  if (debugScenario === 'terminal') {
+    // The terminal scenario starts from the current project Workbench, which
+    // need not have a document open in either pane.
+    await page.getByRole('button', { name: '右侧新建标签页', exact: true }).waitFor()
+  } else if (debugScenario === 'agent-attachments' || debugScenario === 'agent-mention-menu' || debugScenario === 'bb-unified-surface') {
     await page.waitForSelector('.agent-composer-editor', { timeout: timeoutMs })
   } else {
     await page.waitForFunction(() => {
@@ -2237,7 +2243,8 @@ async function main() {
   try {
     log('launching electron app root', { rootDir })
     app = await electron.launch({
-      args: [`--user-data-dir=${userDataRoot}`, rootDir],
+      ...(debugExecutable ? { executablePath: debugExecutable } : {}),
+      args: [`--user-data-dir=${userDataRoot}`, ...(debugExecutable ? [] : [rootDir])],
       env: {
         ...process.env,
         APPDATA: appDataRoot,
@@ -2259,7 +2266,9 @@ async function main() {
     report.snapshot.beforeRestore = await snapshotPage(page)
     await restoreWorkspace(page, fixture)
     report.snapshot.afterRestore = await snapshotPage(page)
-    report.snapshot.afterScenario = await applyDebugScenario(page)
+    report.snapshot.afterScenario = debugScenario === 'terminal'
+      ? await (await import('./electron-terminal-scenario.mjs')).runTerminalScenario({ app, page, artifactRoot })
+      : await applyDebugScenario(page)
     assertDebugScenarioResult(report.snapshot.afterScenario)
     if (debugScenario && (report.renderer.crashed || report.renderer.pageErrors.length > 0)) {
       throw new Error(`Renderer failed during "${debugScenario}": ${JSON.stringify({

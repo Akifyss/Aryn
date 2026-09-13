@@ -90,7 +90,8 @@ export type WorkspaceFallbackTab = {
   isDirty: false
 }
 
-export type WorkspaceDisplayTab = WorkspaceTab | WorkspaceFixedPanelTab | WorkspaceConversationTab | WorkspaceFallbackTab
+export type WorkspaceTerminalTab = Omit<WorkspaceFallbackTab, 'kind'> & { kind: 'terminal' }
+export type WorkspaceDisplayTab = WorkspaceTab | WorkspaceFixedPanelTab | WorkspaceConversationTab | WorkspaceFallbackTab | WorkspaceTerminalTab
 export type TabDropPosition = 'before' | 'after'
 
 type WorkspaceState = {
