@@ -163,6 +163,9 @@
 .workbench-panel-host { display: contents; }
 .workbench-panel-view, .workbench-panel-content { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .workbench-panel-view[hidden] { display: none; }
+.workbench-panel-content .git-panel-header {
+  margin-block-start: var(--editor-fixed-panel-block-start-gap);
+}
 .workbench-conversation-list { flex-direction: column; }
 .workbench-conversation-list-new.app-button {
   align-self: stretch;
