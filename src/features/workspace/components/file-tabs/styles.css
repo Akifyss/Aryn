@@ -131,7 +131,7 @@
 .file-tab {
   --file-tab-actions-surface: var(--file-tabs-rail-surface);
   --file-tab-actions-fade-width: 16px;
-  --file-tab-max-width: min(288px, 42vw);
+  --file-tab-max-width: min(200px, 42vw);
   --file-tab-available-width: max(0px, calc(var(--file-tabs-available-width, 100vw) - var(--file-tab-shoulder-size)));
 
   position: relative;
@@ -480,7 +480,7 @@
 
 @media (max-width: 1120px) {
   .file-tab {
-    --file-tab-max-width: min(224px, 52vw);
+    --file-tab-max-width: min(160px, 52vw);
   }
 
   .file-tab-meta {

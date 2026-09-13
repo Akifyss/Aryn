@@ -188,7 +188,7 @@ it('keeps tabs and actions reachable across overflow, resizing and list changes'
       const rect = node.getBoundingClientRect(); return document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2) === node.querySelector('svg')
         || node.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))
     })).toBe(true)
-    expect((await geometry('long')).width).toBeLessThanOrEqual(224)
+    expect((await geometry('long')).width).toBeLessThanOrEqual(160)
     await checkActiveBoundary('long')
     await page.screenshot({ path: path.join(os.tmpdir(), 'aryn-inline-tab-actions-narrow.png') })
     await tab('long').locator('.file-tab-move').click()
@@ -348,11 +348,11 @@ it('keeps tabs and actions reachable across overflow, resizing and list changes'
     // must not become a permanent maximum for subsequent window sizes.
     await page.evaluate(() => (window as any).onlyLong())
     await page.setViewportSize({width:1000,height:260})
-    await expect.poll(async () => (await geometry('long')).width).toBe(224)
+    await expect.poll(async () => (await geometry('long')).width).toBe(160)
     await page.setViewportSize({width:220,height:260})
-    await expect.poll(async () => (await geometry('long')).width).toBeLessThan(220)
+    await expect.poll(async () => (await geometry('long')).width).toBeLessThan(160)
     await page.setViewportSize({width:1000,height:260})
-    await expect.poll(async () => (await geometry('long')).width).toBe(224)
+    await expect.poll(async () => (await geometry('long')).width).toBe(160)
     expect(errors).toEqual([])
   } finally { await browser.close() }
 })
