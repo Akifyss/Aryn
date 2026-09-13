@@ -5,12 +5,12 @@ import { normalizeWorkspaceFileViewMode } from '@/features/workspace/lib/file-ty
 import { toStoredWorkspaceTab } from '@/features/workspace/lib/workspace-tab-persistence'
 import { createDiffTab } from '@/features/workspace/lib/workspace-tabs'
 import { useWorkspaceStore, type WorkspaceTab } from '@/features/workspace/store/use-workspace-store'
-import { createWorkbenchPane, WORKBENCH_PANE_IDS, getWorkbenchProjectLayouts, useWorkbenchStore, type WorkbenchState, type WorkbenchTab } from './workbench-state'
+import { createWorkbenchPane, createWorkbenchPanel, WORKBENCH_PANE_IDS, getWorkbenchProjectLayouts, useWorkbenchStore, type WorkbenchState, type WorkbenchTab } from './workbench-state'
 
 export function createWorkbenchLayoutSnapshot(state: Pick<WorkbenchState, 'panes' | 'ratio' | 'focusedPane'>, documents: WorkspaceTab[], workspacePath: string | null): PersistedWorkbenchLayout {
   const byId = new Map(documents.map((tab) => [tab.id, tab]))
   const serialize = (tab: WorkbenchTab): PersistedWorkbenchTab | null => {
-    if (tab.kind === 'panel') return { id: tab.id, kind: 'panel', panel: tab.id === 'app://fixed/git' ? 'git' : tab.id === 'app://fixed/files' ? 'files' : 'conversations' }
+    if (tab.kind === 'panel') return { id: tab.id, kind: 'panel', panel: tab.panel }
     if (tab.kind === 'conversation') {
       const request = tab.projectSession?.request
       return { id: tab.id, kind: 'conversation', conversationId: tab.conversationId,
@@ -38,10 +38,16 @@ type RestoreApi = Pick<Window['appApi'], 'resolveWorkspaceEditorKind' | 'readWor
 export async function loadWorkbenchLayout(snapshot: PersistedWorkbenchLayout, api: RestoreApi, projects: ProjectRecord[], conversations: ConversationRecord[]) {
   const documents = new Map<string, WorkspaceTab>()
   const loads = new Map<string, Promise<WorkbenchTab | null>>()
+  const panelIds = new Set<string>()
   const loadTab = (tab: PersistedWorkbenchTab): Promise<WorkbenchTab | null> => {
-    // Equal panel resource IDs still own independent live views in each pane.
-    // Only file/session loading may share a result across pane references.
-    if (tab.kind === 'panel') return Promise.resolve({ kind: 'panel', id: `app://fixed/${tab.panel}` })
+    if (tab.kind === 'panel') {
+      if (tab.panel === 'conversations') return Promise.resolve(null)
+      // Old layouts could use one fixed ID in both panes. Preserve both views,
+      // assigning the second a unique identity that subsequent saves retain.
+      const panel = panelIds.has(tab.id) ? createWorkbenchPanel(tab.panel) : { ...tab }
+      panelIds.add(panel.id)
+      return Promise.resolve(panel)
+    }
     const key = JSON.stringify(tab)
     if (loads.has(key)) return loads.get(key)!
     const pending = (async (): Promise<WorkbenchTab | null> => {

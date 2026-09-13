@@ -61,9 +61,9 @@ export type WorkspaceFixedPanelTab = {
   content: ''
   editorKind: 'prose'
   exists: true
-  filePath: 'app://fixed/files' | 'app://fixed/git' | 'app://fixed/conversations'
+  filePath: string
   fixedTabKind: 'file-panel' | 'git-panel' | 'conversation-panel'
-  id: 'app://fixed/files' | 'app://fixed/git' | 'app://fixed/conversations'
+  id: string
   isDirty: false
   kind: 'fixed-panel'
   savedContent: ''

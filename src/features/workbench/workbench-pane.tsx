@@ -12,7 +12,7 @@ import type { WorkspaceEditorConfiguration } from '@/features/workspace/componen
 import type { WorkbenchConversationConfiguration } from './workbench-conversations'
 import type { WorkbenchConversationHandle } from './workbench-conversation-layer'
 import { WorkbenchConversationList } from './workbench-conversation-list'
-import { WORKBENCH_CONVERSATIONS_ID, WORKBENCH_GIT_ID, getWorkbenchProjectTabs, hasOtherWorkbenchDocumentOwner, useWorkbenchStore, type WorkbenchPaneId } from './workbench-state'
+import { getWorkbenchProjectTabs, hasOtherWorkbenchDocumentOwner, useWorkbenchStore, type WorkbenchPaneId } from './workbench-state'
 import { WorkbenchNewTabMenu } from './workbench-new-tab-menu'
 import { WORKBENCH_START_TAB, WorkbenchStartPage } from './workbench-start-page'
 import { cancelWorkbenchDocumentNavigation, createWorkbenchDocumentNavigation, type WorkbenchDocumentNavigation } from './workbench-document-navigation'
@@ -109,9 +109,9 @@ export function WorkbenchPane({ pane, configuration, commands }: {
       if (document) tabs.push(document)
     } else if (tab.kind === 'panel') {
       tabs.push({
-        ...getFixedPanelTab(tab.id === WORKBENCH_GIT_ID ? 'git' : 'file'),
+        ...getFixedPanelTab(tab.panel === 'git' ? 'git' : 'file'),
         id: tab.id, filePath: tab.id, closable: true,
-        fixedTabKind: tab.id === WORKBENCH_CONVERSATIONS_ID ? 'conversation-panel' : tab.id === WORKBENCH_GIT_ID ? 'git-panel' : 'file-panel',
+        fixedTabKind: tab.panel === 'git' ? 'git-panel' : 'file-panel',
       })
     } else {
       const projectRequest = tab.projectSession?.request

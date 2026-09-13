@@ -11,7 +11,7 @@ beforeEach(() => {
 it.each(['left', 'right'] as const)('moves the same conversation from %s in one update, keeping adjacent tabs and the peer draft', from => {
   const to = from === 'left' ? 'right' : 'left'
   const store = useWorkbenchStore.getState()
-  store.open(from, { kind: 'panel', id: WORKBENCH_FILES_ID })
+  store.open(from, { kind: 'panel', id: WORKBENCH_FILES_ID, panel: 'files' })
   openWorkbenchProjectSession(from, project)
   const tab = useWorkbenchStore.getState().panes[from].tabs[1]
   openWorkbenchProjectSession(to, project)

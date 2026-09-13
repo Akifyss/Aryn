@@ -7,17 +7,21 @@ import type { WorkbenchDirectoryTab, PersistedWorkbenchLayout } from '../../../e
 
 export type WorkbenchPaneId = 'left' | 'right'
 export const WORKBENCH_PANE_IDS: WorkbenchPaneId[] = ['left', 'right']
+// Default/legacy identities only. A panel's type is independent of its tab ID.
 export const WORKBENCH_CONVERSATIONS_ID = 'app://fixed/conversations'
 export const WORKBENCH_FILES_ID = 'app://fixed/files'
 export const WORKBENCH_GIT_ID = 'app://fixed/git'
-export const WORKBENCH_PANEL_IDS = [WORKBENCH_GIT_ID, WORKBENCH_FILES_ID, WORKBENCH_CONVERSATIONS_ID] as const
-export type WorkbenchPanelId = typeof WORKBENCH_PANEL_IDS[number]
+export type WorkbenchPanelType = 'files' | 'git'
 
 export type WorkbenchTab = { id: string } & (
   | { kind: 'document' }
-  | { kind: 'panel'; id: WorkbenchPanelId }
+  | { kind: 'panel'; panel: WorkbenchPanelType | 'conversations' }
   | { kind: 'conversation'; conversationId: string | null; projectSession?: { project: ProjectRecord; request: AgentProjectSessionRequest } }
 )
+
+export function createWorkbenchPanel(panel: WorkbenchPanelType): Extract<WorkbenchTab, { kind: 'panel' }> {
+  return { kind: 'panel', panel, id: `panel://${crypto.randomUUID()}` }
+}
 
 function isSameConversation(a: WorkbenchTab, b: WorkbenchTab) {
   if (a.kind !== 'conversation' || b.kind !== 'conversation') return false
@@ -51,7 +55,7 @@ export function createDefaultWorkbenchLayout(project?: ProjectRecord | null): Wo
     panes: {
       left: { ...createWorkbenchPane(draftId), directoryTab: 'conversation', tabs: [draft] },
       right: { ...createWorkbenchPane(WORKBENCH_FILES_ID), directoryOpen: false, directoryTab: 'git',
-        tabs: [{ id: WORKBENCH_FILES_ID, kind: 'panel' }, { id: WORKBENCH_GIT_ID, kind: 'panel' }] },
+        tabs: [{ id: WORKBENCH_FILES_ID, kind: 'panel', panel: 'files' }, { id: WORKBENCH_GIT_ID, kind: 'panel', panel: 'git' }] },
     },
   }
 }
@@ -77,7 +81,7 @@ function mapWorkbenchPanes(state: WorkbenchState, update: (pane: WorkbenchPaneSt
 export function getWorkbenchProjectTabs(tabs: WorkbenchTab[], project?: ProjectRecord | null) {
   return tabs.filter((tab) => tab.kind === 'conversation'
     ? Boolean(project && tab.projectSession?.project.id === project.id)
-    : tab.id !== WORKBENCH_CONVERSATIONS_ID)
+    : tab.kind !== 'panel' || tab.panel !== 'conversations')
 }
 
 export function createWorkbenchPane(activeTabId = ''): WorkbenchPaneState {
@@ -194,9 +198,11 @@ export const useWorkbenchStore = create<WorkbenchState>((set) => ({
   }),
   open: (pane, tab, focus = true) => set((state) => {
     if (state.restoring) return state
-    // A conversation has one live composer. Reopening focuses its existing view.
-    const owner = tab.kind === 'conversation'
-      ? WORKBENCH_PANE_IDS.find((id) => state.panes[id].tabs.some((item) => isSameConversation(item, tab)))
+    // Reopening an existing panel instance or conversation focuses its owner.
+    // New panel actions allocate another ID, even for the same content type.
+    const owner = tab.kind !== 'document'
+      ? WORKBENCH_PANE_IDS.find((id) => state.panes[id].tabs.some((item) =>
+        tab.kind === 'panel' ? item.kind === 'panel' && item.id === tab.id : isSameConversation(item, tab)))
       : undefined
     const target = owner ?? pane
     const existing = state.panes[target].tabs.find((item) => item.id === tab.id || isSameConversation(item, tab))
@@ -220,10 +226,9 @@ export const useWorkbenchStore = create<WorkbenchState>((set) => ({
     if (!tab) return state
     const to = from === 'left' ? 'right' : 'left'
     const target = state.panes[to]
-    // Panels can have independent instances in both panes. Keep the target's
-    // tab position but adopt the source object, so its live view moves with it.
+    // Only the exact same identity is deduplicated. Same-type panels coexist.
     const targetTabs = target.tabs.some((item) => item.id === id)
-      ? tab.kind === 'panel' ? target.tabs.map(item => item.id === id ? tab : item) : target.tabs
+      ? target.tabs
       : [...target.tabs, tab]
     return {
       focusedPane: to,

@@ -7,7 +7,7 @@ import { Scanner } from '@tailwindcss/oxide'
 import { chromium } from 'playwright'
 import { expect, it } from 'vitest'
 
-it('moves real file and Git panels with their live state, deduplicates, and routes actions to the new owner', async () => {
+it('keeps independent file and Git instances through creation, moving, switching and closing', async () => {
   const mocks: Record<string, string> = {
     'workspace-editor-content': 'export const WorkspaceEditorContent=()=>null',
     'workspace-file-preview': 'export const WorkspaceFileRenderer=()=>null',
@@ -35,8 +35,9 @@ it('moves real file and Git panels with their live state, deduplicates, and rout
     const candidates = new Scanner({ sources: [{ base: path.resolve('src'), pattern: '**/*.{ts,tsx,css}', negated: false }] }).scan()
     await page.addStyleTag({ content: styles.build(candidates) })
     await page.addScriptTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.js'))!.text })
-    const panel = (side: string, id: string) => page.locator(`#workbench-${side} .workbench-panel-view:not([hidden])[data-panel-tab-id="app://fixed/${id}"]`)
-    const tab = (side: string, id: string) => page.locator(`#workbench-${side} .file-tab[data-tab-id="app://fixed/${id}"]`)
+    const identity = (id: string) => id.includes('://') ? id : `app://fixed/${id}`
+    const panel = (side: string, id: string) => page.locator(`#workbench-${side} .workbench-panel-view:not([hidden])[data-panel-tab-id="${identity(id)}"]`)
+    const tab = (side: string, id: string) => page.locator(`#workbench-${side} .file-tab[data-tab-id="${identity(id)}"]`)
     const move = async (side: string, id: string) => { await tab(side, id).hover(); await tab(side, id).locator('.file-tab-move').click() }
     const state = () => page.evaluate(() => (window as any).panelTest.inspect())
     const files = panel('left', 'files')
@@ -54,18 +55,21 @@ it('moves real file and Git panels with their live state, deduplicates, and rout
       test.fileScroll = descendants(node).find(item => item.scrollHeight > item.clientHeight + 100 && ['auto', 'scroll'].includes(getComputedStyle(item).overflowY))
       if (test.fileScroll) test.fileScroll.scrollTop = 240
     })
-    await panel('right', 'files').getByRole('searchbox', { name: '搜索文件' }).fill('peer search')
+    await panel('right', 'peer-files').getByRole('searchbox', { name: '搜索文件' }).fill('peer search')
     await move('left', 'files')
     const movedFiles = panel('right', 'files')
     expect(await movedFiles.getByRole('searchbox', { name: '搜索文件' }).inputValue()).toBe('note-0')
     expect(await movedFiles.evaluate(node => node.querySelector('.workspace-file-system') === (window as any).panelTest.fileElement)).toBe(true)
     expect(await movedFiles.getByRole('button', { name: '后退', exact: true }).isEnabled()).toBe(true)
-    expect((await state()).panes.right.tabs.map((tab: any) => tab.id)).toEqual(['app://fixed/git', 'app://fixed/files'])
+    expect((await state()).panes.right.tabs.map((tab: any) => tab.id)).toEqual(['app://fixed/peer-git', 'app://fixed/peer-files', 'app://fixed/files'])
     expect((await state()).panes.left.tabs).toEqual([])
     expect(await page.locator('#workbench-left').getByRole('tab', { name: '开始', exact: true }).isVisible()).toBe(true)
     expect(await page.evaluate(() => !!document.activeElement?.closest('#workbench-right'))).toBe(true)
     expect(await page.evaluate(() => (window as any).panelTest.fileScroll?.scrollTop)).toBe(240)
     expect(await movedFiles.innerText()).toContain('已选择“note-000.txt”')
+    await page.evaluate(() => (window as any).panelTest.activate('right', 'peer-files'))
+    expect(await panel('right', 'peer-files').getByRole('searchbox', { name: '搜索文件' }).inputValue()).toBe('peer search')
+    await page.evaluate(() => (window as any).panelTest.activate('right', 'files'))
     // The older appendChild path must also preserve the same instance.
     await page.evaluate(() => document.querySelectorAll('.workbench-panel-host').forEach(host => Object.defineProperty(host, 'moveBefore', { value: undefined })))
     await move('right', 'files')
@@ -84,8 +88,10 @@ it('moves real file and Git panels with their live state, deduplicates, and rout
     expect(await movedFiles.getByRole('searchbox', { name: '搜索文件' }).inputValue()).toBe('note-0')
     await expect.poll(() => movedFiles.locator('[data-file-tree-virtualized-scroll]').evaluate(node => node.scrollTop)).toBe(240)
     expect(await movedFiles.getByRole('button', { name: '后退', exact: true }).isEnabled()).toBe(true)
-    // Create an independent peer Git view; moving onto it must retain the source.
-    await page.evaluate(() => (window as any).panelTest.activate('right', 'git'))
+    // The target's independently selected commit must survive the move as well.
+    await page.evaluate(() => (window as any).panelTest.activate('right', 'peer-git'))
+    await panel('right', 'peer-git').getByText('Commit 1', { exact: true }).click()
+    await panel('right', 'peer-git').getByRole('heading', { name: 'Commit 1', exact: true }).waitFor()
     const git = panel('left', 'git')
     await git.getByPlaceholder('提交信息').fill('Unsubmitted commit draft')
     await git.getByText('Commit 0', { exact: true }).click()
@@ -105,6 +111,9 @@ it('moves real file and Git panels with their live state, deduplicates, and rout
     expect(await page.evaluate(() => (window as any).panelTest.gitScroll?.scrollTop)).toBe(200)
     expect(await page.evaluate(() => { const test = (window as any).panelTest; return [test.history.length, test.details.length] })).toEqual(
       await page.evaluate(() => { const test = (window as any).panelTest; return [test.historyCount, test.detailCount] }))
+    await page.evaluate(() => (window as any).panelTest.activate('right', 'peer-git'))
+    expect(await panel('right', 'peer-git').getByRole('heading', { name: 'Commit 1', exact: true }).isVisible()).toBe(true)
+    await page.evaluate(() => (window as any).panelTest.activate('right', 'git'))
     await page.screenshot({ path: path.join(os.tmpdir(), 'aryn-moved-panels.png') })
     // Opening the selected commit's file follows the panel's new side.
     await movedGit.getByText('history.txt', { exact: true }).dblclick()
@@ -130,6 +139,44 @@ it('moves real file and Git panels with their live state, deduplicates, and rout
     await tab('left', 'files').locator('.file-tab-close').click()
     await page.evaluate(() => (window as any).panelTest.open('right', 'files'))
     expect(await panel('right', 'files').getByRole('searchbox', { name: '搜索文件' }).inputValue()).toBe('')
+    // The real + menu creates a fresh instance on every click, on either side.
+    const create = async (side: 'left' | 'right', label: '文件' | '更改') => {
+      const before = (await state()).panes[side].tabs.length
+      await page.getByRole('button', { name: side === 'left' ? '左侧新建标签页' : '右侧新建标签页', exact: true }).click()
+      await page.getByRole('menuitem', { name: label, exact: true }).click()
+      const current = (await state()).panes[side]
+      expect(current.tabs).toHaveLength(before + 1)
+      expect(current.activeTabId).toBe(current.tabs.at(-1).id)
+      return current.activeTabId as string
+    }
+    const firstFiles = await create('left', '文件')
+    await panel('left', firstFiles).getByRole('searchbox', { name: '搜索文件' }).fill('first browser')
+    const secondFiles = await create('left', '文件')
+    expect(secondFiles).not.toBe(firstFiles)
+    expect(await panel('left', secondFiles).getByRole('searchbox', { name: '搜索文件' }).inputValue()).toBe('')
+    await panel('left', secondFiles).getByRole('searchbox', { name: '搜索文件' }).fill('second browser')
+    await page.evaluate(id => (window as any).panelTest.activate('left', id), firstFiles)
+    expect(await panel('left', firstFiles).getByRole('searchbox', { name: '搜索文件' }).inputValue()).toBe('first browser')
+    await tab('left', firstFiles).getByRole('tab').focus()
+    await tab('left', firstFiles).locator('.file-tab-move').focus()
+    await page.keyboard.press('Enter')
+    expect(await panel('right', firstFiles).getByRole('searchbox', { name: '搜索文件' }).inputValue()).toBe('first browser')
+    expect(await panel('left', secondFiles).getByRole('searchbox', { name: '搜索文件' }).inputValue()).toBe('second browser')
+    await tab('left', secondFiles).hover()
+    await tab('left', secondFiles).locator('.file-tab-close').click()
+    expect((await state()).panes.right.tabs.some((tab: any) => tab.id === firstFiles)).toBe(true)
+    const firstGit = await create('right', '更改')
+    await panel('right', firstGit).getByText('Commit 0', { exact: true }).click()
+    await panel('right', firstGit).getByRole('heading', { name: 'Commit 0', exact: true }).waitFor()
+    const secondGit = await create('right', '更改')
+    expect(secondGit).not.toBe(firstGit)
+    await panel('right', secondGit).getByText('Commit 2', { exact: true }).click()
+    await panel('right', secondGit).getByRole('heading', { name: 'Commit 2', exact: true }).waitFor()
+    await page.evaluate(id => (window as any).panelTest.activate('right', id), firstGit)
+    expect(await panel('right', firstGit).getByRole('heading', { name: 'Commit 0', exact: true }).isVisible()).toBe(true)
+    await move('right', firstGit)
+    expect(await panel('left', firstGit).getByRole('heading', { name: 'Commit 0', exact: true }).isVisible()).toBe(true)
+    expect(await panel('right', secondGit).getByRole('heading', { name: 'Commit 2', exact: true }).isVisible()).toBe(true)
     expect(errors).toEqual([])
   } finally { await browser.close() }
 }, 60000)

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createDefaultWorkbenchLayout, createWorkbenchPane, WORKBENCH_CONVERSATIONS_ID, WORKBENCH_FILES_ID, getWorkbenchProjectTabs, openWorkbenchProjectSession, useWorkbenchStore } from '../src/features/workbench/workbench-state'
+import { createDefaultWorkbenchLayout, createWorkbenchPane, getWorkbenchProjectTabs, openWorkbenchProjectSession, useWorkbenchStore } from '../src/features/workbench/workbench-state'
 import { scopeWorkbenchLayout } from '../src/features/workbench/workbench-project-layouts'
 import { WORKBENCH_OPEN_ACTIONS } from '../src/features/workbench/workbench-open-actions'
 import { createWorkbenchLayoutSnapshot, loadWorkbenchLayout } from '../src/features/workbench/workbench-persistence'
@@ -35,12 +35,12 @@ describe('project-only Workbench conversations', () => {
       openWorkbenchProjectSession(pane, a)
       openWorkbenchProjectSession(pane, b, { agentId: 'pi', sessionPath: `/b/history-${pane}`, sessionLabel: 'B history' })
       store.open(pane, { kind: 'conversation', id: `legacy-${pane}`, conversationId: `standalone-${pane}` })
-      store.open(pane, { kind: 'panel', id: WORKBENCH_CONVERSATIONS_ID })
-      store.open(pane, { kind: 'panel', id: WORKBENCH_FILES_ID })
+      store.open(pane, { kind: 'panel', id: `legacy-panel-${pane}`, panel: 'conversations' })
+      store.open(pane, { kind: 'panel', id: `files-${pane}`, panel: 'files' })
       const all = useWorkbenchStore.getState().panes[pane].tabs
       expect(getWorkbenchProjectTabs(all, a).map((tab) => tab.kind)).toEqual(['conversation', 'panel'])
       expect(getWorkbenchProjectTabs(all, b)[0]).toMatchObject({ projectSession: { project: b } })
-      expect(getWorkbenchProjectTabs(all, null)).toEqual([{ kind: 'panel', id: WORKBENCH_FILES_ID }])
+      expect(getWorkbenchProjectTabs(all, null)).toEqual([{ kind: 'panel', id: `files-${pane}`, panel: 'files' }])
       expect(all).toHaveLength(5)
     }
     const saved = createWorkbenchLayoutSnapshot(useWorkbenchStore.getState(), [], a.path)

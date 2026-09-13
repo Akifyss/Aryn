@@ -19,11 +19,11 @@ describe('moving an open document between panes', () => {
     workspace.updateFileTabsContent('/a/note.md', 'unsaved')
     const document = useWorkspaceStore.getState().openTabs[0]
     const store = useWorkbenchStore.getState()
-    store.open(from, { kind: 'panel', id: WORKBENCH_FILES_ID })
+    store.open(from, { kind: 'panel', id: WORKBENCH_FILES_ID, panel: 'files' })
     store.open(from, { kind: 'document', id: document.id })
-    store.open(from, { kind: 'panel', id: WORKBENCH_GIT_ID })
+    store.open(from, { kind: 'panel', id: WORKBENCH_GIT_ID, panel: 'git' })
     store.activate(from, document.id)
-    store.open(to, { kind: 'panel', id: WORKBENCH_FILES_ID })
+    store.open(to, { kind: 'panel', id: 'peer-files', panel: 'files' })
     store.setDirectoryTab(from, 'conversation')
     store.toggleDirectory(to)
     const observed: unknown[] = []
@@ -36,7 +36,7 @@ describe('moving an open document between panes', () => {
       tabs: [{ id: WORKBENCH_FILES_ID }, { id: WORKBENCH_GIT_ID }],
     })
     expect(useWorkbenchStore.getState().panes[to]).toMatchObject({
-      activeTabId: document.id, directoryOpen: false, tabs: [{ id: WORKBENCH_FILES_ID }, { id: document.id }],
+      activeTabId: document.id, directoryOpen: false, tabs: [{ id: 'peer-files' }, { id: document.id }],
     })
     expect(useWorkbenchStore.getState().focusedPane).toBe(to)
     expect(useWorkspaceStore.getState().openTabs[0]).toBe(document)
@@ -47,7 +47,7 @@ describe('moving an open document between panes', () => {
     const store = useWorkbenchStore.getState()
     store.open('left', { kind: 'document', id: 'doc' })
     store.open('right', { kind: 'document', id: 'doc' })
-    store.open('right', { kind: 'panel', id: WORKBENCH_FILES_ID })
+    store.open('right', { kind: 'panel', id: WORKBENCH_FILES_ID, panel: 'files' })
     const targetTabs = useWorkbenchStore.getState().panes.right.tabs
     store.moveTab('left', 'doc')
     expect(useWorkbenchStore.getState().panes.left).toMatchObject({ tabs: [], activeTabId: '' })

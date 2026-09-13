@@ -56,7 +56,7 @@ app.setup = (kind = 'meo', duplicate = false) => {
   const tab = useWorkspaceStore.getState().openTabs[0]
   app.docId = tab.id
   useWorkbenchStore.getState().open('left', { kind: 'document', id: tab.id })
-  useWorkbenchStore.getState().open('right', { kind: 'panel', id: WORKBENCH_FILES_ID })
+  useWorkbenchStore.getState().open('right', { kind: 'panel', id: WORKBENCH_FILES_ID, panel: 'files' })
   if (duplicate) useWorkbenchStore.getState().open('right', { kind: 'document', id: tab.id })
 }
 app.inspect = () => ({ ...useWorkbenchStore.getState(), documents: useWorkspaceStore.getState().openTabs })

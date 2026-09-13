@@ -6,7 +6,7 @@ import type { WorkspaceFileSystemState } from '@/features/workspace/types'
 import type { WorkbenchPaneCommands, WorkbenchPaneConfiguration } from './workbench-pane'
 import { createWorkbenchDocumentNavigation } from './workbench-document-navigation'
 import { createWorkbenchPanelNavigation } from './workbench-panel-navigation'
-import { WORKBENCH_FILES_ID, WORKBENCH_GIT_ID, WORKBENCH_PANE_IDS, getWorkbenchProjectTabs, useWorkbenchStore, type WorkbenchPaneId, type WorkbenchTab } from './workbench-state'
+import { WORKBENCH_PANE_IDS, getWorkbenchProjectTabs, useWorkbenchStore, type WorkbenchPaneId, type WorkbenchTab } from './workbench-state'
 
 type PanelTab = Extract<WorkbenchTab, { kind: 'panel' }>
 type Commands = RefObject<Partial<Record<WorkbenchPaneId, WorkbenchPaneCommands>>>
@@ -97,7 +97,7 @@ function PanelMount({ pane, tab, visible, currentProject, configuration, command
           ?? event.target as HTMLElement
         commands.current[pane]?.focus()
       }}>
-      {tab.id === WORKBENCH_FILES_ID ? <WorkspaceFileSystemPanel
+      {tab.panel === 'files' ? <WorkspaceFileSystemPanel
         {...configuration.editor.fileSystemPanel}
         fileSystemState={fileSystem}
         onFileSystemViewChange={view => setFileSystem(state => ({ ...state, view }))}
@@ -111,33 +111,33 @@ function PanelMount({ pane, tab, visible, currentProject, configuration, command
 
 export function WorkbenchPanelLayer({ configuration, commands }: { configuration: WorkbenchPaneConfiguration; commands: Commands }) {
   const state = useWorkbenchStore()
-  // Tab objects are stable across activate/reorder/move. Unlike the resource ID
-  // (which can exist in both panes), they identify each independent live view.
-  // Moving onto a duplicate transfers the source object and disposes the peer.
-  const keys = useRef(new Map<string, WeakMap<PanelTab, string>>())
+  // Stable instance IDs own each live view, regardless of pane or object copies.
+  const keys = useRef(new Map<string, string>())
   const nextKey = useRef(0)
+  const present = new Set<string>()
   const layouts = [state, ...Object.values(state.projectLayouts).filter(layout => layout.project.id !== state.project?.id)]
   const mounts = layouts.flatMap((layout, index) => {
     const projectId = layout.project?.id ?? ''
-    let projectKeys = keys.current.get(projectId)
-    if (!projectKeys) { projectKeys = new WeakMap(); keys.current.set(projectId, projectKeys) }
     return WORKBENCH_PANE_IDS.flatMap(pane => {
       const tabs = getWorkbenchProjectTabs(layout.panes[pane].tabs, layout.project)
       const activeId = tabs.some(tab => tab.id === layout.panes[pane].activeTabId)
         ? layout.panes[pane].activeTabId : tabs[0]?.id
       return tabs.flatMap(tab => {
-        if (tab.kind !== 'panel' || (tab.id !== WORKBENCH_FILES_ID && tab.id !== WORKBENCH_GIT_ID)) return []
+        if (tab.kind !== 'panel' || tab.panel === 'conversations') return []
+        const identity = JSON.stringify([projectId, tab.id])
+        present.add(identity)
         const visible = index === 0 && activeId === tab.id
-        let key = projectKeys.get(tab)
+        let key = keys.current.get(identity)
         // Mount on first use, retain while hidden, and unmount only on close or
         // replacement. Restored background tabs should not start loading eagerly.
         if (!key && !visible) return []
-        if (!key) { key = String(++nextKey.current); projectKeys.set(tab, key) }
+        if (!key) { key = String(++nextKey.current); keys.current.set(identity, key) }
         return <PanelMount key={key} tab={tab} pane={pane} visible={visible} currentProject={index === 0}
           configuration={configuration} commands={commands} />
       })
     })
   })
+  for (const identity of keys.current.keys()) if (!present.has(identity)) keys.current.delete(identity)
   // Keep React's order stable as well as its keys. Switching projects or
   // moving tabs only reparents portal containers, never their React fibers.
   return mounts.sort((left, right) => Number(left.key) - Number(right.key))

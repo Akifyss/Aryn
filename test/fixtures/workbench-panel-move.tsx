@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { WorkbenchPane, type WorkbenchPaneCommands, type WorkbenchPaneConfiguration } from '../../src/features/workbench/workbench-pane'
 import { WorkbenchPanelLayer } from '../../src/features/workbench/workbench-panel-layer'
-import { createWorkbenchPane, WORKBENCH_FILES_ID, WORKBENCH_GIT_ID, useWorkbenchStore, type WorkbenchPaneId } from '../../src/features/workbench/workbench-state'
+import { createWorkbenchPane, WORKBENCH_FILES_ID, useWorkbenchStore, type WorkbenchPaneId } from '../../src/features/workbench/workbench-state'
 import { createWorkbenchLayoutSnapshot, loadWorkbenchLayout } from '../../src/features/workbench/workbench-persistence'
 import { useWorkspaceStore } from '../../src/features/workspace/store/use-workspace-store'
 import { useSettingsStore } from '../../src/hooks/use-settings-store'
@@ -39,12 +39,12 @@ const emptyLayout = () => ({ ratio: .5, focusedPane: 'left' as const, panes: {
 } })
 useWorkbenchStore.getState().switchProject(project('qa'), emptyLayout())
 useWorkspaceStore.setState({ currentPath: '/qa', openTabs: [], activeTabId: null })
-useWorkbenchStore.getState().open('left', { id: WORKBENCH_FILES_ID, kind: 'panel' })
-useWorkbenchStore.getState().open('right', { id: WORKBENCH_GIT_ID, kind: 'panel' })
-useWorkbenchStore.getState().open('right', { id: WORKBENCH_FILES_ID, kind: 'panel' })
+useWorkbenchStore.getState().open('left', { id: WORKBENCH_FILES_ID, kind: 'panel', panel: 'files' })
+useWorkbenchStore.getState().open('right', { id: 'app://fixed/peer-git', kind: 'panel', panel: 'git' })
+useWorkbenchStore.getState().open('right', { id: 'app://fixed/peer-files', kind: 'panel', panel: 'files' })
 test.inspect = () => ({ ...useWorkbenchStore.getState(), documents: useWorkspaceStore.getState().openTabs })
-test.open = (pane: WorkbenchPaneId, id: string) => useWorkbenchStore.getState().open(pane, { id: id === 'files' ? WORKBENCH_FILES_ID : WORKBENCH_GIT_ID, kind: 'panel' })
-test.activate = (pane: WorkbenchPaneId, id: string) => useWorkbenchStore.getState().activate(pane, id === 'files' ? WORKBENCH_FILES_ID : WORKBENCH_GIT_ID)
+test.open = (pane: WorkbenchPaneId, id: string) => useWorkbenchStore.getState().open(pane, { id: `app://fixed/${id}`, kind: 'panel', panel: id === 'files' ? 'files' : 'git' })
+test.activate = (pane: WorkbenchPaneId, id: string) => useWorkbenchStore.getState().activate(pane, id.includes('://') ? id : `app://fixed/${id}`)
 test.switchProject = (id: string) => {
   const store = useWorkbenchStore.getState()
   store.switchProject(project(id), store.projectLayouts[id] ?? emptyLayout())
@@ -96,8 +96,7 @@ function App() {
     </div>
   </div>
 }
-// Exercise identical panel references through the actual restart/restore path.
-// Each pane must receive its own instance before the live layer mounts.
+// Exercise distinct panel instances through the actual restart/restore path.
 void loadWorkbenchLayout(createWorkbenchLayoutSnapshot(useWorkbenchStore.getState(), [], '/qa'), app.appApi, [project('qa')], []).then(restored => {
   useWorkbenchStore.setState({ panes: restored.panes })
   createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>)

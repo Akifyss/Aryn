@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppStateStore, normalizeLayoutState } from '../electron/main/app-state'
 import { normalizeWorkbenchLayout, type PersistedWorkbenchLayout, type PersistedWorkbenchTab } from '../electron/shared/contracts/workbench-layout'
 import { createWorkbenchLayoutSnapshot, flushWorkbenchPersistence, loadWorkbenchLayout, startWorkbenchPersistence } from '../src/features/workbench/workbench-persistence'
-import { createWorkbenchPane, WORKBENCH_FILES_ID, WORKBENCH_GIT_ID, useWorkbenchStore } from '../src/features/workbench/workbench-state'
+import { createWorkbenchPane, createWorkbenchPanel, WORKBENCH_FILES_ID, WORKBENCH_GIT_ID, useWorkbenchStore } from '../src/features/workbench/workbench-state'
 import { useWorkspaceStore } from '../src/features/workspace/store/use-workspace-store'
 import type { ProjectRecord } from '../src/features/workspace/types'
 import type { ConversationRecord } from '../src/features/conversations/types'
@@ -45,6 +45,32 @@ afterEach(async () => {
 })
 
 describe('Workbench durable layout', () => {
+  it('retains every same-type panel ID, order and selection through disk and repeated restores', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'aryn-panel-instances-'))
+    roots.push(root)
+    const statePath = path.join(root, 'app-state.json')
+    const store = useWorkbenchStore.getState()
+    const panels = (['files', 'git', 'files', 'git'] as const).map(createWorkbenchPanel)
+    panels.forEach(tab => store.open('left', tab))
+    store.reorder('left', panels[3].id, panels[0].id, 'before')
+    store.activate('left', panels[2].id)
+    const saved = createWorkbenchLayoutSnapshot(useWorkbenchStore.getState(), [], project.path)
+    await new AppStateStore(statePath).update(state => ({ ...state, layout: {
+      ...state.layout, projectWorkspaces: { version: 1, layouts: { [project.id]: saved } },
+    } }))
+    const restarted = (await new AppStateStore(statePath).read()).layout.projectWorkspaces!.layouts[project.id]
+    const bridge = api()
+    const restored = await loadWorkbenchLayout(restarted, bridge, [project], [])
+    expect(restored.panes.left.tabs).toEqual([panels[3], panels[0], panels[1], panels[2]])
+    expect(restored.panes.left.activeTabId).toBe(panels[2].id)
+    expect(restored.panes.right.tabs).toEqual([])
+    const next = createWorkbenchLayoutSnapshot(restored, [], project.path)
+    expect(next).toEqual(saved)
+    expect((await loadWorkbenchLayout(next, bridge, [project], [])).panes).toEqual(restored.panes)
+    expect(bridge.readWorkspaceFile).not.toHaveBeenCalled()
+    expect(bridge.getGitFileDiff).not.toHaveBeenCalled()
+  })
+
   it('migrates legacy project maps on disk and writes only the current schema', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'aryn-workspace-migration-'))
     roots.push(root)
@@ -189,7 +215,7 @@ describe('Workbench durable layout', () => {
     useWorkbenchStore.setState({ initialized: true, project })
     const stop = startWorkbenchPersistence()
     try {
-      useWorkbenchStore.getState().open('left', { kind: 'panel', id: WORKBENCH_GIT_ID })
+      useWorkbenchStore.getState().open('left', { kind: 'panel', id: WORKBENCH_GIT_ID, panel: 'git' })
       await flushWorkbenchPersistence()
       useWorkbenchStore.getState().close('left', WORKBENCH_GIT_ID)
       useWorkbenchStore.getState().toggleDirectory('right')
