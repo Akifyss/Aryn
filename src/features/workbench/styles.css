@@ -159,10 +159,14 @@
 .workbench-conversation-list-host,
 .workbench-conversation-content,
 .workbench-conversation-view { display: flex; flex: 1; min-width: 0; min-height: 0; }
-.workbench-conversation-host { display: contents; }
-.workbench-panel-host { display: contents; }
+.workbench-conversation-host,
+.workbench-panel-host,
+.workbench-terminal-host { display: contents; }
 .workbench-panel-view, .workbench-panel-content { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .workbench-panel-view[hidden] { display: none; }
+/* Portal geometry must be available before the lazy terminal content loads. */
+.workbench-terminal-view { flex: 1; min-width: 0; min-height: 0; align-self: stretch; overflow: hidden; }
+.workbench-terminal-view[hidden] { display: none; }
 .workbench-panel-content .git-panel-header {
   margin-block-start: var(--editor-fixed-panel-block-start-gap);
 }
