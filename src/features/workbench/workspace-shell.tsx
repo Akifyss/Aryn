@@ -2,7 +2,6 @@ import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type
 import { DownLine, Settings3Line } from '@mingcute/react'
 import { AppIconButton } from '@/components/app-icon-button'
 import { AppMenu } from '@/components/app-menu'
-import { ProjectIcon } from '@/components/project-icon'
 import { AppTitlebar } from '@/components/app-titlebar'
 import { AppChromeSearchButton } from '@/features/layout/components/app-chrome-controls/app-chrome-controls'
 import { WorkbenchPane, type WorkbenchPaneCommands, type WorkbenchPaneConfiguration } from './workbench-pane'
@@ -135,7 +134,6 @@ export function WorkspaceShell({ configuration, chromeVars, platform, isFullScre
             disabled={isPickingWorkspace} title={presentation.workspaceLabel}
             onClick={(event) => onWorkspace(event.currentTarget.getBoundingClientRect())}
           >
-            <ProjectIcon />
             <span className='workbench-workspace-switch-label'>{presentation.workspaceLabel}</span>
             <DownLine className='workbench-workspace-switch-chevron' aria-hidden='true' />
           </AppMenu.TriggerSurface>

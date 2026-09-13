@@ -1,5 +1,4 @@
 import { AddLine } from '@mingcute/react'
-import { AppIconButton } from '@/components/app-icon-button'
 import { AppMenu as Menu } from '@/components/app-menu'
 import type { WorkbenchPaneId } from './workbench-state'
 import { WORKBENCH_OPEN_ACTIONS } from './workbench-open-actions'
@@ -7,7 +6,7 @@ import type { WorkbenchConversationConfiguration } from './workbench-conversatio
 
 export function WorkbenchNewTabMenu({ pane, configuration }: { pane: WorkbenchPaneId; configuration: WorkbenchConversationConfiguration }) {
   return <Menu.Root modal={false}>
-    <Menu.Trigger render={<AppIconButton />} aria-label={pane === 'left' ? '左侧新建标签页' : '右侧新建标签页'}>
+    <Menu.Trigger variant='icon' aria-label={pane === 'left' ? '左侧新建标签页' : '右侧新建标签页'}>
       <AddLine aria-hidden='true' />
     </Menu.Trigger>
     <Menu.Portal>

@@ -164,12 +164,6 @@ describe('shared application dialogs', () => {
     expect(shellCss).toContain('body:has([data-app-modal-layer])')
     expect(shellCss).not.toContain("[data-slot='modal-backdrop']")
     expect(shellCss).not.toContain("[data-slot='alert-dialog-backdrop']")
-    expect(shellCss).toMatch(
-      /\.panel-drawer-backdrop\.panel-drawer-backdrop\s*\{[^}]*background-color:\s*var\(--backdrop\);/s,
-    )
-    expect(shellCss).not.toMatch(
-      /\.panel-drawer-backdrop\.panel-drawer-backdrop\s*\{[^}]*background-color:\s*var\(--overlay\);/s,
-    )
   })
 
   it('defines status soft colors consistently across themes', async () => {

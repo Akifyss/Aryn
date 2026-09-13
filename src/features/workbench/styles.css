@@ -164,7 +164,13 @@
 .workbench-panel-view, .workbench-panel-content { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .workbench-panel-view[hidden] { display: none; }
 .workbench-conversation-list { flex-direction: column; }
-.workbench-conversation-list-new { align-self: flex-start; flex-shrink: 0; margin: 6px; }
+.workbench-conversation-list-new.app-button {
+  align-self: stretch;
+  justify-content: flex-start;
+  width: auto;
+  flex-shrink: 0;
+  margin: 6px;
+}
 .workbench-conversation-list-host[hidden],
 .workbench-conversation-view[hidden] { display: none; }
 
