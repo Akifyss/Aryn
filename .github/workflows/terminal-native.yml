@@ -1,0 +1,73 @@
+name: Terminal native runtime
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/terminal-native.yml'
+      - 'electron/main/terminal/**'
+      - 'electron/shared/contracts/terminal.ts'
+      - 'electron-builder.json'
+      - 'scripts/*terminal*'
+      - 'scripts/tests/terminal-runtime.test.cjs'
+      - 'test/terminal-native-*.spec.ts'
+      - 'package*.json'
+  pull_request:
+    paths:
+      - '.github/workflows/terminal-native.yml'
+      - 'electron/main/terminal/**'
+      - 'electron/shared/contracts/terminal.ts'
+      - 'electron-builder.json'
+      - 'scripts/*terminal*'
+      - 'scripts/tests/terminal-runtime.test.cjs'
+      - 'test/terminal-native-*.spec.ts'
+      - 'package*.json'
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    env:
+      SHELL: /bin/zsh
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:terminal-runtime
+      - run: npm run check:terminal-runtime
+      - run: npx vitest run test/terminal-native-spawn.spec.ts
+      - run: npm run pretest
+      - name: Verify development Electron terminal
+        run: npm run debug:electron
+        env:
+          ARYN_ELECTRON_DEBUG_SCENARIO: terminal
+          ARYN_ELECTRON_DEBUG_ARTIFACT_ROOT: tmp/terminal-ci-dev
+      - run: npx electron-builder --mac --dir --config.directories.output=tmp/terminal-ci-package
+      - name: Verify packaged Electron terminal
+        shell: bash
+        run: |
+          executable=$(find tmp/terminal-ci-package -path '*/Aryn.app/Contents/MacOS/Aryn' -type f -print -quit)
+          test -n "$executable"
+          export ARYN_ELECTRON_DEBUG_EXECUTABLE="$PWD/$executable"
+          npm run debug:electron
+        env:
+          ARYN_ELECTRON_DEBUG_SCENARIO: terminal
+          ARYN_ELECTRON_DEBUG_ARTIFACT_ROOT: tmp/terminal-ci-packaged
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terminal-${{ matrix.os }}
+          path: |
+            tmp/terminal-ci-dev/
+            tmp/terminal-ci-packaged/

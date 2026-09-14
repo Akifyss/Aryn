@@ -53,6 +53,12 @@ PowerShell 集成仅安装在当前会话内，不修改 profile、提示符或�
 
 依赖版本固定。Windows 使用 node-pty 自带的 ConPTY 运行库；`electron-builder.json` 显式解包 node-pty，保证 `.node`、ConPTY DLL 和辅助程序可访问。原生依赖必须分别验证开发运行和目标平台打包产物，普通浏览器预览不提供本地终端。
 
+macOS 还要求 `spawn-helper` 具有执行权限。已核验 `node-pty@1.1.0` 的 npm 原始发布包：`prebuilds/darwin-arm64/spawn-helper` 和 `prebuilds/darwin-x64/spawn-helper` 均为 `0644`。此版本的安装脚本检测到 prebuild 后直接跳过编译，也不恢复执行位；原生模块可以正常加载，但首次创建 PTY 时 macOS 执行 helper 失败，抛出不含 errno 的 `posix_spawnp failed`。这与 shell 是否存在、xterm 是否渲染成功是不同的检查。
+
+`scripts/prepare-terminal-runtime.cjs` 在 `postinstall` 和 `predev` 准备当前架构的 helper，兼顾 `build/Release`、`build/Debug` 和预编译目录。`after-pack-terminal.cjs` 在 Electron 打包复制/解包之后、签名之前处理实际 `.app` 中的文件；缺失或不可执行时令构建失败。修复只添加执行位，不改二进制内容，不在运行期间修改已签名应用，不通过更换 shell 或重复 spawn 掩盖失败。现有源码环境更新后运行 `npm run dev` 即会执行准备；单独修复依赖可运行 `npm run prepare:terminal`。
+
+`npm run check:terminal-runtime` 用 Electron 运行真实 PTY，检查输出与退出码，并在 macOS 输出实际 helper 路径和权限；它不负责修复权限。`npm run test:terminal-runtime` 验证准备及打包钩子，在 POSIX 文件系统上实测 `0644 → EACCES → 0755 → 可执行`。`test/terminal-native-spawn.spec.ts` 另外通过实际 `TerminalManager` 验证解析出的 shell、中文输出、cwd、resize 与退出。`.github/workflows/terminal-native.yml` 为 macOS arm64 和 Intel 配置上述检查，以及开发版/打包版 Electron 终端场景；Unix 场景独立于原先仅适用于 PowerShell 的断言。
+
 ```powershell
 npx vitest run test/terminal-manager.spec.ts test/terminal-ipc.spec.ts test/workbench-terminal.spec.ts
 npx vitest run test/terminal-processes.spec.ts test/terminal-native-close.spec.ts
@@ -81,6 +87,8 @@ review 回归还覆盖检查期间前台程序已结束时丢弃旧的 busy 快�
 
 2026-09-14 review 验证：18 个测试文件的 130 项相关回归通过；随后补充关闭/重启冲突和异步原生 I/O 异常回归，最终 manager、IPC 和浏览器 controller 共 42 项测试通过（两轮合计覆盖 134 个不同测试）。最终代码的完整 `npm run typecheck`、Vite test 构建和 Windows unpacked 打包均通过。开发构建与 unpacked 产物各通过 23 项真实 Electron 场景，包括延迟确认期间移动标签、切换项目后的清理；两者 renderer 错误和请求失败均为零。报告分别位于 `tmp/electron-terminal-review/electron-debug-session-report.json` 与 `tmp/electron-terminal-review-packaged/electron-debug-session-report.json`。浅色/深色截图已检查；macOS、Linux 与 Windows NSIS 安装流程仍未实测。
 
+2026-09-14 macOS 启动修复：WSL 原生 POSIX 文件权限测试 6 项通过；从 npm 原始 tarball 提取的 arm64/x64 helper 实测由 `0644` 变为 `0755`，字节内容不变。Windows 终端相关 43 项测试、Electron 原生 PTY 启动检查、完整类型检查和 Windows unpacked 打包回归通过。本次未修改终端业务逻辑或界面，打包回归使用现有构建产物。macOS 双架构 CI 与 Unix Electron 场景已加入，当前 Windows/WSL 工作环境不能执行 macOS 二进制，因此尚无本次修复的 macOS 实机或 CI 通过结果，不能将 POSIX 权限检查视为 macOS 启动验收。
+
 ## 参考实现
 
 - [Orca](https://github.com/stablyai/orca/blob/main/package.json)：Electron / node-pty / xterm 的分层组合。
@@ -89,5 +97,6 @@ review 回归还覆盖检查期间前台程序已结束时丢弃旧的 busy 快�
 - [T3 Code](https://github.com/pingdotgg/t3code/blob/main/docs/internals/terminal-runtime.md)：进程与客户端分离、有界历史和禁止历史查询回复。
 - [xterm.js flow control](https://xtermjs.org/docs/guides/flowcontrol/) 与 [node-pty](https://github.com/microsoft/node-pty)：终端解析确认与平台 PTY API。
 - [VS Code PowerShell shell integration](https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/terminal/common/scripts/shellIntegration.ps1)：交互读取函数中的命令边界；本项目只使用会话活动标记，不报告命令内容。
+- [node-pty #858](https://github.com/microsoft/node-pty/pull/858) 与 [T3 Code #4924](https://github.com/pingdotgg/t3code/issues/4924)：macOS 预编译 spawn-helper 执行权限缺失的上游修复和同类报告；本项目已独立核验固定版本的发布包。
 
 本实现借鉴边界设计，未引入参考项目的远程连接、独立守护进程或代理终端协议。

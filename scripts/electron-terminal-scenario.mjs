@@ -5,6 +5,9 @@ import fs from 'node:fs/promises'
 // Uses the isolated profile created by electron-debug-session.mjs. Native
 // dialogs are answered in the test process, never in the user's desktop session.
 export async function runTerminalScenario({ app, page, artifactRoot }) {
+  if (process.platform !== 'win32') {
+    return (await import('./electron-terminal-posix-scenario.mjs')).runPosixTerminalScenario({ app, page })
+  }
   page.setDefaultTimeout(20000)
   const project = await page.evaluate(async () => {
     const state = await window.appApi.getProjectState()

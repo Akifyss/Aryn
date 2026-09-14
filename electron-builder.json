@@ -3,6 +3,7 @@
   "appId": "com.aryn.desktop",
   "asar": true,
   "asarUnpack": ["node_modules/node-pty/**"],
+  "afterPack": "scripts/after-pack-terminal.cjs",
   "directories": {
     "output": "release/${version}"
   },
