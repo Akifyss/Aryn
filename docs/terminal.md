@@ -93,6 +93,8 @@ review 回归还覆盖检查期间前台程序已结束时丢弃旧的 busy 快�
 
 本地对照验证（Windows / Node 24.16.0）：限制为 2048 MiB 时复现相同堆溢出和退出码 134；设置 4096 MiB 后完整 `npm run pretest` 通过，包括 bb surface、renderer、main 和 preload 构建。另验证 workflow YAML、内存设置只作用于构建步骤，以及日志管道保留失败退出码；本地日志位于 `tmp/terminal-ci-failure/repro-2gb.log` 和 `tmp/terminal-ci-failure/verify-4gb.log`。
 
+2026-09-14 第二次 macOS CI：[运行 34855686574](https://github.com/Akifyss/Aryn/actions/runs/34855686574) 的 arm64/Intel 原生检查和完整应用构建均通过，确认构建堆预算修复有效。开发版场景随后在打开终端之前因 `assert(project)` 失败：脚本读取了 `ProjectState` 中不存在的 `activeProjectId`，实际字段为 `lastProjectId`；Windows 场景用首个项目兜底，掩盖了相同错误。两个场景现均按 `lastProjectId` 查找，找不到时明确失败，不任意选择其他项目。修复前后执行实际场景的项目查询回调，覆盖单项目、选中非首个项目、失效 ID 和未选择项目，共 8 项检查；修复后全部通过。Windows 隔离 Electron 完整终端回归通过，renderer 错误及请求失败均为零，报告位于 `tmp/terminal-ci-project-fix/electron-debug-session-report.json`。本次仅修改测试脚本；macOS 完整界面及打包验证仍需新提交的 CI 结果。
+
 ## 参考实现
 
 - [Orca](https://github.com/stablyai/orca/blob/main/package.json)：Electron / node-pty / xterm 的分层组合。

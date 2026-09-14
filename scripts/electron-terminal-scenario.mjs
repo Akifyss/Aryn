@@ -11,9 +11,9 @@ export async function runTerminalScenario({ app, page, artifactRoot }) {
   page.setDefaultTimeout(20000)
   const project = await page.evaluate(async () => {
     const state = await window.appApi.getProjectState()
-    return state.projects.find(project => project.id === state.activeProjectId) ?? state.projects[0]
+    return state.projects.find(project => project.id === state.lastProjectId)
   })
-  assert(project)
+  assert(project, 'Terminal debug workspace has no selected project in ProjectState.lastProjectId')
   await app.evaluate(({ dialog }) => {
     globalThis.__terminalCloseDialogs = []
     globalThis.__terminalCloseResponse = 0
