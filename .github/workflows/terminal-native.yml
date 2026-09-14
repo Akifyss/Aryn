@@ -47,7 +47,16 @@ jobs:
       - run: npm run test:terminal-runtime
       - run: npm run check:terminal-runtime
       - run: npx vitest run test/terminal-native-spawn.spec.ts
-      - run: npm run pretest
+      - name: Build application for Electron checks
+        shell: bash
+        env:
+          # Node 22 on both macOS runners defaults to a ~2 GiB heap; the full
+          # renderer bundle exceeds that. Scope the budget to build subprocesses.
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          mkdir -p tmp
+          node -e "console.log({node: process.version, heapLimitMiB: require('node:v8').getHeapStatistics().heap_size_limit / 1024 / 1024})"
+          npm run pretest 2>&1 | tee tmp/terminal-ci-build.log
       - name: Verify development Electron terminal
         run: npm run debug:electron
         env:
@@ -69,5 +78,6 @@ jobs:
         with:
           name: terminal-${{ matrix.os }}
           path: |
+            tmp/terminal-ci-build.log
             tmp/terminal-ci-dev/
             tmp/terminal-ci-packaged/

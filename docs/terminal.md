@@ -89,6 +89,10 @@ review 回归还覆盖检查期间前台程序已结束时丢弃旧的 busy 快�
 
 2026-09-14 macOS 启动修复：WSL 原生 POSIX 文件权限测试 6 项通过；从 npm 原始 tarball 提取的 arm64/x64 helper 实测由 `0644` 变为 `0755`，字节内容不变。Windows 终端相关 43 项测试、Electron 原生 PTY 启动检查、完整类型检查和 Windows unpacked 打包回归通过。本次未修改终端业务逻辑或界面，打包回归使用现有构建产物。macOS 双架构 CI 与 Unix Electron 场景已加入，当前 Windows/WSL 工作环境不能执行 macOS 二进制，因此尚无本次修复的 macOS 实机或 CI 通过结果，不能将 POSIX 权限检查视为 macOS 启动验收。
 
+2026-09-14 首次 macOS CI：[arm64 job](https://github.com/Akifyss/Aryn/actions/runs/34853421703/job/104006789516) 和 [Intel job](https://github.com/Akifyss/Aryn/actions/runs/34853421703/job/104006789188) 均通过 6 项权限/打包准备测试、Electron 42.2.0 原生 PTY 启动检查和 `TerminalManager` 原生测试，日志确认 helper 权限为 `755`。两者随后在完整应用的 Vite 构建阶段达到约 2048 MiB 堆上限，报 `JavaScript heap out of memory` 并以 134 退出；完整界面及打包验证因此未执行。workflow 为构建步骤单独设置 `NODE_OPTIONS=--max-old-space-size=4096`，不传给后续 Electron 检查；构建日志保存为 `tmp/terminal-ci-build.log` 并上传，Bash pipefail 保留原始失败结果。修复后的完整 macOS CI 仍需在新提交上验证，重跑旧提交不会使用新配置。
+
+本地对照验证（Windows / Node 24.16.0）：限制为 2048 MiB 时复现相同堆溢出和退出码 134；设置 4096 MiB 后完整 `npm run pretest` 通过，包括 bb surface、renderer、main 和 preload 构建。另验证 workflow YAML、内存设置只作用于构建步骤，以及日志管道保留失败退出码；本地日志位于 `tmp/terminal-ci-failure/repro-2gb.log` 和 `tmp/terminal-ci-failure/verify-4gb.log`。
+
 ## 参考实现
 
 - [Orca](https://github.com/stablyai/orca/blob/main/package.json)：Electron / node-pty / xterm 的分层组合。
