@@ -107,6 +107,10 @@ review 回归还覆盖检查期间前台程序已结束时丢弃旧的 busy 快�
 
 2026-09-16 macOS CI 与清理修复：[运行 34995247014](https://github.com/Akifyss/Aryn/actions/runs/34995247014) 的 Intel job 全部通过，包括 zsh 原生检查和开发版／打包版 Electron 场景；arm64 的原生启动及活动判断检查通过，但 zsh 测试清理临时 `startup` 目录时出现 `ENOTEMPTY`，其余 16 项通过，后续构建和界面验证跳过。测试夹具在 `manager.dispose()` 发出终止信号后立即删除 HOME/ZDOTDIR，没有等待进程退出，可能与 shell 的退出写入竞争。现通过独立的原生 PTY `onExit` 观察器确认退出后再删除目录，等待超时或删除失败仍令测试失败。新增延迟退出写入回归在旧清理顺序下失败，修复后 WSL 的 CI 原生测试命令通过 17 项（macOS 专属历史检查跳过），针对清理及原失败用例重复三轮均通过，Windows manager／准备与清理回归 32 项通过。本次只修改测试及记录；修复后的 macOS CI 尚待运行。
 
+2026-09-16 构建依赖修复：[运行 35002987603](https://github.com/Akifyss/Aryn/actions/runs/35002987603) 的两种架构均通过 18 项原生检查，确认上述清理修复；Intel 的完整构建、开发版及打包版 Electron 验证全部通过，arm64 则在主应用 Vite 构建时耗尽约 4 GiB 堆。构建分析定位到供应商图标从 `@lobehub/icons` 聚合入口导入，经 Avatar/Combine 组件加载未使用的 Lobe UI、Ant Design 等依赖。改为直接导入实际显示的 Color/Mono SVG，保留所有供应商映射；新增构建图检查阻止这些 UI 依赖再次被引入，并纳入 macOS workflow。
+
+本地对照（Windows / Node 22.23.2 / 4096 MiB 堆预算）：主 renderer 解析模块从 19,235 降至 9,420，采样堆峰值从 4,027 MiB 降至 3,312 MiB，完整 Vite test 构建通过。33 个供应商分支（含未知供应商）在 md/lg/xl 三种尺寸下的 99 份 SVG 输出逐字节一致，类型检查、图标构建回归及供应商设置测试通过；Windows 隔离 Electron 的 26 项终端检查通过，renderer 错误和请求失败为零（`tmp/terminal-build-memory/electron/electron-debug-session-report.json`）。未提高 CI 堆预算或修改终端行为；本次 macOS 构建仍须由新提交的 CI 验证。
+
 ## 参考实现
 
 四个指定项目的固定版本源码核对、取舍及本次采纳项见 [终端参考实现核对](terminal-reference-review.md)。

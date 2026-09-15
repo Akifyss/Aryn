@@ -10,12 +10,14 @@ on:
       - 'electron/shared/contracts/terminal.ts'
       - 'src/App.tsx'
       - 'src/features/terminal/**'
+      - 'src/features/settings/components/settings-dialog/provider-settings-section/provider-icon.tsx'
       - 'src/components/app-confirm-dialog/**'
       - 'src/components/app-dialog/**'
       - 'electron-builder.json'
       - 'scripts/*terminal*'
       - 'scripts/tests/terminal-runtime.test.cjs'
       - 'test/terminal-*.spec.ts'
+      - 'test/provider-icon-build.spec.ts'
       - 'package*.json'
   pull_request:
     paths:
@@ -25,12 +27,14 @@ on:
       - 'electron/shared/contracts/terminal.ts'
       - 'src/App.tsx'
       - 'src/features/terminal/**'
+      - 'src/features/settings/components/settings-dialog/provider-settings-section/provider-icon.tsx'
       - 'src/components/app-confirm-dialog/**'
       - 'src/components/app-dialog/**'
       - 'electron-builder.json'
       - 'scripts/*terminal*'
       - 'scripts/tests/terminal-runtime.test.cjs'
       - 'test/terminal-*.spec.ts'
+      - 'test/provider-icon-build.spec.ts'
       - 'package*.json'
 
 permissions:
@@ -56,7 +60,7 @@ jobs:
       - run: npm ci
       - run: npm run test:terminal-runtime
       - run: npm run check:terminal-runtime
-      - run: npx vitest run test/terminal-manager.spec.ts test/terminal-ipc.spec.ts test/terminal-processes.spec.ts
+      - run: npx vitest run test/terminal-manager.spec.ts test/terminal-ipc.spec.ts test/terminal-processes.spec.ts test/provider-icon-build.spec.ts
       - run: npx vitest run test/terminal-native-spawn.spec.ts test/terminal-native-zsh.spec.ts test/terminal-zsh-integration.spec.ts
       - name: Build application for Electron checks
         shell: bash

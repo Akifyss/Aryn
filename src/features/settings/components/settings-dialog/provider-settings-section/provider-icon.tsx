@@ -1,45 +1,30 @@
 import type { ReactNode } from 'react'
-import { Key2Line } from '@mingcute/react'
+import { Key2Line } from '@mingcute/react/key-2'
 import type { AppIconSize } from '@/components/icon-size'
-import {
-  Azure,
-  Bedrock,
-  Cerebras,
-  Claude,
-  Cloudflare,
-  DeepSeek,
-  Fireworks,
-  Gemini,
-  GithubCopilot,
-  Groq,
-  HuggingFace,
-  Minimax,
-  Mistral,
-  Moonshot,
-  OpenAI,
-  OpenCode,
-  OpenRouter,
-  Together,
-  Vercel,
-  XAI,
-  XiaomiMiMo,
-  ZAI,
-} from '@lobehub/icons'
-
-type LobeIconRenderer = {
-  (props: { size?: number }): ReactNode
-  Color?: LobeIconRenderer
-}
-
-function renderLobeIcon(IconComponent: LobeIconRenderer) {
-  if (IconComponent.Color) {
-    const ColorIcon = IconComponent.Color
-    return <ColorIcon />
-  }
-
-  const ProviderIcon = IconComponent
-  return <ProviderIcon />
-}
+// Import the displayed SVG variants directly. The aggregate icon objects attach
+// Avatar/Combine components and pull their UI dependencies into the build graph.
+import Azure from '@lobehub/icons/es/Azure/components/Color'
+import Bedrock from '@lobehub/icons/es/Bedrock/components/Color'
+import Cerebras from '@lobehub/icons/es/Cerebras/components/Color'
+import Claude from '@lobehub/icons/es/Claude/components/Color'
+import Cloudflare from '@lobehub/icons/es/Cloudflare/components/Color'
+import DeepSeek from '@lobehub/icons/es/DeepSeek/components/Color'
+import Fireworks from '@lobehub/icons/es/Fireworks/components/Color'
+import Gemini from '@lobehub/icons/es/Gemini/components/Color'
+import GithubCopilot from '@lobehub/icons/es/GithubCopilot/components/Mono'
+import Groq from '@lobehub/icons/es/Groq/components/Mono'
+import HuggingFace from '@lobehub/icons/es/HuggingFace/components/Color'
+import Minimax from '@lobehub/icons/es/Minimax/components/Color'
+import Mistral from '@lobehub/icons/es/Mistral/components/Color'
+import Moonshot from '@lobehub/icons/es/Moonshot/components/Mono'
+import OpenAI from '@lobehub/icons/es/OpenAI/components/Mono'
+import OpenCode from '@lobehub/icons/es/OpenCode/components/Mono'
+import OpenRouter from '@lobehub/icons/es/OpenRouter/components/Mono'
+import Together from '@lobehub/icons/es/Together/components/Color'
+import Vercel from '@lobehub/icons/es/Vercel/components/Mono'
+import XAI from '@lobehub/icons/es/XAI/components/Mono'
+import XiaomiMiMo from '@lobehub/icons/es/XiaomiMiMo/components/Mono'
+import ZAI from '@lobehub/icons/es/ZAI/components/Mono'
 
 function ProviderIconFrame({
   children,
@@ -70,81 +55,81 @@ export function ProviderIcon({
   switch (provider) {
     case 'openai-codex':
     case 'openai':
-      icon = renderLobeIcon(OpenAI)
+      icon = <OpenAI />
       break
     case 'zai':
-      icon = renderLobeIcon(ZAI)
+      icon = <ZAI />
       break
     case 'opencode':
     case 'opencode-go':
-      icon = renderLobeIcon(OpenCode)
+      icon = <OpenCode />
       break
     case 'anthropic':
-      icon = renderLobeIcon(Claude)
+      icon = <Claude />
       break
     case 'github-copilot':
-      icon = renderLobeIcon(GithubCopilot)
+      icon = <GithubCopilot />
       break
     case 'openrouter':
-      icon = renderLobeIcon(OpenRouter)
+      icon = <OpenRouter />
       break
     case 'google':
     case 'google-vertex':
-      icon = renderLobeIcon(Gemini)
+      icon = <Gemini />
       break
     case 'deepseek':
-      icon = renderLobeIcon(DeepSeek)
+      icon = <DeepSeek />
       break
     case 'mistral':
-      icon = renderLobeIcon(Mistral)
+      icon = <Mistral />
       break
     case 'groq':
-      icon = renderLobeIcon(Groq)
+      icon = <Groq />
       break
     case 'cerebras':
-      icon = renderLobeIcon(Cerebras)
+      icon = <Cerebras />
       break
     case 'xai':
-      icon = renderLobeIcon(XAI)
+      icon = <XAI />
       break
     case 'vercel-ai-gateway':
-      icon = renderLobeIcon(Vercel)
+      icon = <Vercel />
       break
     case 'huggingface':
-      icon = renderLobeIcon(HuggingFace)
+      icon = <HuggingFace />
       break
     case 'fireworks':
-      icon = renderLobeIcon(Fireworks)
+      icon = <Fireworks />
       break
     case 'together':
-      icon = renderLobeIcon(Together)
+      icon = <Together />
       break
     case 'kimi-coding':
-      icon = renderLobeIcon(Moonshot)
+      icon = <Moonshot />
       break
     case 'minimax':
     case 'minimax-cn':
-      icon = renderLobeIcon(Minimax)
+      icon = <Minimax />
       break
     case 'moonshotai':
     case 'moonshotai-cn':
-      icon = renderLobeIcon(Moonshot)
+      icon = <Moonshot />
       break
     case 'xiaomi':
     case 'xiaomi-token-plan-cn':
     case 'xiaomi-token-plan-ams':
     case 'xiaomi-token-plan-sgp':
-      icon = renderLobeIcon(XiaomiMiMo)
+      icon = <XiaomiMiMo />
       break
     case 'azure-openai-responses':
-      icon = renderLobeIcon(Azure)
+      icon = <Azure />
       break
     case 'cloudflare-ai-gateway':
     case 'cloudflare-workers-ai':
-      icon = renderLobeIcon(Cloudflare)
+      icon = <Cloudflare />
       break
     case 'amazon-bedrock':
-      icon = renderLobeIcon(Bedrock)
+      icon = <Bedrock />
       break
     default:
       icon = <Key2Line aria-hidden='true' />
