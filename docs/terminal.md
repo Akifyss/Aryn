@@ -105,6 +105,8 @@ review 回归还覆盖检查期间前台程序已结束时丢弃旧的 busy 快�
 
 2026-09-16 合并 review：Windows 9 个测试文件、73 项回归及完整类型检查通过；WSL/zsh 15 项检查通过，macOS 专属历史检查跳过。新增用例覆盖用户 line-init 回调失败时保留确认，以及后续注册 ZLE hook 时不递归、不重复、不改变用户选项。用户 hook 链失效时仍可能持续确认，不能据此宣称所有自定义 zsh 环境均可免确认关闭。CI 补全终端前端、preload 和共享确认组件的触发路径，并加入 manager／IPC／进程表回归（同一命令在 WSL 通过 52 项）。本轮未再改变已通过上述构建和 26 项 Windows Electron 检查的应用实现；macOS 新代码的开发版与打包版验证仍待 CI 执行。
 
+2026-09-16 macOS CI 与清理修复：[运行 34995247014](https://github.com/Akifyss/Aryn/actions/runs/34995247014) 的 Intel job 全部通过，包括 zsh 原生检查和开发版／打包版 Electron 场景；arm64 的原生启动及活动判断检查通过，但 zsh 测试清理临时 `startup` 目录时出现 `ENOTEMPTY`，其余 16 项通过，后续构建和界面验证跳过。测试夹具在 `manager.dispose()` 发出终止信号后立即删除 HOME/ZDOTDIR，没有等待进程退出，可能与 shell 的退出写入竞争。现通过独立的原生 PTY `onExit` 观察器确认退出后再删除目录，等待超时或删除失败仍令测试失败。新增延迟退出写入回归在旧清理顺序下失败，修复后 WSL 的 CI 原生测试命令通过 17 项（macOS 专属历史检查跳过），针对清理及原失败用例重复三轮均通过，Windows manager／准备与清理回归 32 项通过。本次只修改测试及记录；修复后的 macOS CI 尚待运行。
+
 ## 参考实现
 
 四个指定项目的固定版本源码核对、取舍及本次采纳项见 [终端参考实现核对](terminal-reference-review.md)。

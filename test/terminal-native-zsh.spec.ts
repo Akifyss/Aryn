@@ -1,4 +1,5 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
@@ -16,14 +17,33 @@ async function terminal(files: Record<string, string> = {}, args = ['-l'], dotdi
     await mkdir(path.dirname(path.join(root, name)), { recursive: true })
     await writeFile(path.join(root, name), content)
   }
+  let exited = true
+  let exitCode: number | null = null
+  let exitSubscription: { dispose: () => void } | undefined
   const manager = new TerminalManager({ projectPath: async () => root, emit: () => {},
+    spawn: (file, args, options) => {
+      const { spawn } = createRequire(import.meta.url)('node-pty') as typeof import('node-pty')
+      const pty = spawn(file, args, options)
+      exited = false
+      // Keep this observer independent of manager.dispose(), which detaches its
+      // own listeners before sending SIGHUP. Sending a signal is not an exit.
+      exitSubscription = pty.onExit(event => { exitCode = event.exitCode; exited = true })
+      return pty
+    },
     shell: async env => {
       env.HOME = root
       delete env.ZDOTDIR
       if (dotdir) env.ZDOTDIR = path.join(root, dotdir)
       return { file: '/bin/zsh', args, label: 'zsh' }
     } })
-  cleanups.push(async () => { manager.dispose(); await rm(root, { recursive: true, force: true }) })
+  const cleanup = async () => {
+    manager.dispose()
+    try {
+      await expect.poll(() => exited, { timeout: 7000, message: `zsh must exit before removing ${root}` }).toBe(true)
+    } finally { exitSubscription?.dispose() }
+    await rm(root, { recursive: true, force: true })
+  }
+  cleanups.push(cleanup)
   const request = { id: 'terminal://zsh', projectId: 'zsh', cols: 160, rows: 30 }
   const ref = await manager.open(1, request)
   const write = (data: string) => manager.write(1, { ...ref, data })
@@ -34,8 +54,20 @@ async function terminal(files: Record<string, string> = {}, args = ['-l'], dotdi
     catch (cause) { throw new Error(`Expected zsh ${status}: ${await output()}`, { cause }) }
   }
   const waitOutput = (value: string) => expect.poll(output, { timeout: 7000 }).toContain(value)
-  return { root, manager, ref, request, write, output, activity, waitStatus, waitOutput }
+  return { root, manager, ref, request, write, output, activity, waitStatus, waitOutput, cleanup, exitCode: () => exitCode }
 }
+
+it.skipIf(process.platform === 'win32')('waits for shell shutdown before deleting its startup and history directory', async () => {
+  const t = await terminal({ '.zshrc': `
+# Model shell shutdown work that outlives kill(): history and exit hooks can
+# still write into HOME/ZDOTDIR after the manager has detached the terminal.
+function TRAPHUP { sleep 0.2; builtin print -r -- saved > "$HOME/exit-history" || exit 9; exit 0; }
+` })
+  await t.waitStatus('idle')
+  await t.cleanup()
+  expect(t.exitCode()).toBe(0)
+  expect(await access(t.root).then(() => true, () => false)).toBe(false)
+})
 
 it.skipIf(process.platform === 'win32')('recognizes idle zsh while protecting builtins, foreground/background jobs and nested readers', async () => {
   const t = await terminal({ '.zshrc': "PROMPT='ARYN_PROMPT> '\n" })
