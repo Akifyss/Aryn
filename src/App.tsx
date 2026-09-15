@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppConfirmation } from '@/components/app-confirm-dialog/app-confirm-dialog'
+import { useTerminalCloseConfirmation } from '@/features/terminal/use-terminal-close-confirmation'
 import type { ActiveWorkspaceContext } from '@/features/conversations/types'
 import { useConversationController } from '@/features/conversations/hooks/use-conversation-controller'
 import { conversationDraftContext } from '@/features/conversations/lib/conversation-state'
@@ -71,6 +72,7 @@ function App() {
     confirmation,
     requestConfirmation,
   } = useAppConfirmation()
+  useTerminalCloseConfirmation(requestConfirmation)
 
   const [agentWorkspaceState, setAgentWorkspaceState] = useState<AgentWorkspaceState | null>(null)
   const meoEditorHostRef = useRef<MeoEditorHostHandle | null>(null)

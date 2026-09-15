@@ -10,6 +10,7 @@
 - Renderer reload、crash 或视图 detach 只解除客户端附着。主进程中的 shell 和 headless 屏幕继续有界运行，重连时以稳定 tab ID 恢复。窗口销毁或应用完整退出会结束会话；下次启动只恢复 tab，第一次访问时在项目目录启动新 shell，不自动重放命令。
 - 关闭/重启先检查实际活动：空闲或已退出的终端直接处理；仍有命令或子进程时确认；无法可靠判断时说明原因并保留取消入口。检查和确认均绑定当时的 generation，重复点击共用同一检查/确认；等待期间发生会话替换时不会关闭新进程。
 - 关闭与重启是不同意图，不能共用同一次确认结果；一个操作等待期间，另一个操作不会并发执行，防止重新创建已移除标签的会话。
+- 确认复用应用全局的 `AppConfirmDialog`，继承主题、焦点约束、取消按钮及 Esc 行为。主进程通过一次性请求 ID 向当前窗口发起确认，回复仅接受同一主 frame、请求 ID 和布尔选择；最终操作仍校验窗口与 generation。renderer 刷新、崩溃或销毁会取消旧请求，不影响重新连接后的请求。其他应用确认替换当前弹窗时，按现有全局确认机制取消旧操作。
 - 关闭结果按项目和终端 ID 更新标签所属布局：即使等待期间移动到另一面板或切换项目，也会从实际所属布局移除标签，避免留下已结束的标签。失败时保留标签并显示错误。
 - 创建请求先在主进程登记，再异步验证项目和查找 shell。关闭、删除项目、窗口销毁和应用退出均能取消尚未完成的创建。
 - shell 自行退出后保留最后输出与退出码，直到用户关闭或重启。
@@ -32,12 +33,14 @@ resize 与输出共用有序队列和 sequence：先解析旧尺寸下的输出�
 
 `TerminalManager.inspectClose` 组合两个独立证据，不能用会话的 `running` 状态代替任务活动：
 
-- `TerminalShellActivity` 在 PowerShell 的 `PSConsoleHostReadLine` 开始等待输入及返回命令时发送会话专属 OSC 633 标记，主进程 headless parser 处理完整序列。它既能区分空闲提示符，也能识别 `Start-Sleep`、循环等没有子进程的前台工作。输入 Enter 时立即作废上一次空闲状态，防止命令开始标记尚未到达时误关。
+- `TerminalShellActivity` 消费会话专属 OSC 633 活动标记，主进程 headless parser 处理完整序列。PowerShell 在 `PSConsoleHostReadLine` 开始等待输入及返回命令时报告状态；zsh 通过 `preexec` 和 ZLE 的输入开始/结束 hook 报告状态，只有非子 shell 的 ZLE `CONTEXT=start` 才标为空闲，排除 `vared`、`select` 和续行输入。它们既能区分空闲提示符，也能识别 `Start-Sleep`、循环等没有子进程的前台工作。输入 Enter 时立即作废上一次空闲状态，防止命令开始标记尚未到达时误关。
 - `terminal-processes.ts` 仅在关闭/重启时异步读取进程表。Windows 使用系统 PowerShell 的 CIM，macOS/Linux 使用 `ps`；沿父子关系检查所有后代，包括后台进程和嵌套 shell。Windows 控制台辅助进程不作为用户任务，仍继续检查它们的后代；已复用父 PID 的旧进程及 POSIX 僵尸不会误报。只采集 PID、父 PID、进程名和 Windows 创建时间，不读取命令参数、环境或任务内容。
 
 只有命令状态明确空闲、没有子进程且扫描期间状态未变化，才跳过确认。单次 OS 查询最多 2.5 秒；输入或命令边界变化后最多重新检查一次，失败、权限不足或超时均视为未知。关闭窗口会取消检查；shell 在检查中退出则直接允许关闭。已识别的任务显示进程名，未知状态不会声称任务仍在运行；关闭与重新启动使用对应文案，默认按钮和 Escape 均取消。
 
-PowerShell 集成仅安装在当前会话内，不修改 profile、提示符或按键映射，不绕过执行策略，不记录命令文本。嵌套调试提示符和提示符处尚未结束的 PowerShell 作业（包括没有子 PID 的 ThreadJob）不会被标为空闲；作业结束状态在下一次进入提示符时刷新，期间保守确认。受限语言模式、未加载/被替换的 PSReadLine、尚未就绪的 shell，以及目前未安装命令边界集成的 bash/zsh/fish 等 shell 都采用未知状态保护；不能通过屏幕上的提示符文本猜测空闲。任意用户代码自行创建的非 PowerShell 作业线程或远程任务不在本地进程检测的保证范围内。
+PowerShell 集成仅安装在当前会话内，不修改 profile、提示符或按键映射，不绕过执行策略，不记录命令文本。嵌套调试提示符和提示符处尚未结束的 PowerShell 作业（包括没有子 PID 的 ThreadJob）不会被标为空闲；作业结束状态在下一次进入提示符时刷新，期间保守确认。受限语言模式、未加载/被替换的 PSReadLine、尚未就绪的 shell，以及目前未安装命令边界集成的 bash/fish 等 shell 都采用未知状态保护；不能通过屏幕上的提示符文本猜测空闲。任意用户代码自行创建的非 PowerShell 作业线程或远程任务不在本地进程检测的保证范围内。
+
+zsh 集成仅通过会话独立的临时 `.zshenv` 进入，立即还原用户的 `ZDOTDIR` 并在顶层加载用户 `.zshenv`；其余系统和用户启动文件及 `.zlogout` 均由 zsh 自行加载，避免 macOS `/etc/zshrc` 将历史文件或按键配置路径指向临时目录。活动 hook 延迟到首次提示符初始化，通过标准 helper 保留用户现有函数和 ZLE widget，函数内部采用局部 zsh 模式以隔离用户选项；不改写用户文件、提示符或历史记录，也不向子 shell 导出集成参数。脚本随 main bundle 以文本打包，再写入权限受限的临时文件，避免 zsh 读取 ASAR 路径。关闭、取消创建及启动失败均清理临时文件。显式 `-f`、用户禁用 RCS/ZLE、用户替换 hook 数组导致集成未安装或准备失败时保留原 shell 行为和未知状态保护，不强制开启集成，也不阻止终端启动。
 
 ## 屏幕恢复与界面
 
@@ -62,6 +65,7 @@ macOS 还要求 `spawn-helper` 具有执行权限。已核验 `node-pty@1.1.0` �
 ```powershell
 npx vitest run test/terminal-manager.spec.ts test/terminal-ipc.spec.ts test/workbench-terminal.spec.ts
 npx vitest run test/terminal-processes.spec.ts test/terminal-native-close.spec.ts
+npx vitest run test/terminal-zsh-integration.spec.ts test/terminal-native-zsh.spec.ts
 npx vitest run test/terminal-controller-browser.spec.ts
 npm run typecheck
 npx vite build --mode=test
@@ -75,7 +79,7 @@ npm run debug:electron
 Remove-Item Env:ARYN_ELECTRON_DEBUG_EXECUTABLE, Env:ARYN_ELECTRON_DEBUG_ARTIFACT_ROOT, Env:ARYN_ELECTRON_DEBUG_SCENARIO
 ```
 
-浏览器测试在 Chromium 中运行真实 xterm 控制器，以模拟 IPC 检查重连、协议回复、输入与网格顺序及焦点。Electron 场景使用调试流程的隔离项目/profile；检查真实 PowerShell、cwd、中文输入、复制粘贴、查找、tab 移动、多终端、回滚、resize、主题、renderer 重连、项目切换、后台 100,000 行输出、Ctrl+C、关闭取消与 shell/child 回收，以及退出码和重启。调试脚本对隔离窗口中的原生确认框提供确定答案，不操作日常窗口。首次缺少构建依赖产物时，使用 `npm run debug:electron:build`；完整调试说明见 [electron-debug-workflow.md](electron-debug-workflow.md)。
+浏览器测试在 Chromium 中运行真实 xterm 控制器，以模拟 IPC 检查重连、协议回复、输入与网格顺序及焦点。Electron 场景使用调试流程的隔离项目/profile；检查真实 PowerShell、cwd、中文输入、复制粘贴、查找、tab 移动、多终端、回滚、resize、主题、renderer 重连、项目切换、后台 100,000 行输出、Ctrl+C、关闭取消与 shell/child 回收，以及退出码和重启。调试脚本操作隔离窗口中的真实应用内确认框，检查取消默认焦点、Esc、关闭按钮、确认及主题；若终端退回原生确认框则明确失败，不操作日常窗口。首次缺少构建依赖产物时，使用 `npm run debug:electron:build`；完整调试说明见 [electron-debug-workflow.md](electron-debug-workflow.md)。
 
 关闭策略另有真实 Windows PTY 测试，覆盖 PowerShell 7/Windows PowerShell 的空闲、内部 cmdlet、后台作业、ThreadJob（PowerShell 7）与退出；单元测试覆盖异步标记分片、进程扫描失败、重复关闭、窗口销毁、generation 替换、检查期间输入及任务结束等情况。Electron 场景同时断言空闲关闭和已退出重启没有确认、内部 cmdlet 和前台程序关闭需要确认。
 
@@ -95,7 +99,15 @@ review 回归还覆盖检查期间前台程序已结束时丢弃旧的 busy 快�
 
 2026-09-14 第二次 macOS CI：[运行 34855686574](https://github.com/Akifyss/Aryn/actions/runs/34855686574) 的 arm64/Intel 原生检查和完整应用构建均通过，确认构建堆预算修复有效。开发版场景随后在打开终端之前因 `assert(project)` 失败：脚本读取了 `ProjectState` 中不存在的 `activeProjectId`，实际字段为 `lastProjectId`；Windows 场景用首个项目兜底，掩盖了相同错误。两个场景现均按 `lastProjectId` 查找，找不到时明确失败，不任意选择其他项目。修复前后执行实际场景的项目查询回调，覆盖单项目、选中非首个项目、失效 ID 和未选择项目，共 8 项检查；修复后全部通过。Windows 隔离 Electron 完整终端回归通过，renderer 错误及请求失败均为零，报告位于 `tmp/terminal-ci-project-fix/electron-debug-session-report.json`。本次仅修改测试脚本；macOS 完整界面及打包验证仍需新提交的 CI 结果。
 
+2026-09-15 zsh 空闲关闭修复：此前 zsh 没有活动 hook，`inspectClose` 即使看到无子进程也会返回 `unknown`，因此空闲提示符总是弹确认。旧版本在真实 zsh 中复现此结果；补充集成后，WSL/zsh 的 5 项原生场景和 4 项准备/清理测试通过，覆盖空闲、内置循环、前后台进程、嵌套 shell/`vared`、Ctrl+C、启动文件顺序、ZDOTDIR 与导出属性、原有 hook/widget、历史和退出状态。Windows 51 项相关测试、完整类型检查、Vite test 构建和 23 项隔离 Electron 场景通过，renderer 错误及请求失败均为零（`tmp/terminal-zsh-windows-regression/electron-debug-session-report.json`）。macOS CI 增加 zsh 原生测试，并将开发版/打包版场景扩展到运行中取消关闭、空闲重启和空闲关闭；本次 macOS 双架构运行尚待推送后验证，上一轮启动验证不能代替这次关闭行为验证。
+
+2026-09-16 应用内确认框更新：关闭/重启使用全局 `AppConfirmDialog`，主进程保留活动检查、窗口归属、generation 与重复操作保护，并在 renderer 刷新/崩溃/销毁时取消等待。63 项相关测试、完整类型检查和 Vite test 构建通过；Windows 隔离 Electron 的 26 项检查通过，覆盖浅深色确认框、默认取消焦点、Esc、右上角关闭、取消后继续运行、确认后进程回收，以及空闲关闭。报告位于 `tmp/terminal-app-confirmation/electron-debug-session-report.json`，renderer 错误和请求失败均为零。macOS 场景已切换为操作真实应用内弹窗，本次未执行 macOS 实机或打包验证。
+
+2026-09-16 合并 review：Windows 9 个测试文件、73 项回归及完整类型检查通过；WSL/zsh 15 项检查通过，macOS 专属历史检查跳过。新增用例覆盖用户 line-init 回调失败时保留确认，以及后续注册 ZLE hook 时不递归、不重复、不改变用户选项。用户 hook 链失效时仍可能持续确认，不能据此宣称所有自定义 zsh 环境均可免确认关闭。CI 补全终端前端、preload 和共享确认组件的触发路径，并加入 manager／IPC／进程表回归（同一命令在 WSL 通过 52 项）。本轮未再改变已通过上述构建和 26 项 Windows Electron 检查的应用实现；macOS 新代码的开发版与打包版验证仍待 CI 执行。
+
 ## 参考实现
+
+四个指定项目的固定版本源码核对、取舍及本次采纳项见 [终端参考实现核对](terminal-reference-review.md)。
 
 - [Orca](https://github.com/stablyai/orca/blob/main/package.json)：Electron / node-pty / xterm 的分层组合。
 - [Monocode](https://github.com/hardbeat920/monocode/blob/main/src/lib/terminalTab.ts)：终端 tab 身份和元数据。
@@ -103,6 +115,7 @@ review 回归还覆盖检查期间前台程序已结束时丢弃旧的 busy 快�
 - [T3 Code](https://github.com/pingdotgg/t3code/blob/main/docs/internals/terminal-runtime.md)：进程与客户端分离、有界历史和禁止历史查询回复。
 - [xterm.js flow control](https://xtermjs.org/docs/guides/flowcontrol/) 与 [node-pty](https://github.com/microsoft/node-pty)：终端解析确认与平台 PTY API。
 - [VS Code PowerShell shell integration](https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/terminal/common/scripts/shellIntegration.ps1)：交互读取函数中的命令边界；本项目只使用会话活动标记，不报告命令内容。
+- [zsh startup files](https://zsh.sourceforge.io/Doc/Release/Files.html) 与 [zsh hooks](https://zsh.sourceforge.io/Doc/Release/Functions.html#Hook-Functions)：启动文件顺序及可组合的命令 hook；另核对 [VS Code zsh 环境转交](https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/terminal/common/scripts/shellIntegration-env.zsh) 的 `ZDOTDIR` 处理。
 - [node-pty #858](https://github.com/microsoft/node-pty/pull/858) 与 [T3 Code #4924](https://github.com/pingdotgg/t3code/issues/4924)：macOS 预编译 spawn-helper 执行权限缺失的上游修复和同类报告；本项目已独立核验固定版本的发布包。
 
 本实现借鉴边界设计，未引入参考项目的远程连接、独立守护进程或代理终端协议。

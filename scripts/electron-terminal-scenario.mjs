@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import { observeTerminalConfirmations } from './electron-terminal-confirmation.mjs'
 
-// Uses the isolated profile created by electron-debug-session.mjs. Native
-// dialogs are answered in the test process, never in the user's desktop session.
+// Uses the isolated profile created by electron-debug-session.mjs.
 export async function runTerminalScenario({ app, page, artifactRoot }) {
   if (process.platform !== 'win32') {
-    return (await import('./electron-terminal-posix-scenario.mjs')).runPosixTerminalScenario({ app, page })
+    return (await import('./electron-terminal-posix-scenario.mjs')).runPosixTerminalScenario({ app, page, artifactRoot })
   }
   page.setDefaultTimeout(20000)
   const project = await page.evaluate(async () => {
@@ -14,24 +14,6 @@ export async function runTerminalScenario({ app, page, artifactRoot }) {
     return state.projects.find(project => project.id === state.lastProjectId)
   })
   assert(project, 'Terminal debug workspace has no selected project in ProjectState.lastProjectId')
-  await app.evaluate(({ dialog }) => {
-    globalThis.__terminalCloseDialogs = []
-    globalThis.__terminalCloseResponse = 0
-    dialog.showMessageBox = async (...args) => {
-      globalThis.__terminalCloseDialogs.push(args.at(-1))
-      if (globalThis.__terminalDeferClose) return new Promise(resolve => { globalThis.__terminalResolveClose = resolve })
-      return { response: globalThis.__terminalCloseResponse, checkboxChecked: false }
-    }
-  })
-  const dialogCount = () => app.evaluate(() => globalThis.__terminalCloseDialogs.length)
-  const waitDialog = async count => {
-    const end = Date.now() + 10000
-    while (Date.now() < end) {
-      if (await dialogCount() === count) return
-      await new Promise(resolve => setTimeout(resolve, 100))
-    }
-    assert.fail(`Expected ${count} terminal confirmations`)
-  }
   const dead = async pid => {
     const end = Date.now() + 5000
     while (Date.now() < end) {
@@ -157,7 +139,12 @@ export async function runTerminalScenario({ app, page, artifactRoot }) {
       const trigger = page.locator('.workbench-workspace-switch')
       if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.click()
       const item = page.getByRole('menuitem', { name, exact: true })
-      if (await item.isVisible() && await item.isEnabled()) { await item.click(); selected = true; break }
+      // Visibility may change while the previous menu's closing transition
+      // settles. Keep readiness and click in one bounded Playwright operation.
+      if (await item.isVisible() && await item.click({ timeout: 500 }).then(() => true, () => false)) {
+        selected = true
+        break
+      }
       await page.waitForTimeout(100)
     }
     assert(selected, `Project menu did not become ready for ${name}`)
@@ -209,12 +196,34 @@ export async function runTerminalScenario({ app, page, artifactRoot }) {
   await page.keyboard.type("Write-Output ('INTERRUPT_' + 'OK')")
   await page.keyboard.press('Enter')
   await waitOutput(/INTERRUPT_OK/)
+  const { dialog, dialogCount, waitDialog } = await observeTerminalConfirmations({ app, page })
   await page.keyboard.type("Write-Output ('BUILTIN_' + 'READY'); Start-Sleep -Seconds 60")
   await page.keyboard.press('Enter')
   await waitOutput(/BUILTIN_READY/)
   await page.locator('#workbench-left').getByRole('button', { name: 'Close 终端', exact: true }).click({ force: true })
   await waitDialog(1)
-  assert.equal(await app.evaluate(() => globalThis.__terminalCloseDialogs[0].message), '任务仍在运行，关闭终端？')
+  await dialog.getByRole('heading', { name: '任务仍在运行，关闭终端？', exact: true }).waitFor()
+  await page.screenshot({ path: path.join(artifactRoot, 'terminal-close-confirmation-light.png') })
+  const dialogLight = await dialog.evaluate(node => getComputedStyle(node).backgroundColor)
+  await page.evaluate(() => {
+    for (const node of [document.documentElement, document.body]) { node.classList.remove('light'); node.classList.add('dark') }
+    document.documentElement.setAttribute('data-theme', 'dark')
+  })
+  await page.waitForTimeout(200)
+  assert.notEqual(await dialog.evaluate(node => getComputedStyle(node).backgroundColor), dialogLight)
+  await page.screenshot({ path: path.join(artifactRoot, 'terminal-close-confirmation-dark.png') })
+  await page.evaluate(() => {
+    for (const node of [document.documentElement, document.body]) { node.classList.remove('dark'); node.classList.add('light') }
+    document.documentElement.setAttribute('data-theme', 'light')
+  })
+  await page.keyboard.press('Escape')
+  await dialog.waitFor({ state: 'hidden' })
+  assert.equal((await snapshot()).generation, originalGeneration)
+  await terminalSurface.getByRole('button', { name: '重新启动终端', exact: true }).click()
+  await waitDialog(2)
+  await dialog.getByRole('heading', { name: '任务仍在运行，重新启动终端？', exact: true }).waitFor()
+  await dialog.getByRole('button', { name: '关闭', exact: true }).click()
+  await dialog.waitFor({ state: 'hidden' })
   assert.equal((await snapshot()).generation, originalGeneration)
   await input().focus()
   await page.keyboard.press('Control+c')
@@ -224,23 +233,22 @@ export async function runTerminalScenario({ app, page, artifactRoot }) {
   const closeChildPid = Number((await waitOutput(/CLOSE_CHILD=\d+/)).screen.match(/CLOSE_CHILD=(\d+)/)[1])
 
   await page.locator('#workbench-left').getByRole('button', { name: 'Close 终端', exact: true }).click({ force: true })
-  await waitDialog(2)
-  assert.match(await app.evaluate(() => globalThis.__terminalCloseDialogs[1].detail), /node\.exe/)
-  assert.equal((await snapshot()).generation, originalGeneration)
-  await app.evaluate(() => { globalThis.__terminalCloseResponse = 1; globalThis.__terminalDeferClose = true })
-  await page.locator('#workbench-left').getByRole('button', { name: 'Close 终端', exact: true }).click({ force: true })
   await waitDialog(3)
-  // A delayed close completion belongs to this terminal, even if its pane and
-  // active project have changed. The isolated dialog stub leaves UI operable.
+  assert.match(await dialog.textContent(), /node\.exe/)
+  await dialog.getByRole('button', { name: '取消', exact: true }).click()
+  await dialog.waitFor({ state: 'hidden' })
+  assert.equal((await snapshot()).generation, originalGeneration)
+  // Real modal UI blocks background interaction. Move and switch before asking
+  // again; delayed cross-project completion is covered by workbench unit tests.
   await page.locator('#workbench-left .file-tab').filter({ has: page.getByRole('tab', { name: '终端', exact: true }) }).hover()
   await page.locator('#workbench-left').getByRole('button', { name: /将 终端 .*右侧/ }).click()
   await switchProject('Terminal QA peer')
-  await app.evaluate(() => {
-    globalThis.__terminalDeferClose = false
-    globalThis.__terminalResolveClose({ response: 1, checkboxChecked: false })
-  })
-  await page.locator(`[data-terminal-id="${id}"]`).waitFor({ state: 'detached' })
   await switchProject(project.name)
+  await page.locator('#workbench-right').getByRole('button', { name: 'Close 终端', exact: true }).click({ force: true })
+  await waitDialog(4)
+  await dialog.getByRole('button', { name: '关闭终端', exact: true }).click()
+  await dialog.waitFor({ state: 'hidden' })
+  await page.locator(`[data-terminal-id="${id}"]`).waitFor({ state: 'detached' })
   assert.equal(await page.getByRole('tab', { name: '终端', exact: true }).count(), 0, 'A closed terminal must not remain in a moved/background layout')
   assert(await dead(shellPid), `shell ${shellPid} leaked after closing tab`)
   assert(await dead(closeChildPid), `child ${closeChildPid} leaked after closing tab`)
@@ -253,10 +261,13 @@ export async function runTerminalScenario({ app, page, artifactRoot }) {
   await page.keyboard.press('Enter')
   await peerSurface.getByText('已退出 · 7', { exact: true }).waitFor()
   assert.equal((await peerSnapshot()).exitCode, 7)
+  const peerInput = await peerSurface.locator('textarea').first().elementHandle()
   await peerSurface.getByRole('button', { name: '重新启动终端', exact: true }).click()
+  await page.waitForFunction(node => !node.isConnected, peerInput)
+  await peerInput.dispose()
   await peerSurface.getByText('运行中', { exact: true }).waitFor()
   assert.notEqual((await peerSnapshot()).generation, peerGeneration)
-  assert.equal(await dialogCount(), 3, 'An exited shell must restart without confirmation')
+  assert.equal(await dialogCount(), 4, 'An exited shell must restart without confirmation')
   const readyDeadline = Date.now() + 10000
   while (!/PS [^>]+>/.test((await peerSnapshot()).screen)) {
     assert(Date.now() < readyDeadline, 'Restarted PowerShell never became ready')
@@ -264,9 +275,9 @@ export async function runTerminalScenario({ app, page, artifactRoot }) {
   }
   await page.locator('#workbench-right').getByRole('button', { name: /Close 终端/ }).click({ force: true })
   await peerSurface.waitFor({ state: 'detached' })
-  assert.equal(await dialogCount(), 3, 'An idle shell must close without confirmation')
+  assert.equal(await dialogCount(), 4, 'An idle shell must close without confirmation')
   return { ok: true, projectPath: project.path, shellPid, childPid, restoredGeneration: originalGeneration,
     resizedCols: resized.cols, geometry, checks: ['native-shell', 'cwd', 'CJK-input', 'editing-chord', 'clipboard-paste', 'pane-move', 'multiple-terminals',
       'search', 'clipboard-copy', 'scrollback', 'resize', 'themes', 'renderer-reattach', 'project-switch', 'detached-background-output', 'Ctrl+C',
-      'builtin-close-cancel', 'close-cancel', 'close-after-pane-and-project-move', 'process-cleanup', 'exit-code', 'restart', 'idle-close-without-dialog'] }
+      'app-dialog-cancel-focus', 'app-dialog-themes', 'builtin-close-Escape', 'busy-restart-dismiss', 'close-cancel', 'close-after-pane-and-project-move', 'process-cleanup', 'exit-code', 'restart', 'idle-close-without-dialog'] }
 }

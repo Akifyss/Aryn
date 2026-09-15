@@ -10,6 +10,7 @@ import { TERMINAL_MAX_INPUT, TERMINAL_MAX_SESSIONS, TERMINAL_SCROLLBACK, termina
 import { resolveTerminalShell, terminalEnvironment } from './terminal-shell'
 import { inspectTerminalProcesses, unknownActivity, type TerminalActivity } from './terminal-processes'
 import { TerminalShellActivity } from './terminal-shell-activity'
+import { prepareZshIntegration } from './terminal-zsh-integration'
 
 const require = createRequire(import.meta.url)
 const HIGH_WATER = 512 * 1024
@@ -99,8 +100,22 @@ export class TerminalManager {
     const cwd = await this.dependencies.projectPath(session.projectId)
     this.active(session)
     if (!cwd || !await stat(cwd).then(value => value.isDirectory(), () => false)) throw new Error('项目目录不存在，请检查目录后重试。')
-    const env = terminalEnvironment()
+    let env = terminalEnvironment()
     const shell = await (this.dependencies.shell ?? resolveTerminalShell)(env)
+    this.active(session)
+    const integration = await prepareZshIntegration(shell.file, shell.args, env, session.activity.nonce).catch(error => {
+      // Shell integration is optional: a read-only/full temp directory must not
+      // prevent the shell from opening. Missing readiness stays conservatively unknown.
+      console.warn('[terminal] Unable to prepare zsh activity detection.', error)
+      return null
+    })
+    if (integration) {
+      if (session.disposed) await integration.dispose()
+      else {
+        env = integration.env
+        session.subscriptions.push(integration)
+      }
+    }
     this.active(session)
     // CJS entry points also work when this manager is bundled as Electron ESM.
     const { Terminal } = require('@xterm/headless') as typeof import('@xterm/headless')

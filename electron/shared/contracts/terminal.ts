@@ -24,13 +24,22 @@ export type TerminalPayload =
   | { type: 'error'; message: string }
   | { type: 'closed' }
 export type TerminalEvent = TerminalRef & TerminalPayload
+export type TerminalCloseAction = 'close' | 'restart'
+export type TerminalCloseConfirmation = {
+  requestId: string
+  action: TerminalCloseAction
+  status: 'busy' | 'unknown'
+  processes: string[]
+}
 export type TerminalApi = {
   open: (request: TerminalOpenRequest) => Promise<TerminalSnapshot>
   write: (request: TerminalRef & { data: string }) => Promise<void>
   resize: (request: TerminalRef & { cols: number; rows: number }) => Promise<void>
   acknowledge: (request: TerminalRef & { viewId: string; sequence: number }) => void
   detach: (request: TerminalViewRef) => void
-  close: (id: string, action?: 'close' | 'restart') => Promise<boolean>
+  close: (id: string, action?: TerminalCloseAction) => Promise<boolean>
+  onCloseConfirmation: (listener: (request: TerminalCloseConfirmation) => void) => () => void
+  respondCloseConfirmation: (requestId: string, confirmed: boolean) => void
   onEvent: (listener: (event: TerminalEvent) => void) => () => void
 }
 

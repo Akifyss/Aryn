@@ -1,5 +1,5 @@
 import { ipcRenderer, contextBridge, webUtils } from 'electron'
-import type { TerminalApi, TerminalEvent } from '../shared/contracts/terminal'
+import type { TerminalApi, TerminalCloseConfirmation, TerminalEvent } from '../shared/contracts/terminal'
 import type { AgentClientEvent, AgentInteractionResponse, AgentInteractionTimelineRecord, AgentPromptAttachment, AgentPromptSendOptions, AgentProviderAuthUiEvent, AgentQueuedMessageUpdate, AgentRequestScope, AgentRunningPromptBehavior, AgentSessionCreateOptions, AgentSessionSnapshot, AgentThinkingLevel, AgentWorkspaceState, OpenCodeSurfaceRequest, OpenCodeSurfaceResponse } from '../shared/agent-contracts/types'
 import type { AgentAvailability } from '../shared/agent-contracts/definition'
 import type { ActiveWorkspaceContext, ConversationRecord, ConversationState, CreateConversationWorkspaceRequest, UpdateConversationRequest } from '../shared/contracts/conversations'
@@ -56,6 +56,12 @@ contextBridge.exposeInMainWorld('appApi', {
     acknowledge: request => ipcRenderer.send('terminal:acknowledge', request),
     detach: request => ipcRenderer.send('terminal:detach', request),
     close: (id, action) => ipcRenderer.invoke('terminal:close', id, action),
+    onCloseConfirmation: listener => {
+      const receive = (_event: Electron.IpcRendererEvent, request: TerminalCloseConfirmation) => listener(request)
+      ipcRenderer.on('terminal:close-confirmation', receive)
+      return () => ipcRenderer.off('terminal:close-confirmation', receive)
+    },
+    respondCloseConfirmation: (requestId, confirmed) => ipcRenderer.send('terminal:confirm-close', requestId, confirmed),
     onEvent: listener => {
       const receive = (_event: Electron.IpcRendererEvent, event: TerminalEvent) => listener(event)
       ipcRenderer.on('terminal:event', receive)

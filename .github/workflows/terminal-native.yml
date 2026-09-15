@@ -6,21 +6,31 @@ on:
     paths:
       - '.github/workflows/terminal-native.yml'
       - 'electron/main/terminal/**'
+      - 'electron/preload/index.ts'
       - 'electron/shared/contracts/terminal.ts'
+      - 'src/App.tsx'
+      - 'src/features/terminal/**'
+      - 'src/components/app-confirm-dialog/**'
+      - 'src/components/app-dialog/**'
       - 'electron-builder.json'
       - 'scripts/*terminal*'
       - 'scripts/tests/terminal-runtime.test.cjs'
-      - 'test/terminal-native-*.spec.ts'
+      - 'test/terminal-*.spec.ts'
       - 'package*.json'
   pull_request:
     paths:
       - '.github/workflows/terminal-native.yml'
       - 'electron/main/terminal/**'
+      - 'electron/preload/index.ts'
       - 'electron/shared/contracts/terminal.ts'
+      - 'src/App.tsx'
+      - 'src/features/terminal/**'
+      - 'src/components/app-confirm-dialog/**'
+      - 'src/components/app-dialog/**'
       - 'electron-builder.json'
       - 'scripts/*terminal*'
       - 'scripts/tests/terminal-runtime.test.cjs'
-      - 'test/terminal-native-*.spec.ts'
+      - 'test/terminal-*.spec.ts'
       - 'package*.json'
 
 permissions:
@@ -46,7 +56,8 @@ jobs:
       - run: npm ci
       - run: npm run test:terminal-runtime
       - run: npm run check:terminal-runtime
-      - run: npx vitest run test/terminal-native-spawn.spec.ts
+      - run: npx vitest run test/terminal-manager.spec.ts test/terminal-ipc.spec.ts test/terminal-processes.spec.ts
+      - run: npx vitest run test/terminal-native-spawn.spec.ts test/terminal-native-zsh.spec.ts test/terminal-zsh-integration.spec.ts
       - name: Build application for Electron checks
         shell: bash
         env:
